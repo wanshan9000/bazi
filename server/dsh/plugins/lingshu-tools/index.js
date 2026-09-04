@@ -1,6 +1,14 @@
 // dsh 插件：把灵枢命理引擎注册为模型可调用的工具
 import { pathToFileURL } from 'node:url'
 import { makeBaziTool } from './tools/bazi.js'
+import { makeZiweiTool } from './tools/ziwei.js'
+import { makeLiuyaoTool } from './tools/liuyao.js'
+import { makeQimenTool } from './tools/qimen.js'
+import { makeHuangliTool, makeModernHuangliTool } from './tools/huangli.js'
+import { makeTarotTool } from './tools/tarot.js'
+import { makeNameTool } from './tools/name.js'
+import { makeFengshuiTool } from './tools/fengshui.js'
+import { makeWuyunliuqiTool } from './tools/wuyunliuqi.js'
 
 export const name = 'lingshu-tools'
 export const inject = ['tools']
@@ -11,7 +19,10 @@ async function loadEngines() {
   return import(pathToFileURL(file).href)
 }
 
-export const TOOL_FACTORIES = [makeBaziTool]
+export const TOOL_FACTORIES = [
+  makeBaziTool, makeZiweiTool, makeLiuyaoTool, makeQimenTool, makeHuangliTool, makeModernHuangliTool,
+  makeTarotTool, makeNameTool, makeFengshuiTool, makeWuyunliuqiTool,
+]
 
 export async function apply(ctx) {
   const E = await loadEngines()
