@@ -6,6 +6,7 @@ import crypto from 'crypto'
 import { config } from '../config.js'
 import { listSkills, findSkill, upsertSkill, deleteSkill } from '../store.js'
 import { adminConfigured, issueToken, requireAdmin } from '../adminAuth.js'
+import { syncAdminSkill, removeAdminSkill } from '../dsh/adminSkills.js'
 
 const router = Router()
 
@@ -112,6 +113,7 @@ router.post('/admin/skills', requireAdmin, (req, res) => {
   const { ok, errors, skill } = validateSkill(req.body)
   if (!ok) return res.status(400).json({ ok: false, msg: '校验失败', errors })
   const saved = upsertSkill(skill)
+  try { syncAdminSkill(saved) } catch (e) { console.warn('[skills] 同步 _admin 失败：', e.message) }
   res.json({ ok: true, msg: '已保存', data: saved })
 })
 
@@ -138,7 +140,9 @@ router.post('/admin/skills/import', requireAdmin, (req, res) => {
   items.forEach((raw, i) => {
     const r = validateSkill(raw)
     if (r.ok) {
-      imported.push(upsertSkill(r.skill))
+      const saved = upsertSkill(r.skill)
+      try { syncAdminSkill(saved) } catch (e) { console.warn('[skills] 同步 _admin 失败：', e.message) }
+      imported.push(saved)
     } else {
       skipped.push({ index: i, name: raw?.name || raw?.key || `#${i + 1}`, errors: r.errors })
     }
@@ -155,12 +159,16 @@ router.patch('/admin/skills/:key', requireAdmin, (req, res) => {
   if (typeof req.body.enabled === 'boolean') patch.enabled = req.body.enabled
   if (req.body.name != null) patch.name = String(req.body.name).trim()
   const saved = upsertSkill({ ...existing, ...patch })
+  try { syncAdminSkill(saved) } catch (e) { console.warn('[skills] 同步 _admin 失败：', e.message) }
   res.json({ ok: true, msg: '已更新', data: saved })
 })
 
 // ---- 7. 删除 ----
 router.delete('/admin/skills/:key', requireAdmin, (req, res) => {
   const ok = deleteSkill(req.params.key)
+  if (ok) {
+    try { removeAdminSkill(req.params.key) } catch (e) { console.warn('[skills] 移除 _admin 失败：', e.message) }
+  }
   res.json({ ok, msg: ok ? '已删除' : '技能不存在' })
 })
 
