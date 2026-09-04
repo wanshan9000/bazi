@@ -10,6 +10,11 @@
 //     { next(): Promise<HarnessNotification>, tryNext(), close() }，AsyncIterable
 // - close(): Promise<void>
 // - 错误类：TransportClosedError（.name === 'TransportClosedError'）、RequestTimeoutError、JsonRpcResponseError
+//
+// close() 语义核对自 lib/index.js：subscription.close() 会调用 fail(new
+// TransportClosedError(...))，fail() 会 reject 所有挂起的 next() 等待者——也就是
+// 说，关闭订阅会让正在等待的 run() 立刻收到一个 TransportClosedError 拒绝，而不是
+// 停在原地直到超时。
 import fs from 'node:fs'
 import { HarnessClient } from '@deepseek-ai/dsh-sdk-client'
 import { normalize, isIdle } from './events.js'
@@ -44,11 +49,13 @@ function defaultCreateClient() {
 }
 
 export class DshPool {
-  constructor({ createClient = defaultCreateClient } = {}) {
+  constructor({ createClient = defaultCreateClient, turnTimeoutMs = TURN_TIMEOUT_MS } = {}) {
     this.createClient = createClient
+    this.turnTimeoutMs = turnTimeoutMs
     this.clients = new Map()   // routeKey → { client, ready: Promise }
     this.busy = new Set()      // sessionId
-    this.closeWaiters = new Set() // 每个进行中的 run() 注册的 resolve()：close() 时唤醒它们，避免等到 120s 超时
+    this.openSubs = new Set()  // 所有仍在被 run() 等待的订阅句柄：close() 时逐个关闭，令其 next() 拒绝
+    this.closed = false        // close() 之后为 true；用于把由此触发的 next() 拒绝识别为 CLOSED，而非子进程意外死亡
   }
 
   isBusy(sessionId) { return this.busy.has(sessionId) }
@@ -71,6 +78,14 @@ export class DshPool {
     return entry.ready
   }
 
+  // 丢弃某路由的常驻客户端并关闭其子进程（fire-and-forget：调用方无需等待子进程退出）。
+  dropClient(routeKey) {
+    const entry = this.clients.get(routeKey)
+    if (!entry) return
+    this.clients.delete(routeKey)
+    entry.ready.then(c => c.close()).catch(() => { /* 初始化本就失败的子进程无需再关闭 */ })
+  }
+
   async run({ routeKey, sessionId, text, onEvent, signal }) {
     if (this.busy.has(sessionId)) { const e = new Error('BUSY: 该会话正在回复中'); e.code = 'BUSY'; throw e }
     this.busy.add(sessionId)
@@ -78,25 +93,30 @@ export class DshPool {
     // 单个定时器，覆盖整轮；在 finally 清理，避免每次通知都开一个新定时器导致泄漏。
     let timer = null
     const deadline = new Promise((_, reject) => {
-      timer = setTimeout(() => { const e = new Error('TIMEOUT: 回复超时'); e.code = 'TIMEOUT'; reject(e) }, TURN_TIMEOUT_MS)
+      timer = setTimeout(() => { const e = new Error('TIMEOUT: 回复超时'); e.code = 'TIMEOUT'; reject(e) }, this.turnTimeoutMs)
     })
-    // close() 唤醒信号：不依赖子进程/订阅自己解除阻塞（fake client 在测试里就做不到），
-    // 池整体关闭时应立刻放行所有仍在等待通知的 run()，而不是干等到 120s 超时。
-    const CLOSED = Symbol('dsh-pool-closed')
-    let resolveClosed
-    const closedSignal = new Promise(resolve => { resolveClosed = () => resolve(CLOSED) })
-    this.closeWaiters.add(resolveClosed)
     try {
+      // 中止信号在发出 prompt 之前就已置位：不占用子进程配额，直接返回空结果。
+      if (signal && signal.aborted) return { finalText: '', usage: null, title: null }
       const client = await this.client(routeKey)
       sub = client.subscribeSessionTree(sessionId)
+      this.openSubs.add(sub)
       await client.prompt(sessionId, [{ type: 'text', text }])
       let finalText = ''
       let usage = null
       let title = null
       while (true) {
         if (signal && signal.aborted) break
-        const n = await Promise.race([sub.next(), deadline, closedSignal])
-        if (n === CLOSED) break
+        let n
+        try {
+          n = await Promise.race([sub.next(), deadline])
+        } catch (err) {
+          // close() 关闭了这条订阅：真实 SDK 里这会让挂起的 next() 以
+          // TransportClosedError 拒绝；翻译成调用方能识别的 CLOSED，而不是当作
+          // 子进程意外死亡处理（那样会误触发下面的 dropClient）。
+          if (this.closed) { const e = new Error('服务正在关闭'); e.code = 'CLOSED'; throw e }
+          throw err
+        }
         if (isIdle(n, sessionId)) break
         const e = normalize(n)
         if (!e) continue
@@ -106,19 +126,21 @@ export class DshPool {
       }
       return { finalText, usage, title }
     } catch (err) {
-      // 子进程死亡或超时：丢弃该路由客户端，下次请求重启
-      if (err && (err.name === 'TransportClosedError' || err.code === 'TIMEOUT')) this.clients.delete(routeKey)
+      // 子进程死亡或超时：丢弃该路由客户端并关闭它，下次请求会重新启动一个
+      if (err && (err.name === 'TransportClosedError' || err.code === 'TIMEOUT')) this.dropClient(routeKey)
       throw err
     } finally {
       clearTimeout(timer)
-      this.closeWaiters.delete(resolveClosed)
-      if (sub) sub.close()
+      if (sub) { this.openSubs.delete(sub); sub.close() }
       this.busy.delete(sessionId)
     }
   }
 
   async close() {
-    for (const resolve of this.closeWaiters) resolve()
+    this.closed = true
+    // 先关闭所有仍在等待的订阅：真实 SDK 的 close() 会让挂起的 next() 立即以
+    // TransportClosedError 拒绝，从而让对应的 run() 尽快退出，而不是干等到超时。
+    for (const sub of this.openSubs) sub.close()
     const all = [...this.clients.values()]
     this.clients.clear()
     await Promise.allSettled(all.map(async e => { try { const c = await e.ready; await c.close() } catch { /* 忽略 */ } }))
