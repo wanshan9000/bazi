@@ -26,197 +26,13 @@ import ReportView from './ReportView.jsx'
 import { renderMarkdown } from '../utils/markdown.jsx'
 import { loadQuota, addAgentTokens, tokensToCredits, isAgentOverQuota, AGENT_QUOTA_TOKENS } from '../engine/freeQuota.js'
 import { consumeCredit } from '../data/users.js'
+import { ThinkBlock, ToolCallsBlock, FeedbackBar, CopyButton, renderAiText, timeNow, fmtSessionTime, QUICK } from './agent/ChatParts.jsx'
 
 // 报告类型 → 技能 key（反馈→进化信号关联）。子平→易学-泰山、盲派→盲派；合婚归姻缘、择日归黄历
 const REPORT_SKILL = {
   bazi: 'yixue-taishan', mangpai: 'mangpai', liuyao: 'liuyao', qimen: 'qimen', ziwei: 'ziwei',
   tarot: 'tarot', huangli: 'huangli', name: 'name', fengshui: 'fengshui',
   hehun: 'love', zejiri: 'huangli', full: 'consult'
-}
-
-// ── 反馈按钮（👍有用 / 👎不对）→ 技能进化信号源。仅用于测算报告 / 测算论断 ──
-function FeedbackBar({ msgId, fb, on, report }) {
-  return (
-    <div className={`msg-feedback ${report ? 'msg-fb-report' : ''}`}>
-      <button
-        className={`fb-btn ${fb[msgId] === 'up' ? 'on' : ''}`}
-        title="论断有用"
-        onClick={() => on(msgId, 'up')}
-      >👍</button>
-      <button
-        className={`fb-btn ${fb[msgId] === 'down' ? 'on' : ''}`}
-        title="论断不对 / 没解决"
-        onClick={() => on(msgId, 'down')}
-      >👎</button>
-    </div>
-  )
-}
-
-// ── 复制按钮：一键复制关键测试结果 / 测算论断全文 ──
-function CopyButton({ text, title = '复制结果' }) {
-  const [copied, setCopied] = useState(false)
-  const handleCopy = async () => {
-    const content = String(text || '')
-    try {
-      await navigator.clipboard.writeText(content)
-    } catch (e) {
-      // 兼容非安全上下文：回退到临时 textarea
-      const ta = document.createElement('textarea')
-      ta.value = content
-      document.body.appendChild(ta)
-      ta.select()
-      try { document.execCommand('copy') } catch (_) {}
-      document.body.removeChild(ta)
-    }
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1600)
-  }
-  return (
-    <button className={`copy-btn ${copied ? 'copied' : ''}`} title={title} onClick={handleCopy}>
-      {copied ? '✓ 已复制' : '⧉'}
-    </button>
-  )
-}
-
-// ── AI 思考块：回复中的 <think>…</think> 默认收起为一行（点击展开看推演过程） ────
-// 思考过程与结果正文分别输出：流式中自动展开以便用户实时看到推演；流式结束后默认收起，
-// 结果正文渲染在思考块下方，二者清晰分离。展开后窗口固定高度、内部滚动、字体小细。
-function ThinkBlock({ content, streaming = false }) {
-  // 流式中默认展开（让用户看到思考过程），完成后默认收起（让用户聚焦结果正文）
-  const [open, setOpen] = useState(streaming)
-  const bodyRef = useRef(null)
-  const lastStreamingRef = useRef(streaming)
-  // 监听 streaming 由 true → false：流式一结束立即收起——避免"思考块一直开着"
-  // useState 初值只在首次渲染生效，父组件 streaming 变化不会自动更新内部 open 状态
-  useEffect(() => {
-    if (!streaming) setOpen(false)
-    lastStreamingRef.current = streaming
-  }, [streaming])
-  // 兜底：content 不再变化 + 非流式 → 立即收起（防止某些边缘情况下 useEffect 没触发）
-  useEffect(() => {
-    if (streaming) return
-    const t = setTimeout(() => setOpen(false), 250)
-    return () => clearTimeout(t)
-  }, [content, streaming])
-  useEffect(() => {
-    if (open && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
-  }, [content, open])
-  return (
-    <div className={`think-block ${open ? 'open' : ''} ${streaming ? 'think-streaming' : ''}`}>
-      <button className="think-toggle" onClick={() => setOpen(o => !o)} aria-expanded={open}>
-        <span className="think-toggle-left">
-          <span className="think-icon" aria-hidden="true">✦</span>
-          <span className="think-label">{streaming ? '深度思考中…' : '思考过程'}</span>
-        </span>
-        <span className="think-arrow">{open ? '收起' : '展开'}</span>
-      </button>
-      {open && (
-        <div className="think-body" ref={bodyRef}>
-          {String(content || '').trim() || (streaming ? <span className="think-placeholder">正在推演…</span> : '')}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// 工具调用：可折叠块，列出本次会话实际触发的工具（中文名 + 数量）
-function ToolCallsBlock({ names }) {
-  const [open, setOpen] = useState(false)
-  const list = String(names || '').split(/[、,，\s]+/).filter(Boolean)
-  if (!list.length) return null
-  return (
-    <div className={`tool-block ${open ? 'open' : ''}`}>
-      <button className="tool-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className="tool-icon" aria-hidden="true">⚙</span>
-        <span className="tool-label">调用了 {list.length} 个工具</span>
-        <span className="tool-arrow">{open ? '˅' : '˄'}</span>
-      </button>
-      {open && (
-        <div className="tool-body">
-          {list.map((n, i) => (
-            <div className="tool-item" key={`t${i}`}>
-              <span className="tool-item-dot" />
-              <span className="tool-item-name">{n}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// 将 AI 文本按 <think>…</think> 拆分为普通段落与可折叠思考块
-// 普通文本走 markdown 解析器（自动把  |列1|列2|  表格转成 HTML 表格）
-// streaming=true：流式过程中默认展开思考块、自动跟随；并兼容未闭合的 <think>…（流式中常见）
-function renderAiText(text, streaming = false) {
-  // 剥离模型流式返回时包裹的 <output>…</output> 标签（保留内容），避免 "&lt;output&gt;" 显示在页面上
-  let raw = String(text || '')
-  raw = raw.replace(/<\/?output[^>]*>/gi, '')
-
-  // 处理未闭合的 <think>…（流式过程中末尾出现 <think> 但尚未到 </think> 也视为思考块）
-  // 思路：把流式中"从最近的 <think> 起到末尾"的内容也当作思考块，与结果正文分别输出
-  if (streaming) {
-    const lastOpen = raw.lastIndexOf('<think>')
-    const lastClose = raw.lastIndexOf('</think>')
-    if (lastOpen > lastClose) {
-      // 流式末尾存在未闭合的 <think>，把这段切出作为思考块
-      const before = raw.slice(0, lastOpen)
-      const thinkOpen = raw.slice(lastOpen + '<think>'.length)
-      // key 必须与下方 split 分支保持一致，否则流式结束（streaming:true→false）时
-      // React 因 key 变化（think-stream → t1）卸载旧 ThinkBlock、重挂新 ThinkBlock，
-      // 内部 open/streaming 状态被重置，视觉上"思考块闪一下、收起、又重启"。
-      // 未闭合 think 是第 (before 中已闭合 think 数 + 1) 个，split 分支里第 N 个 think 的
-      // key 为 t(N*2-1)。
-      const closedCount = (before.match(/<\/think>/g) || []).length
-      const streamKey = `t${closedCount * 2 + 1}`
-      return (
-        <>
-          {before && <div className="md-block">{renderMarkdown(before)}</div>}
-          <ThinkBlock key={streamKey} content={thinkOpen} streaming={true} />
-        </>
-      )
-    }
-  }
-
-  // 按 <think>…</think> 切分：思考块与结果正文分别渲染（思考块在固定高度窗口，正文在其下方）
-  const parts = raw.split(/<think>([\s\S]*?)<\/think>/g)
-  const nodes = []
-  let prevThink = null
-  parts.forEach((part, i) => {
-    if (i % 2 === 1) {
-      // 防御：跳过与前一个思考块内容完全相同的块（部分模型会重复输出同一段推演，
-      // 或收尾边界导致同文块出现两次），避免渲染出"两个一样的深度思考"
-      if (prevThink !== null && String(part).trim() === String(prevThink).trim()) return
-      prevThink = part
-      nodes.push(<ThinkBlock key={`t${i}`} content={part} streaming={streaming} />)
-      return
-    }
-    // 剥离段落中残留的孤立 <think> / </think> 标签（模型可能输出残缺标签），避免显示在正文里
-    const clean = part.replace(/<\/?think>/gi, '')
-    // 跳过空段落：split 在文本开头/结尾或连续 <think>…</think> 处会产生空串，
-    // 直接渲染会多出"啥都没有"的空框
-    if (!clean.trim()) return
-    nodes.push(<div key={`p${i}`} className="md-block">{renderMarkdown(clean)}</div>)
-  })
-  // 防御：流式已结束但正文"只有标题没有内容"——通常是 token 截断 / 网络中断导致只输出了
-  // ### 一、xxx 之类的章节标题，没有正文。这种情况下视觉上是一个"几乎空"的框，
-  // 追加一行小提示，引导用户重发，避免误判为"啥都没有"。
-  if (!streaming) {
-    const onlyTitles = nodes.length > 0 && nodes.every(n => {
-      if (!n.props || !n.props.children) return false
-      const inner = String(n.props.children)
-      // 只匹配像 "### 一、事业" / "## 财运" 之类的标题行（允许少量换行/空白）
-      return /^\s*(#{1,4})\s+.+?\s*$/.test(inner.trim()) || inner.replace(/[\s#\d一二三四五六七八九十、章节标题话\s]/g, '').length < 4
-    })
-    if (onlyTitles) {
-      nodes.push(
-        <div key="incomplete" className="md-block" style={{ color: '#a07a8c', fontSize: 12, marginTop: 8, opacity: 0.85 }}>
-          ✦ 看起来这次只输出了章节标题，正文未生成完整（可能是网络或 token 截断）。可点击「重新生成」或换一句话再试。
-        </div>
-      )
-    }
-  }
-  return nodes
 }
 
 // ── 上下文记忆：命盘持久化（localStorage）────────────────────────────
@@ -315,25 +131,6 @@ function loadChartMemory() {
   } catch { return null }
 }
 
-// 快捷问答（常规对话，不出报告）
-const QUICK = [
-  '今年运势',
-  '合适的工作',
-  '正缘何时来',
-  '抽张塔罗',
-  '盲派报告',
-  '子平报告',
-  '健康',
-  '事业',
-  '财运',
-  '人际关系',
-  '感情',
-]
-
-
-function timeNow() {
-  return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
 
 // 会话消息序列化：report 消息的 report 对象尝试完整 JSON 化，失败则降级为标题+markdown
 function serializeMessages(list) {
@@ -350,20 +147,6 @@ function serializeMessages(list) {
   })
 }
 
-function fmtSessionTime(ts) {
-  try {
-    const d = new Date(ts)
-    const now = new Date()
-    const sameDay = d.toDateString() === now.toDateString()
-    const hm = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    if (sameDay) return `今天 ${hm}`
-    const md = `${d.getMonth() + 1}月${d.getDate()}日`
-    if (d.getFullYear() === now.getFullYear()) return `${md} ${hm}`
-    return `${d.getFullYear()}年${md} ${hm}`
-  } catch {
-    return ''
-  }
-}
 
 const TOOL_NAME_CN = {
   bazi: '八字排盘', bazi_report: '八字报告', ziwei: '紫微排盘', ziwei_report: '紫微报告',
