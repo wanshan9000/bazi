@@ -16,3 +16,6 @@ _verify.mjs
 # 系统与编辑器
 .DS_Store
 *.log
+
+# superpowers SDD 工作区（会话草稿）
+.superpowers/
