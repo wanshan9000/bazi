@@ -1,0 +1,18 @@
+# 依赖与构建产物
+node_modules/
+dist/
+
+# 密钥与环境变量（保留 .env.example 模板）
+server/.env
+
+# 运行时用户数据（含订阅者手机号/八字等个人信息，勿上传）
+server/data/
+
+# 本地开发调试脚本（如需提交请 git add -f）
+_dbg*.mjs
+_smoke_test*.mjs
+_verify.mjs
+
+# 系统与编辑器
+.DS_Store
+*.log

@@ -1,0 +1,135 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e18] [cursor=pointer]:
+        - text: 元氣
+        - emphasis [ref=e19]: 满满
+      - navigation [ref=e20]:
+        - button "首页" [ref=e21] [cursor=pointer]
+        - button "元气AI" [ref=e23] [cursor=pointer]
+        - button "八字" [ref=e25] [cursor=pointer]
+        - button "黄历" [ref=e27] [cursor=pointer]
+        - button "紫微" [ref=e29] [cursor=pointer]
+        - button "塔罗" [ref=e31] [cursor=pointer]
+        - button "文库" [ref=e33] [cursor=pointer]
+      - button "登录" [ref=e36] [cursor=pointer]
+  - main [ref=e38]:
+    - generic [ref=e316]:
+      - button "← 返回首页" [ref=e318] [cursor=pointer]
+      - heading "紫微门 ⭐" [level=1] [ref=e319]
+      - paragraph [ref=e320]: 览十二宫 · 观星曜 · 一览人生星光地图
+      - generic [ref=e321]:
+        - generic [ref=e322]:
+          - heading "起紫微命盘" [level=3] [ref=e323]:
+            - generic [ref=e324]: ✦
+          - paragraph [ref=e326]: 请输入您本人的生辰八字（公历或农历皆可） · 依生年、月、日、时排出十二宫 · 主星入宫定格局
+        - generic [ref=e327]:
+          - generic [ref=e329]:
+            - generic [ref=e330]:
+              - generic [ref=e331]: 出生年 / 月 / 日 （依本人生辰，非当前时间）
+              - generic [ref=e332]:
+                - generic [ref=e333] [cursor=pointer]: 阳历
+                - generic [ref=e334] [cursor=pointer]: 农历
+            - generic [ref=e335]:
+              - generic [ref=e336]:
+                - spinbutton "如 1995" [ref=e337]: "1990"
+                - generic: 年
+              - generic [ref=e338]:
+                - combobox [ref=e339]:
+                  - option "1 月"
+                  - option "2 月"
+                  - option "3 月"
+                  - option "4 月"
+                  - option "5 月"
+                  - option "6 月" [selected]
+                  - option "7 月"
+                  - option "8 月"
+                  - option "9 月"
+                  - option "10 月"
+                  - option "11 月"
+                  - option "12 月"
+                - generic: 月
+              - generic [ref=e340]:
+                - combobox [ref=e341]:
+                  - option "1 日"
+                  - option "2 日"
+                  - option "3 日"
+                  - option "4 日"
+                  - option "5 日"
+                  - option "6 日"
+                  - option "7 日"
+                  - option "8 日"
+                  - option "9 日"
+                  - option "10 日"
+                  - option "11 日"
+                  - option "12 日"
+                  - option "13 日"
+                  - option "14 日"
+                  - option "15 日"
+                  - option "16 日"
+                  - option "17 日"
+                  - option "18 日"
+                  - option "19 日"
+                  - option "20 日"
+                  - option "21 日"
+                  - option "22 日"
+                  - option "23 日"
+                  - option "24 日"
+                  - option "25 日"
+                  - option "26 日"
+                  - option "27 日"
+                  - option "28 日"
+                  - option "29 日"
+                  - option "30 日" [selected]
+                - generic: 日
+          - generic [ref=e343]:
+            - generic [ref=e344]: 出生时辰
+            - button "午时 · 11:00 - 13:00" [ref=e345] [cursor=pointer]:
+              - generic [ref=e347]: ▾
+          - generic [ref=e348]:
+            - generic [ref=e349]:
+              - generic [ref=e350]: 性别
+              - generic [ref=e351]:
+                - generic [ref=e352] [cursor=pointer]: 乾造 · 男
+                - generic [ref=e353] [cursor=pointer]: 坤造 · 女
+            - generic [ref=e354]:
+              - generic [ref=e355]: 称呼（可选）
+              - textbox "怎么称呼你？" [ref=e356]
+          - button "起紫微命盘" [ref=e357] [cursor=pointer]:
+            - generic [ref=e358]: ✦
+          - paragraph [ref=e360]: 生辰信息仅用于本次排盘 · 紫微斗数依此起十二宫 · 仅供自我探索参考
+        - text: ☾
+  - contentinfo [ref=e271]:
+    - generic [ref=e272]:
+      - generic [ref=e284]:
+        - paragraph [ref=e285]:
+          - text: 元氣
+          - emphasis [ref=e286]: 满满
+        - paragraph [ref=e287]: 把心事交给星星，把好运留给自己
+      - generic [ref=e288]:
+        - generic [ref=e289]:
+          - paragraph [ref=e290]: 开始占卜
+          - list [ref=e291]:
+            - listitem [ref=e292]: 八字排盘
+            - listitem [ref=e293]: 紫微斗数
+            - listitem [ref=e294]: 塔罗指引
+            - listitem [ref=e295]: 元气 AI
+        - generic [ref=e296]:
+          - paragraph [ref=e297]: 发现更多
+          - list [ref=e298]:
+            - listitem [ref=e299]: 文库精选
+            - listitem [ref=e300]: 订阅黄历
+            - listitem [ref=e301]: 我的元气
+        - generic [ref=e302]:
+          - paragraph [ref=e303]: 关于
+          - list [ref=e304]:
+            - listitem [ref=e305]: 隐私政策
+            - listitem [ref=e306]: 用户协议
+            - listitem [ref=e307]: 联系我们
+            - listitem [ref=e308]: 管理控制台
+    - generic [ref=e309]:
+      - paragraph [ref=e310]: © 2025–2026 元氣滿滿 · 仅供娱乐参考 · 命由己造，相由心生
+      - paragraph [ref=e311]:
+        - generic [ref=e312]: 沪 ICP 备 XXXXXXXX 号
+        - generic [ref=e313]: ·
+        - generic [ref=e314]: 沪公网安备 XXXXXXXXXXXXXX 号

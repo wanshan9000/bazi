@@ -1,0 +1,86 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e18] [cursor=pointer]:
+        - text: 元氣
+        - emphasis [ref=e19]: 满满
+      - navigation [ref=e20]:
+        - button "首页" [ref=e21] [cursor=pointer]
+        - button "元气AI" [active] [ref=e23] [cursor=pointer]
+        - button "八字" [ref=e25] [cursor=pointer]
+        - button "黄历" [ref=e27] [cursor=pointer]
+        - button "紫微" [ref=e29] [cursor=pointer]
+        - button "塔罗" [ref=e31] [cursor=pointer]
+        - button "文库" [ref=e33] [cursor=pointer]
+      - button "登录" [ref=e36] [cursor=pointer]
+  - main [ref=e38]:
+    - generic [ref=e315]:
+      - button "返回首页" [ref=e316] [cursor=pointer]:
+        - generic [ref=e319]: 返回
+      - heading "元气AI 问司命 · 八字 · 紫微，两门通晓" [level=1] [ref=e320]:
+        - text: 元气AI
+        - generic [ref=e321]: 问司命 · 八字 · 紫微，两门通晓
+      - generic [ref=e323]:
+        - generic [ref=e324]:
+          - generic [ref=e325]: 司
+          - generic [ref=e326]: 司命 Agent
+          - generic [ref=e329]:
+            - button "新会话" [ref=e330] [cursor=pointer]
+            - button "会话历史" [ref=e333] [cursor=pointer]
+            - button "我的命盘" [ref=e338] [cursor=pointer]
+        - generic [ref=e341]:
+          - generic [ref=e342]:
+            - generic [ref=e343]: 司
+            - paragraph [ref=e347]: 我是「司命」，三门命理的 AI 命理 Agent。
+          - generic [ref=e348]:
+            - generic [ref=e349]: 司
+            - paragraph [ref=e353]: 八字、紫微、六爻，三法归一。你可以直接问我问题，也可以先排一份命盘，让我的回答贴合你的命局。
+          - generic [ref=e354]:
+            - generic [ref=e355]: 司
+            - paragraph [ref=e359]: 请告诉我你的生辰八字，我来帮你排盘+大运，或者你先讨论什么问题，请告诉我。
+        - generic [ref=e361]:
+          - generic [ref=e362]: 快捷问答
+          - generic [ref=e363]:
+            - button "今年运势" [ref=e364] [cursor=pointer]
+            - button "合适的工作" [ref=e365] [cursor=pointer]
+            - button "正缘何时来" [ref=e366] [cursor=pointer]
+            - button "摇一卦" [ref=e367] [cursor=pointer]
+            - button "抽张塔罗" [ref=e368] [cursor=pointer]
+        - generic [ref=e369]:
+          - textbox "问司命任何问题…" [ref=e370]
+          - button "未接入模型 · 点击选择" [ref=e372] [cursor=pointer]
+          - button [disabled] [ref=e373]
+  - contentinfo [ref=e271]:
+    - generic [ref=e272]:
+      - generic [ref=e284]:
+        - paragraph [ref=e285]:
+          - text: 元氣
+          - emphasis [ref=e286]: 满满
+        - paragraph [ref=e287]: 把心事交给星星，把好运留给自己
+      - generic [ref=e288]:
+        - generic [ref=e289]:
+          - paragraph [ref=e290]: 开始占卜
+          - list [ref=e291]:
+            - listitem [ref=e292]: 八字排盘
+            - listitem [ref=e293]: 紫微斗数
+            - listitem [ref=e294]: 塔罗指引
+            - listitem [ref=e295]: 元气 AI
+        - generic [ref=e296]:
+          - paragraph [ref=e297]: 发现更多
+          - list [ref=e298]:
+            - listitem [ref=e299]: 文库精选
+            - listitem [ref=e300]: 订阅黄历
+            - listitem [ref=e301]: 我的元气
+        - generic [ref=e302]:
+          - paragraph [ref=e303]: 关于
+          - list [ref=e304]:
+            - listitem [ref=e305]: 隐私政策
+            - listitem [ref=e306]: 用户协议
+            - listitem [ref=e307]: 联系我们
+            - listitem [ref=e308]: 管理控制台
+    - generic [ref=e309]:
+      - paragraph [ref=e310]: © 2025–2026 元氣滿滿 · 仅供娱乐参考 · 命由己造，相由心生
+      - paragraph [ref=e311]:
+        - generic [ref=e312]: 沪 ICP 备 XXXXXXXX 号
+        - generic [ref=e313]: ·
+        - generic [ref=e314]: 沪公网安备 XXXXXXXXXXXXXX 号

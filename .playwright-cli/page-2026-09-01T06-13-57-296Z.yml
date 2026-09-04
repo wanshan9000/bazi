@@ -1,0 +1,229 @@
+- generic [ref=f3e3]:
+  - banner [ref=f3e4]:
+    - generic [ref=f3e5]:
+      - generic [ref=f3e18] [cursor=pointer]:
+        - text: 元氣
+        - emphasis [ref=f3e19]: 满满
+      - navigation [ref=f3e20]:
+        - button "首页" [ref=f3e21] [cursor=pointer]
+        - button "元气AI" [ref=f3e23] [cursor=pointer]
+        - button "八字" [ref=f3e25] [cursor=pointer]
+        - button "黄历" [ref=f3e27] [cursor=pointer]
+        - button "紫微" [ref=f3e29] [cursor=pointer]
+        - button "塔罗" [ref=f3e31] [cursor=pointer]
+        - button "文库" [ref=f3e33] [cursor=pointer]
+      - button "登录" [ref=f3e36] [cursor=pointer]
+  - main [ref=f3e38]:
+    - generic [ref=f3e40]:
+      - button "← 返回首页" [ref=f3e42] [cursor=pointer]
+      - heading "八字门 🌿" [level=1] [ref=f3e43]
+      - paragraph [ref=f3e44]: 排四柱 · 看五行 · 找到你的出厂设置
+      - generic [ref=f3e45]:
+        - generic [ref=f3e46]:
+          - generic [ref=f3e47]:
+            - generic [ref=f3e48]: 出生日期*
+            - generic [ref=f3e49]:
+              - generic [ref=f3e50] [cursor=pointer]: 阳历
+              - generic [ref=f3e51] [cursor=pointer]: 农历
+          - generic [ref=f3e52]:
+            - generic [ref=f3e53]:
+              - combobox [ref=f3e54]:
+                - option "2026 年"
+                - option "2025 年"
+                - option "2024 年"
+                - option "2023 年"
+                - option "2022 年"
+                - option "2021 年"
+                - option "2020 年"
+                - option "2019 年"
+                - option "2018 年"
+                - option "2017 年"
+                - option "2016 年"
+                - option "2015 年"
+                - option "2014 年"
+                - option "2013 年"
+                - option "2012 年"
+                - option "2011 年"
+                - option "2010 年"
+                - option "2009 年"
+                - option "2008 年"
+                - option "2007 年"
+                - option "2006 年"
+                - option "2005 年"
+                - option "2004 年"
+                - option "2003 年"
+                - option "2002 年"
+                - option "2001 年"
+                - option "2000 年"
+                - option "1999 年"
+                - option "1998 年"
+                - option "1997 年"
+                - option "1996 年"
+                - option "1995 年" [selected]
+                - option "1994 年"
+                - option "1993 年"
+                - option "1992 年"
+                - option "1991 年"
+                - option "1990 年"
+                - option "1989 年"
+                - option "1988 年"
+                - option "1987 年"
+                - option "1986 年"
+                - option "1985 年"
+                - option "1984 年"
+                - option "1983 年"
+                - option "1982 年"
+                - option "1981 年"
+                - option "1980 年"
+                - option "1979 年"
+                - option "1978 年"
+                - option "1977 年"
+                - option "1976 年"
+                - option "1975 年"
+                - option "1974 年"
+                - option "1973 年"
+                - option "1972 年"
+                - option "1971 年"
+                - option "1970 年"
+                - option "1969 年"
+                - option "1968 年"
+                - option "1967 年"
+                - option "1966 年"
+                - option "1965 年"
+                - option "1964 年"
+                - option "1963 年"
+                - option "1962 年"
+                - option "1961 年"
+                - option "1960 年"
+                - option "1959 年"
+                - option "1958 年"
+                - option "1957 年"
+                - option "1956 年"
+                - option "1955 年"
+                - option "1954 年"
+                - option "1953 年"
+                - option "1952 年"
+                - option "1951 年"
+                - option "1950 年"
+                - option "1949 年"
+                - option "1948 年"
+                - option "1947 年"
+                - option "1946 年"
+                - option "1945 年"
+                - option "1944 年"
+                - option "1943 年"
+                - option "1942 年"
+                - option "1941 年"
+                - option "1940 年"
+                - option "1939 年"
+                - option "1938 年"
+                - option "1937 年"
+                - option "1936 年"
+                - option "1935 年"
+                - option "1934 年"
+                - option "1933 年"
+                - option "1932 年"
+                - option "1931 年"
+                - option "1930 年"
+                - option "1929 年"
+                - option "1928 年"
+                - option "1927 年"
+                - option "1926 年"
+              - text: ▾
+            - generic [ref=f3e55]:
+              - combobox [ref=f3e56]:
+                - option "1 月"
+                - option "2 月"
+                - option "3 月"
+                - option "4 月"
+                - option "5 月"
+                - option "6 月" [selected]
+                - option "7 月"
+                - option "8 月"
+                - option "9 月"
+                - option "10 月"
+                - option "11 月"
+                - option "12 月"
+              - text: ▾
+            - generic [ref=f3e57]:
+              - combobox [ref=f3e58]:
+                - option "1 日"
+                - option "2 日"
+                - option "3 日"
+                - option "4 日"
+                - option "5 日"
+                - option "6 日"
+                - option "7 日"
+                - option "8 日"
+                - option "9 日"
+                - option "10 日"
+                - option "11 日"
+                - option "12 日"
+                - option "13 日"
+                - option "14 日"
+                - option "15 日" [selected]
+                - option "16 日"
+                - option "17 日"
+                - option "18 日"
+                - option "19 日"
+                - option "20 日"
+                - option "21 日"
+                - option "22 日"
+                - option "23 日"
+                - option "24 日"
+                - option "25 日"
+                - option "26 日"
+                - option "27 日"
+                - option "28 日"
+                - option "29 日"
+                - option "30 日"
+              - text: ▾
+        - generic [ref=f3e59]:
+          - generic [ref=f3e60]: 出生时辰
+          - button "午时 · 11:00 - 13:00" [ref=f3e61] [cursor=pointer]:
+            - generic [ref=f3e63]: ▾
+        - generic [ref=f3e64]:
+          - generic [ref=f3e65]: 性别
+          - generic [ref=f3e66]:
+            - generic [ref=f3e67] [cursor=pointer]: 乾造 · 男
+            - generic [ref=f3e68] [cursor=pointer]: 坤造 · 女
+        - generic [ref=f3e69]:
+          - generic [ref=f3e70]: 称呼（可选）
+          - textbox "怎么称呼你？" [ref=f3e71]
+        - generic [ref=f3e72]:
+          - button "✦ 排定命盘" [ref=f3e73] [cursor=pointer]
+          - paragraph [ref=f3e74]: 基于你的生辰推算四柱八字与五行命局 · 仅供自我探索参考
+  - contentinfo [ref=f3e75]:
+    - generic [ref=f3e76]:
+      - generic [ref=f3e88]:
+        - paragraph [ref=f3e89]:
+          - text: 元氣
+          - emphasis [ref=f3e90]: 满满
+        - paragraph [ref=f3e91]: 把心事交给星星，把好运留给自己
+      - generic [ref=f3e92]:
+        - generic [ref=f3e93]:
+          - paragraph [ref=f3e94]: 开始占卜
+          - list [ref=f3e95]:
+            - listitem [ref=f3e96]: 八字排盘
+            - listitem [ref=f3e97]: 紫微斗数
+            - listitem [ref=f3e98]: 塔罗指引
+            - listitem [ref=f3e99]: 元气 AI
+        - generic [ref=f3e100]:
+          - paragraph [ref=f3e101]: 发现更多
+          - list [ref=f3e102]:
+            - listitem [ref=f3e103]: 文库精选
+            - listitem [ref=f3e104]: 订阅黄历
+            - listitem [ref=f3e105]: 我的元气
+        - generic [ref=f3e106]:
+          - paragraph [ref=f3e107]: 关于
+          - list [ref=f3e108]:
+            - listitem [ref=f3e109]: 隐私政策
+            - listitem [ref=f3e110]: 用户协议
+            - listitem [ref=f3e111]: 联系我们
+            - listitem [ref=f3e112]: 管理控制台
+    - generic [ref=f3e113]:
+      - paragraph [ref=f3e114]: © 2025–2026 元氣滿滿 · 仅供娱乐参考 · 命由己造，相由心生
+      - paragraph [ref=f3e115]:
+        - generic [ref=f3e116]: 沪 ICP 备 XXXXXXXX 号
+        - generic [ref=f3e117]: ·
+        - generic [ref=f3e118]: 沪公网安备 XXXXXXXXXXXXXX 号

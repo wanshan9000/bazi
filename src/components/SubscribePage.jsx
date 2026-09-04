@@ -1,0 +1,784 @@
+import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { buildChart } from '../engine/bazi.js'
+import { buildWeek, buildDaily, chartProfile } from '../engine/huangli.js'
+import { inferScenario, calcAge, sceneName } from '../engine/cantian.js'
+import { WUXING_COLOR, WUXING_ICON } from '../data/ganzhi.js'
+import { dayElement } from '../data/huangli.js'
+import ShichenPicker from './ShichenPicker.jsx'
+import TrueSolarField from './TrueSolarField.jsx'
+import FusedHuangliCard from './FusedHuangliCard.jsx'
+import ReportLock from './ReportLock.jsx'
+import { api } from '../api/client.js'
+import { getLunarMonths, getLunarDayCount, lunarToSolar } from '../utils/lunar.js'
+
+const IDENTITY_OPTIONS = [
+  { key: 'worker', name: '打工人', emoji: '💼' },
+  { key: 'student', name: '学生党', emoji: '📚' },
+  { key: 'free', name: '自由一族', emoji: '🌿' },
+]
+
+const LS_SUB = 'genki-huangli-sub'
+const SHICHEN = [
+  ['子时', '23-01'], ['丑时', '01-03'], ['寅时', '03-05'], ['卯时', '05-07'],
+  ['辰时', '07-09'], ['巳时', '09-11'], ['午时', '11-13'], ['未时', '13-15'],
+  ['申时', '15-17'], ['酉时', '17-19'], ['戌时', '19-21'], ['亥时', '21-23']
+]
+const SHICHEN_HOUR = { 子: 0, 丑: 2, 寅: 4, 卯: 6, 辰: 8, 巳: 10, 午: 12, 未: 14, 申: 16, 酉: 18, 戌: 20, 亥: 22 }
+
+function loadSub() {
+  try { return JSON.parse(localStorage.getItem(LS_SUB)) || null } catch { return null }
+}
+
+export default function SubscribePage({ chart: extChart, onBack, user, onRequireLogin }) {
+  const saved = useMemo(loadSub, [])
+  const [chart, setChart] = useState(extChart || saved?.chart || null)
+  const [pref, setPref] = useState(saved?.pref || { time: 'morning', notify: false, enabled: true, role: '', favZodiac: [] })
+  const [subToken, setSubToken] = useState(saved?.subToken || '')
+  const [serverOk, setServerOk] = useState(false)
+  const [showForm, setShowForm] = useState(!chart)
+  const [today, setToday] = useState(new Date())
+  // 整页"当前查看日期"（默认今天），本周速览 / 30 天选择器 / 今日黄历卡片都以此同步
+  const [viewDate, setViewDate] = useState(() => new Date(today))
+
+  // 若外部八字变化，同步（App 里排完盘再来订阅）
+  useEffect(() => { if (extChart) setChart(extChart) }, [extChart])
+
+  // 启动时探测后端是否可用
+  useEffect(() => {
+    api.health().then(h => setServerOk(h.ok))
+  }, [])
+
+  // 订阅持久化
+  useEffect(() => {
+    try { localStorage.setItem(LS_SUB, JSON.stringify({ chart, pref, subToken })) } catch { /* ignore */ }
+  }, [chart, pref, subToken])
+
+  const week = useMemo(() => chart ? buildWeek(today, chart) : [], [chart, today])
+  const profile = chart ? chartProfile(chart) : null
+
+  // 根据订阅人的「年纪 + 身份」自动推断黄历场景
+  const age = useMemo(() => (chart ? calcAge(chart.year, chart.month, chart.day) : 0), [chart])
+  const sceneKey = useMemo(() => inferScenario(age, pref.role), [age, pref.role])
+
+  // 浏览器通知授权统一交给 SubscribeBar 内部处理（弹层内可一并开启）
+  // 保留占位 prop，避免破坏父组件 onToggleNotify 接口
+  const toggleNotify = () => { /* 由 SubscribeBar.handleSwitchClick 接管 */ }
+
+  return (
+    <div className="page-wrap hl-page">
+      <div className="container">
+        <div className="page-head rise">
+          <button className="back-btn" onClick={onBack}>← 返回首页</button>
+          {!showForm && (
+            <button className="change-chart-btn" onClick={() => setShowForm(true)}>更换生辰</button>
+          )}
+        </div>
+
+        {/* 黄历 · 品牌主标题 */}
+        <div className="hl-hero rise rise-1">
+          <div className="hl-hero-title">
+            <span className="hl-hero-main">黄历<span className="hl-hero-leaf">🌿</span></span>
+          </div>
+          <div className="hl-hero-sub">查每日宜忌 · 配生辰开运 · 找到你的出厂设置</div>
+        </div>
+
+        {showForm ? (
+          <BirthForm onDone={(c, role) => {
+            setChart(c)
+            if (role) setPref(prev => ({ ...prev, role }))
+            setShowForm(false)
+          }} />
+        ) : (
+          <>
+            {profile && <ProfileBar profile={profile} />}
+
+            {/* 今日融合黄历（订阅设置 + 融合卡片） */}
+            <div className="card hl-report-card rise rise-4">
+              <div className="hl-report-head">
+                <SubscribeBar
+                  pref={pref}
+                  setPref={setPref}
+                  onToggleNotify={toggleNotify}
+                  chart={chart}
+                  subToken={subToken}
+                  onSubscribed={token => setSubToken(token)}
+                  serverOk={serverOk}
+                  user={user}
+                  onRequireLogin={onRequireLogin}
+                />
+              </div>
+              <FusedHuangliCard
+                chart={chart}
+                date={viewDate}
+                onChangeDate={setViewDate}
+                defaultScenario={sceneKey}
+                myZodiac={profile?.shengxiao}
+                favZodiac={pref.favZodiac || []}
+              />
+            </div>
+
+            <WeekStrip week={week} chart={chart} viewDate={viewDate} onSelectDate={setViewDate} />
+
+            <MonthCurve chart={chart} today={today} />
+
+            <div className="card" style={{ marginTop: 16, textAlign: 'center', padding: '16px' }}>
+              <button className="change-chart-btn" style={{ marginRight: 8 }} onClick={() => setShowForm(true)}>更换生辰</button>
+              <button className="btn ghost small" onClick={() => { setToday(new Date()); window.scrollTo(0, 0) }}>回到今天</button>
+            </div>
+
+            <p className="form-note" style={{ marginTop: 14, textAlign: 'center' }}>
+              订阅基于你的八字生成 · 每日提示仅供生活参考，命由己造
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---- 生辰表单（与八字门一致） ----
+function BirthForm({ onDone }) {
+  const now = new Date()
+  const [calendar, setCalendar] = useState('solar')
+  const [year, setYear] = useState(1995)
+  const [month, setMonth] = useState(6)
+  const [day, setDay] = useState(15)
+  const [lunarLeap, setLunarLeap] = useState(false)
+  const [hour, setHour] = useState(12)
+  const [timeKnown, setTimeKnown] = useState(true)
+  const [gender, setGender] = useState('男')
+  const [role, setRole] = useState('')
+  // 太阳真时校正：开启后，排盘时辰用换算后的 trueSolarHour
+  const [useTrueSolar, setUseTrueSolar] = useState(false)
+  const [trueSolarHour, setTrueSolarHour] = useState(null)
+  const [placeLabel, setPlaceLabel] = useState('')
+
+  const daysInMonth = (y, m) => new Date(y, m, 0).getDate()
+  const years = []
+  for (let y = now.getFullYear(); y >= 1926; y--) years.push(y)
+  const lunarMonths = calendar === 'lunar' ? getLunarMonths(year) : []
+  const lunarMaxDay = calendar === 'lunar' ? getLunarDayCount(year, month, lunarLeap) : daysInMonth(year, month)
+  const adjustDay = (d) => setDay(Math.min(d, calendar === 'lunar' ? getLunarDayCount(year, month, lunarLeap) : daysInMonth(year, month)))
+  const setM = (m, leap) => { setMonth(m); setLunarLeap(!!leap); setDay(prev => Math.min(prev, calendar === 'lunar' ? getLunarDayCount(year, m, !!leap) : daysInMonth(year, m))) }
+  const setY = (y) => {
+    setYear(y)
+    if (calendar === 'lunar') {
+      const ms = getLunarMonths(y)
+      if (ms.length) { const m0 = ms[0]; setMonth(m0.num); setLunarLeap(m0.leap); setDay(Math.min(day, getLunarDayCount(y, m0.num, m0.leap))) }
+    } else setDay(prev => Math.min(prev, daysInMonth(y, month)))
+  }
+
+  const submit = () => {
+    let outYear = year, outMonth = month, outDay = day
+    if (calendar === 'lunar') {
+      const sol = lunarToSolar(year, month, day, lunarLeap)
+      outYear = sol.year; outMonth = sol.month; outDay = sol.day
+    }
+    // 太阳真时开启且换算成功 → 排盘用换算后的时辰
+    const finalHour = timeKnown ? (useTrueSolar && trueSolarHour != null ? trueSolarHour : hour) : 12
+    onDone(buildChart(outYear, outMonth, outDay, finalHour, gender), role)
+  }
+
+  return (
+    <div className="card rise rise-3">
+      <div className="hl-form-head">✦ 用你的八字订制每日黄历 ✦</div>
+      <p className="hl-form-sub">填入出生信息，生成专属于你的每日开运提示</p>
+
+      <div className="field-pair">
+        <div className="field">
+          <label>性别</label>
+          <div className="select-wrap">
+            <select value={gender} onChange={e => setGender(e.target.value)}>
+              <option value="男">乾造 · 男</option>
+              <option value="女">坤造 · 女</option>
+            </select>
+          </div>
+        </div>
+        <div className="field">
+          <label>你的身份 <span className="opt">(选填 · 不选则按年纪自动推断)</span></label>
+          <div className="select-wrap">
+            <select value={role} onChange={e => setRole(e.target.value)}>
+              <option value="">不选（按年纪自动推断）</option>
+              {IDENTITY_OPTIONS.map(o => (
+                <option key={o.key} value={o.key}>{o.emoji} {o.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="date-label-row">
+          <span>出生日期<span className="req">*</span></span>
+          <span className="cal-switch">
+            <span className={`cal-chip ${calendar === 'solar' ? 'active' : ''}`} onClick={() => { setCalendar('solar'); setLunarLeap(false) }}>阳历</span>
+            <span className={`cal-chip ${calendar === 'lunar' ? 'active' : ''}`} onClick={() => setCalendar('lunar')}>农历</span>
+          </span>
+        </label>
+        <div className="date-row">
+          <div className="select-wrap">
+            <select value={year} onChange={e => setY(+e.target.value)}>
+              {years.map(y => <option key={y} value={y}>{y} 年</option>)}
+            </select>
+          </div>
+          <div className="select-wrap">
+            <select value={calendar === 'lunar' ? (lunarLeap ? `闰${month}` : `${month}`) : month} onChange={e => {
+              if (calendar === 'lunar') { const v = e.target.value; setM(+v.replace('闰', ''), v.startsWith('闰')) }
+              else setM(+e.target.value)
+            }}>
+              {calendar === 'lunar'
+                ? lunarMonths.map(m => <option key={m.key} value={m.key}>{m.label}</option>)
+                : Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1} 月</option>)}
+            </select>
+          </div>
+          <div className="select-wrap">
+            <select value={day} onChange={e => adjustDay(+e.target.value)}>
+              {Array.from({ length: lunarMaxDay }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1} 日</option>)}
+            </select>
+          </div>
+        </div>
+        {calendar === 'lunar' && <p className="field-hint">农历输入会自动换算为公历排盘</p>}
+      </div>
+
+      <div className="field">
+        <label>出生时辰</label>
+        <ShichenPicker
+          value={hour}
+          timeKnown={timeKnown}
+          onChange={({ hour: h, timeKnown: tk }) => {
+            setHour(h)
+            setTimeKnown(tk)
+            // 手动指定时辰后，退出太阳真时校正，以手选为准
+            if (tk) { setUseTrueSolar(false); setTrueSolarHour(null) }
+          }}
+        />
+      </div>
+
+      <div className="field">
+        <TrueSolarField
+          year={year}
+          month={month}
+          day={day}
+          hour={hour}
+          useTrueSolar={useTrueSolar}
+          onChange={({ useTrueSolar: u, trueSolarHour: ts, placeLabel: pl }) => {
+            setUseTrueSolar(u)
+            setTrueSolarHour(ts)
+            setPlaceLabel(pl)
+          }}
+        />
+      </div>
+
+      <div className="form-actions">
+        <button className="btn" style={{ width: '100%' }} onClick={submit}>
+          ✦ 生成我的专属黄历
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---- 命局概要条 ----
+function ProfileBar({ profile }) {
+  return (
+    <div className="hl-profile rise rise-3">
+      <div className="hl-profile-wx" style={{ background: WUXING_COLOR[profile.dayMasterWx] }}>
+        {WUXING_ICON[profile.dayMasterWx]}
+      </div>
+      <div className="hl-profile-info">
+        <div className="hl-profile-line">
+          <span className="hl-profile-title">
+            {profile.dayMaster}日主 · <em>{profile.dayMasterWx}</em>命 · {profile.shengxiao}肖
+          </span>
+          <span className={`hl-profile-strength ${profile.strength === '旺' ? 'strong' : 'weak'}`}>
+            {profile.strength === '旺' ? '身旺' : '身弱'}
+          </span>
+        </div>
+        <div className="hl-profile-tags">
+          <span className="hl-tag good">喜神 {profile.favorable.join('·')}</span>
+          <span className="hl-tag bad">忌神 {profile.avoid.join('·')}</span>
+          <span className="hl-tag wx">{profile.gender === '男' ? '乾造' : '坤造'}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---- 订阅面板（短信 + 微信扫码，真实后端） ----
+const TIMES = [
+  { k: 'morning', label: '晨起', sub: '07:00', icon: '🌅' },
+  { k: 'noon', label: '午间', sub: '12:00', icon: '☀️' },
+  { k: 'evening', label: '晚归', sub: '21:00', icon: '🌙' }
+]
+const ZODIACS = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪']
+
+// 从 chart 提取生日信息（用于后端生成推送内容）
+function birthFromChart(chart) {
+  if (!chart) return null
+  return {
+    year: chart.year, month: chart.month, day: chart.day,
+    hour: chart.hour ?? 12, gender: chart.gender === '男' ? 'm' : 'f',
+  }
+}
+
+function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscribed, serverOk, user, onRequireLogin }) {
+  const fav = pref.favZodiac || []
+  const [tab, setTab] = useState(serverOk ? 'sms' : 'local') // sms | wechat | local
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [countdown, setCountdown] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState({ type: '', text: '' })
+  const [devCode, setDevCode] = useState('')
+  const [showModal, setShowModal] = useState(false)
+
+  // 后端不可用时回退到本地浏览器通知
+  useEffect(() => { if (!serverOk && tab === 'sms') setTab('local') }, [serverOk, tab])
+  useEffect(() => { if (!serverOk && tab === 'wechat') setTab('local') }, [serverOk, tab])
+
+  // 倒计时
+  useEffect(() => {
+    if (countdown <= 0) return
+    const t = setTimeout(() => setCountdown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [countdown])
+
+  const toggleZodiac = (z) => {
+    const next = fav.includes(z) ? fav.filter(x => x !== z) : [...fav, z]
+    setPref(prev => ({ ...prev, favZodiac: next }))
+    if (subToken) api.update(subToken, { favZodiac: next }).catch(() => {})
+  }
+  const pickTime = (k) => {
+    setPref(prev => ({ ...prev, time: k }))
+    if (subToken) api.update(subToken, { time: k }).catch(() => {})
+  }
+
+  const flash = (type, text) => {
+    setMsg({ type, text })
+    if (type !== '') setTimeout(() => setMsg({ type: '', text: '' }), 6000)
+  }
+
+  // 发送验证码
+  const handleSendCode = async () => {
+    if (!/^1\d{10}$/.test(phone)) return flash('err', '请输入正确的 11 位手机号')
+    setBusy(true)
+    try {
+      const r = await api.sendCode(phone)
+      setDevCode(r.devCode || '')
+      setCountdown(60)
+      flash('ok', r.msg || '验证码已发送')
+    } catch (e) { flash('err', e.message) }
+    setBusy(false)
+  }
+
+  // 短信订阅
+  const handleSmsSubscribe = async () => {
+    if (!/^1\d{10}$/.test(phone)) return flash('err', '请输入正确的 11 位手机号')
+    if (!code) return flash('err', '请输入验证码')
+    setBusy(true)
+    try {
+      const r = await api.smsSubscribe({ phone, code, birth: birthFromChart(chart), time: pref.time, favZodiac: fav })
+      if (r.token) onSubscribed(r.token)
+      flash('ok', r.msg || '订阅成功 🍀')
+    } catch (e) { flash('err', e.message) }
+    setBusy(false)
+  }
+
+  // 微信扫码
+  const handleWechat = async () => {
+    setBusy(true)
+    try {
+      const r = await api.wechatQr()
+      if (r.mock) {
+        // 降级：模拟扫码完成，直接生成一个微信订阅
+        const done = await api.wechatMockDone({ phone: phone || undefined, birth: birthFromChart(chart), time: pref.time, favZodiac: fav })
+        if (done.token) onSubscribed(done.token)
+        flash('ok', '微信订阅成功（开发降级模式）')
+      } else if (r.url) {
+        window.location.href = r.url
+      }
+    } catch (e) { flash('err', e.message) }
+    setBusy(false)
+  }
+
+  // 已订阅态：显示订阅信息 + 取消
+  const handleUnsubscribe = async () => {
+    if (!subToken) return
+    try { await api.unsubscribe(subToken) } catch { /* ignore */ }
+    onSubscribed('')
+    setPhone(''); setCode('')
+    flash('ok', '已取消订阅')
+  }
+
+  // 开关点击：开通订阅属于会员权益 → 未登录先去注册/登录（成功后自动返回本页）
+  const requireUser = () => { if (!user && onRequireLogin) { onRequireLogin(); return true } return false }
+
+  // 开关点击：已订阅则关闭；未订阅则弹出"选择提醒方式"弹层
+  const handleSwitchClick = () => {
+    if (requireUser()) return
+    const isOn = !!subToken || !!pref.notify
+    if (isOn) {
+      if (subToken) handleUnsubscribe()
+      if (pref.notify) setPref(prev => ({ ...prev, notify: false }))
+      setShowModal(false)
+      flash('ok', '已关闭每日提醒')
+      return
+    }
+    setShowModal(true)
+  }
+
+  return (
+    <div className="hl-sub">
+      {/* 未登录：订阅属会员权益，先注册/登录（成功后自动返回本页继续开通） */}
+      {!user && (
+        <div className="hl-sub-login">
+          <span className="hl-sub-login-ic" aria-hidden>🔒</span>
+          <span className="hl-sub-login-txt">订阅黄历是「凡境」会员权益 · 注册登录后即可开通每日宜忌推送（扫码识别一步注册 · 自动登录）</span>
+          <button className="hl-sub-login-btn" onClick={() => onRequireLogin && onRequireLogin()}>注册 / 登录</button>
+        </div>
+      )}
+
+      {/* 顶部：订阅开关 */}
+      <div className="hl-sub-head">
+        <div className="hl-sub-head-l">
+          <span className="hl-sub-ic">🔔</span>
+          <span className="hl-sub-title">每日提醒</span>
+          <span className="hl-sub-tip">
+            {!user
+              ? '会员权益 · 登录后开通'
+              : (serverOk
+                ? (subToken ? '已通过短信/微信订阅 · 按时段推送' : '短信 / 微信扫码订阅，按时段推送')
+                : '后端未连接 · 已用浏览器通知')}
+          </span>
+        </div>
+        <button
+          className={`hl-switch ${(subToken || pref.notify) ? 'on' : ''}`}
+          onClick={handleSwitchClick}
+          aria-pressed={!!(subToken || pref.notify)}
+          title={subToken || pref.notify ? '点击关闭每日提醒' : '点击开通每日提醒'}
+        >
+          <span className="hl-switch-knob" />
+        </button>
+      </div>
+
+      {/* 已订阅且连接后端：显示偏好管理 */}
+      {serverOk && subToken ? (
+        <>
+          <div className="hl-sub-ok">
+            <span className="hl-sub-ok-ic">✅</span>
+            <span className="hl-sub-ok-txt">订阅已生效，每天按时段推送当日黄历</span>
+            <button className="hl-sub-ok-cancel" onClick={handleUnsubscribe}>取消</button>
+          </div>
+
+          {/* 时段三选 */}
+          <div className="hl-sub-times-row">
+            {TIMES.map(t => (
+              <button key={t.k} className={`hl-sub-time ${pref.time === t.k ? 'active' : ''}`} onClick={() => pickTime(t.k)}>
+                <span className="hl-sub-time-ic">{t.icon}</span>
+                <span className="hl-sub-time-lbl">{t.label}</span>
+                <small>{t.sub}</small>
+              </button>
+            ))}
+          </div>
+        </>
+      ) : serverOk ? (
+        <>
+          {/* 未订阅：简短提示 + 触发弹层 */}
+          <div className="hl-sub-prompt">
+            <div className="hl-sub-prompt-txt">
+              <div className="hl-sub-prompt-h">开通每日提醒</div>
+              <div className="hl-sub-prompt-s">支持手机短信 / 微信扫码，按你选定时段准时推送</div>
+            </div>
+            <button className="hl-sub-prompt-btn" onClick={() => { if (requireUser()) return; setShowModal(true) }}>
+              ✦ 选择提醒方式
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="hl-sub-local">
+          <div className="hl-sub-ok-txt">当前为浏览器通知模式（后端未连接）。</div>
+          <div className="hl-sub-times-row" style={{ marginTop: 10 }}>
+            {TIMES.map(t => (
+              <button key={t.k} className={`hl-sub-time ${pref.time === t.k ? 'active' : ''}`} onClick={() => setPref(prev => ({ ...prev, time: t.k }))}>
+                <span className="hl-sub-time-ic">{t.icon}</span>
+                <span className="hl-sub-time-lbl">{t.label}</span>
+                <small>{t.sub}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 关注生肖 */}
+      <div className="hl-sub-fav">
+        <div className="hl-sub-fav-head">
+          <span className="hl-sub-ic">🐾</span>
+          <span className="hl-sub-title">关注生肖</span>
+          <span className="hl-sub-tip">多选 · 为你特别标注其每日运势</span>
+        </div>
+        <div className="hl-zodiac-grid">
+          {ZODIACS.map(z => (
+            <button
+              key={z}
+              className={`hl-zodiac-chip ${fav.includes(z) ? 'active' : ''}`}
+              onClick={() => toggleZodiac(z)}
+              aria-pressed={fav.includes(z)}
+              title={fav.includes(z) ? `取消关注${z}` : `关注${z}`}
+            >{z}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* 提示消息 */}
+      {msg.text && (
+        <div className={`hl-sub-msg ${msg.type}`}>{msg.text}</div>
+      )}
+
+      {/* 选择提醒方式 弹层：createPortal 跳出页面嵌套，fixed 遮罩相对视口铺满全屏 */}
+      {showModal && createPortal(
+        <div className="hl-modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="hl-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="hl-modal-title">
+            <div className="hl-modal-head">
+              <div id="hl-modal-title" className="hl-modal-title">✦ 选择提醒方式</div>
+              <button className="hl-modal-close" onClick={() => setShowModal(false)} aria-label="关闭">×</button>
+            </div>
+
+            <div className="hl-modal-dev-note">
+              <span className="hl-modal-dev-ic">🛠️</span>
+              <span>
+                <b>后续配置：</b>短信供应商 API · 微信扫码服务密钥接入后即可上线真实推送。当前为开发降级模式，订阅仅在本机生效。
+              </span>
+            </div>
+
+            <div className="hl-sub-methods">
+              <button className={`hl-sub-method ${tab === 'sms' ? 'active' : ''}`} onClick={() => setTab('sms')}>📱 手机短信</button>
+              <button className={`hl-sub-method ${tab === 'wechat' ? 'active' : ''}`} onClick={() => setTab('wechat')}>💬 微信扫码</button>
+            </div>
+
+            {tab === 'sms' ? (
+              <div className="hl-sub-sms">
+                <div className="hl-sub-row">
+                  <input className="hl-input" inputMode="numeric" placeholder="手机号" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} />
+                </div>
+                <div className="hl-sub-row">
+                  <input className="hl-input" inputMode="numeric" placeholder="验证码" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+                  <button className="hl-code-btn" onClick={handleSendCode} disabled={countdown > 0 || busy}>
+                    {countdown > 0 ? `${countdown}s` : '获取验证码'}
+                  </button>
+                </div>
+                {devCode && (
+                  <div className="hl-dev-code">开发模式验证码：<b>{devCode}</b></div>
+                )}
+                <button className="hl-sub-btn" onClick={handleSmsSubscribe} disabled={busy}>
+                  {busy ? '提交中…' : '✦ 立即订阅'}
+                </button>
+              </div>
+            ) : (
+              <div className="hl-sub-wechat">
+                <div className="hl-wechat-tip">使用微信「扫一扫」，扫码后确认订阅，即可每天收到当日黄历推送。</div>
+                <button className="hl-sub-btn wx" onClick={handleWechat} disabled={busy}>
+                  {busy ? '处理中…' : '💬 打开微信扫码订阅'}
+                </button>
+                <div className="hl-dev-code">开发降级模式：点击后直接生成模拟微信订阅</div>
+              </div>
+            )}
+
+            <div className="hl-modal-foot">
+              <button className="hl-modal-cancel" onClick={() => setShowModal(false)}>稍后再说</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+// ---- 一周预览 ----
+function WeekStrip({ week, chart, viewDate, onSelectDate }) {
+  const fmt = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+  const selKey = viewDate ? fmt(viewDate) : null
+  const parseDate = (s) => {
+    const [y, m, d] = s.split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }
+  return (
+    <div className="card hl-week rise rise-5">
+      <div className="hl-sec-head">
+        <div className="hl-sec-title">✦ 本周速览</div>
+        <span className="hl-sec-sub">七日小运 · 择优而行</span>
+      </div>
+      <div className="hl-week-grid">
+        {week.map(d => {
+          const isSel = d.date === selKey
+          const isToday = d.isToday
+          return (
+            <button
+              type="button"
+              key={d.date}
+              className={`hl-week-item ${isToday ? 'today' : ''} ${isSel ? 'sel' : ''}`}
+              onClick={() => onSelectDate && onSelectDate(parseDate(d.date))}
+              aria-pressed={isSel}
+              title={isToday ? '今日' : `查看 ${d.date} 的黄历`}
+            >
+              {isToday && <span className="hl-week-flag">今日</span>}
+              {isSel && !isToday && <span className="hl-week-flag sel">已选</span>}
+              <div className="hl-week-day">{d.date.slice(8)}<small>{d.week}</small></div>
+              <div className="hl-week-gz">{d.dayGanzhi}</div>
+              <div className={`hl-week-mode hl-mode-${d.relation}`}>{d.action.mode}</div>
+              <div className="hl-week-yi">{d.yi.slice(0, 2).join('·')}</div>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ---- 月度每日运势曲线 ----
+function MonthCurve({ chart, today }) {
+  const data = useMemo(() => {
+    if (!chart) return []
+    const y = today.getFullYear()
+    const m = today.getMonth()
+    const n = new Date(y, m + 1, 0).getDate()
+    const rows = []
+    for (let d = 1; d <= n; d++) {
+      const date = new Date(y, m, d)
+      rows.push({ date, el: dayElement(date) })
+    }
+    return rows
+  }, [chart, today])
+
+  const points = useMemo(() => {
+    const self = chart?.dayMasterWx
+    if (!self) return []
+    const SHENG = { 木: '火', 火: '土', 土: '金', 金: '水', 水: '木' }
+    const KE = { 木: '土', 土: '水', 水: '火', 火: '金', 金: '木' }
+    return data.map(({ date, el }) => {
+      // 与 buildDaily 一致的生克评分
+      let score = 0
+      for (const wx of [el.ganWx, el.zhiWx]) {
+        if (wx === self) score += 2
+        else if (SHENG[wx] === self) score += 1
+        else if (SHENG[self] === wx) score += 1
+        else if (KE[wx] === self) score -= 1
+        else if (KE[self] === wx) score -= 1
+      }
+      const relation = score >= 3 ? '顺' : score <= 0 ? '慎' : '平'
+      return {
+        date,
+        day: date.getDate(),
+        score,
+        relation,
+        isToday: date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate(),
+        isWeekend: date.getDay() === 0 || date.getDay() === 6,
+      }
+    })
+  }, [data, chart, today])
+
+  if (!chart || points.length === 0) return null
+
+  const W = 560
+  const H = 190
+  const PL = 34
+  const PR = 14
+  const PT = 22
+  const PB = 26
+  const iw = W - PL - PR
+  const ih = H - PT - PB
+  const minScore = -2
+  const maxScore = 4
+  const n = points.length
+  const x = i => PL + (n === 1 ? iw / 2 : (iw * i) / (n - 1))
+  const y = s => PT + ih - ((s - minScore) / (maxScore - minScore)) * ih
+
+  const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.score).toFixed(1)}`).join(' ')
+
+  // 5 日均线（平滑观察趋势）
+  const avg = points.map((_, i) => {
+    let s = 0, c = 0
+    for (let j = Math.max(0, i - 2); j <= Math.min(n - 1, i + 2); j++) { s += points[j].score; c++ }
+    return s / c
+  })
+  const avgLine = avg.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
+
+  const yLabels = [4, 2, 0, -2]
+  const relationColor = { 顺: 'var(--jade)', 平: 'var(--gold)', 慎: 'var(--cinnabar)' }
+
+  // 月份刻度：每 5 天一个
+  const ticks = points.filter(p => p.day === 1 || p.day % 5 === 0)
+
+  return (
+    <div className="card hl-month rise rise-6">
+      <div className="hl-sec-head">
+        <div className="hl-sec-title">✦ 月度运势曲线</div>
+        <span className="hl-sec-sub">{today.getFullYear()}年{today.getMonth() + 1}月 · 生克评分趋势</span>
+      </div>
+
+      <div className="hl-month-chart">
+        <svg viewBox={`0 0 ${W} ${H}`} className="hl-month-svg" preserveAspectRatio="none">
+          {/* 网格线 */}
+          {yLabels.map(s => (
+            <g key={s}>
+              <line x1={PL} x2={W - PR} y1={y(s)} y2={y(s)} className="hl-m-grid" />
+              <text x={PL - 6} y={y(s) + 4} className="hl-m-ylbl">{s > 0 ? `+${s}` : s}</text>
+            </g>
+          ))}
+
+          {/* 周末底色 */}
+          {points.map((p, i) => p.isWeekend && (
+            <rect key={i} x={x(i) - iw / (n * 2)} y={PT} width={iw / n} height={ih} className="hl-m-weekend" />
+          ))}
+
+          {/* 今日竖线 */}
+          {points.find(p => p.isToday) && (
+            <line x1={x(points.findIndex(p => p.isToday))} x2={x(points.findIndex(p => p.isToday))} y1={PT} y2={PT + ih} className="hl-m-today" />
+          )}
+
+          {/* 面积渐变 */}
+          <defs>
+            <linearGradient id="hlMArea" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--cinnabar)" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="var(--cinnabar)" stopOpacity="0.02" />
+            </linearGradient>
+            <linearGradient id="hlMLine" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="var(--lavender)" />
+              <stop offset="50%" stopColor="var(--cinnabar)" />
+              <stop offset="100%" stopColor="var(--gold)" />
+            </linearGradient>
+          </defs>
+          <path d={`${line} L${x(n - 1).toFixed(1)},${y(minScore)} L${x(0).toFixed(1)},${y(minScore)} Z`} fill="url(#hlMArea)" />
+          <path d={avgLine} fill="none" className="hl-m-avg" />
+          <path d={line} fill="none" className="hl-m-line" />
+
+          {/* 数据点 */}
+          {points.map((p, i) => (
+            <g key={i}>
+              <circle cx={x(i)} cy={y(p.score)} r={p.isToday ? 5 : 3.2} className="hl-m-dot" fill={relationColor[p.relation] || 'var(--gold)'} opacity={p.isToday ? 1 : 0.85} />
+              {p.isToday && (
+                <text x={x(i)} y={y(p.score) - 9} textAnchor="middle" className="hl-m-today-lbl">今日</text>
+              )}
+            </g>
+          ))}
+        </svg>
+
+        {/* X 轴日期刻度 */}
+        <div className="hl-m-xaxis">
+          {ticks.map((p, i) => (
+            <span key={i} className={`hl-m-xitem ${p.isToday ? 'on' : ''}`}>{p.day}</span>
+          ))}
+        </div>
+      </div>
+
+      {/* 图例 */}
+      <div className="hl-month-legend">
+        <span className="hl-m-lg"><i style={{ background: 'var(--jade)' }} />顺 · 生扶</span>
+        <span className="hl-m-lg"><i style={{ background: 'var(--gold)' }} />平 · 平稳</span>
+        <span className="hl-m-lg"><i style={{ background: 'var(--cinnabar)' }} />慎 · 冲克</span>
+        <span className="hl-m-lg avg"><i />均线（5日）</span>
+      </div>
+    </div>
+  )
+}

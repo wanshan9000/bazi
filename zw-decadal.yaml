@@ -1,0 +1,751 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e18] [cursor=pointer]:
+        - text: 元氣
+        - emphasis [ref=e19]: 满满
+      - navigation [ref=e20]:
+        - button "首页" [ref=e21] [cursor=pointer]
+        - button "元气AI" [ref=e23] [cursor=pointer]
+        - button "八字" [ref=e25] [cursor=pointer]
+        - button "黄历" [ref=e27] [cursor=pointer]
+        - button "紫微" [ref=e29] [cursor=pointer]
+        - button "塔罗" [ref=e31] [cursor=pointer]
+        - button "文库" [ref=e33] [cursor=pointer]
+      - button "登录" [ref=e36] [cursor=pointer]
+  - main [ref=e38]:
+    - generic [ref=e316]:
+      - generic [ref=e317]:
+        - button "← 返回首页" [ref=e318] [cursor=pointer]
+        - button "更换生辰" [ref=e361] [cursor=pointer]
+      - heading "紫微门 ⭐" [level=1] [ref=e319]
+      - paragraph [ref=e320]: 览十二宫 · 观星曜 · 一览人生星光地图
+      - generic [ref=e362]:
+        - generic [ref=e363] [cursor=pointer]:
+          - generic [ref=e364]:
+            - button "⧉ 复制" [ref=e365]
+            - button "↗ 分享" [ref=e366]
+          - generic [ref=e367]:
+            - generic [ref=e368]: 丙日主 · 紫微完整报告
+            - generic [ref=e369]: 命主星曜：太阳 · 廉贞 · 马肖 乾造
+        - generic [ref=e371]:
+          - generic [ref=e372]:
+            - generic [ref=e373]: 本章导航
+            - generic [ref=e374]:
+              - button "一 技法总纲" [ref=e375] [cursor=pointer]:
+                - generic [ref=e376]: 一
+                - text: 技法总纲
+              - button "二 命盘信息" [ref=e377] [cursor=pointer]:
+                - generic [ref=e378]: 二
+                - text: 命盘信息
+              - button "三 命局格局" [ref=e379] [cursor=pointer]:
+                - generic [ref=e380]: 三
+                - text: 命局格局
+              - button "四 全盘关联总纲" [ref=e381] [cursor=pointer]:
+                - generic [ref=e382]: 四
+                - text: 全盘关联总纲
+              - button "五 星曜概览" [ref=e383] [cursor=pointer]:
+                - generic [ref=e384]: 五
+                - text: 星曜概览
+              - button "六 生年四化详解" [ref=e385] [cursor=pointer]:
+                - generic [ref=e386]: 六
+                - text: 生年四化详解
+              - button "七 十二宫速览" [ref=e387] [cursor=pointer]:
+                - generic [ref=e388]: 七
+                - text: 十二宫速览
+              - button "八 十二宫星曜" [ref=e389] [cursor=pointer]:
+                - generic [ref=e390]: 八
+                - text: 十二宫星曜
+              - button "九 命宫解析" [ref=e391] [cursor=pointer]:
+                - generic [ref=e392]: 九
+                - text: 命宫解析
+              - button "十 命宫三方四正" [ref=e393] [cursor=pointer]:
+                - generic [ref=e394]: 十
+                - text: 命宫三方四正
+              - button "11 十二宫逐宫详批" [ref=e395] [cursor=pointer]:
+                - generic [ref=e396]: "11"
+                - text: 十二宫逐宫详批
+              - button "12 大限十年运程" [active] [ref=e397] [cursor=pointer]:
+                - generic [ref=e398]: "12"
+                - text: 大限十年运程
+              - button "13 大限与流年" [ref=e399] [cursor=pointer]:
+                - generic [ref=e400]: "13"
+                - text: 大限与流年
+              - button "14 五行局与命主详解" [ref=e401] [cursor=pointer]:
+                - generic [ref=e402]: "14"
+                - text: 五行局与命主详解
+          - generic [ref=e403]:
+            - heading "二 命盘信息" [level=4] [ref=e404]:
+              - generic [ref=e405]: 二
+              - generic [ref=e406]: 命盘信息
+            - generic [ref=e407]:
+              - generic [ref=e408]:
+                - generic [ref=e409]:
+                  - generic [ref=e410]: 年柱
+                  - generic [ref=e411]: 庚
+                  - generic [ref=e412]: 午
+                - generic [ref=e413]:
+                  - generic [ref=e414]: 月柱
+                  - generic [ref=e415]: 壬
+                  - generic [ref=e416]: 午
+                - generic [ref=e417]:
+                  - generic [ref=e418]:
+                    - text: 日柱
+                    - generic [ref=e419]: 日主
+                  - generic [ref=e420]: 丙
+                  - generic [ref=e421]: 寅
+                - generic [ref=e422]:
+                  - generic [ref=e423]: 时柱
+                  - generic [ref=e424]: 甲
+                  - generic [ref=e425]: 午
+              - generic [ref=e426]:
+                - generic [ref=e427]:
+                  - generic [ref=e428]: 喜用
+                  - generic [ref=e429]:
+                    - generic [ref=e430]: 土
+                    - generic [ref=e431]: 木
+                    - generic [ref=e432]: 金
+                - generic [ref=e433]:
+                  - generic [ref=e434]: 忌用
+                  - generic [ref=e435]:
+                    - generic [ref=e436]: 火
+                    - generic [ref=e437]: 水
+                - generic [ref=e438]:
+                  - generic [ref=e439]: 命主
+                  - generic [ref=e440]: 贪狼
+                - generic [ref=e441]:
+                  - generic [ref=e442]: 身主
+                  - generic [ref=e443]: 火星
+              - generic [ref=e444]:
+                - generic [ref=e445]:
+                  - generic [ref=e446]: 公历
+                  - generic [ref=e447]: 1990-6-30
+                - generic [ref=e448]:
+                  - generic [ref=e449]: 农历
+                  - generic [ref=e450]: 一九九〇年闰五月初八
+                - generic [ref=e451]:
+                  - generic [ref=e452]: 起运
+                  - generic [ref=e453]:
+                    - text: 火六局 · 6岁起运
+                    - emphasis [ref=e454]: 第一大限：命宫 戊子（每限十年）
+                - generic [ref=e455]:
+                  - generic [ref=e456]: 生肖
+                  - generic [ref=e457]: 马
+                - generic [ref=e458]:
+                  - generic [ref=e459]: 星座
+                  - generic [ref=e460]: 巨蟹座
+                - generic [ref=e461]:
+                  - generic [ref=e462]: 五行局
+                  - generic [ref=e463]: 火六局
+            - paragraph [ref=e464]: 上为八字命局，下为紫微盘面 · 同参方得全貌
+          - generic [ref=e465]:
+            - heading "三 命局格局" [level=4] [ref=e466]:
+              - generic [ref=e467]: 三
+              - generic [ref=e468]: 命局格局
+            - generic [ref=e469]:
+              - paragraph [ref=e470]:
+                - generic [ref=e471]: 【巨门入命格】
+                - text: 巨门坐命，口舌之星，善辩多思，需以诚信与谨言化解口舌是非。
+              - paragraph [ref=e472]: 命宫主星：巨门｜身宫：命宫｜格局以命宫三方四正（命、财帛、官禄、迁移）为纲，主一生大势。
+          - generic [ref=e473]:
+            - heading "四 全盘关联总纲" [level=4] [ref=e474]:
+              - generic [ref=e475]: 四
+              - generic [ref=e476]: 全盘关联总纲
+            - generic [ref=e477]:
+              - paragraph [ref=e478]:
+                - generic [ref=e479]: 【生辰·五行局·命主身主】
+                - text: 以「1990-6-30」生辰起盘，属火六局命。五行局定命宫起法与一生根基；命主为「贪狼」、身主为「火星」，为先天权威归属与后天晚景依托之枢。
+              - paragraph [ref=e480]:
+                - generic [ref=e481]: 【命宫·格局·三方四正】
+                - text: 命宫坐「巨门」，身宫落「命宫（戊子）」，命局成「巨门入命格」。命盘大势以命宫三方四正（命宫、迁移、财帛、官禄）为纲领——命宫定气质、财帛看求财、官禄看事业、迁移看际遇，四宫互参方见全貌。
+              - paragraph [ref=e482]:
+                - generic [ref=e483]: 【生年四化】
+                - text: 「福德·天同化忌」，主耗——执着耗损，主该宫之事多波折费心，宜以平常心化解；「田宅·武曲化权」，主掌——实权担当，主该宫之事可掌控、能有所为；「官禄·太阳化禄」（正属命宫三方四正），主得——财禄机遇，主该宫之事有进益、得贵人助；「夫妻·太阴化科」，主名——名声贵气，主该宫之事得认可、逢凶化吉。其中「官禄·太阳化禄」直落命宫三方四正，此生得失之重心，正与命、财、官、迁四宫相呼应，须与格局同参。
+              - paragraph [ref=e484]:
+                - generic [ref=e485]: 【当前大限】
+                - text: 行至「田宅」宫（主星武曲、七杀），此限四化武曲、贪狼、天梁、文曲，其中「武曲化权」为生年四化之转用，主其宫所主之事在当限显化，此限不在三方四正，为较外围之十年，重在借四化而动。
+              - paragraph [ref=e486]:
+                - generic [ref=e487]: 【本年流年】
+                - text: 落「迁移」宫（主星天机），流年四化天同、天机、文昌、廉贞，其中「天同化忌」呼应生年四化，本年吉凶以此为纲；流年与大限同参，方知当下十年如何借运而进。
+              - paragraph [ref=e488]:
+                - generic [ref=e489]: 【综论】
+                - text: 命主「贪狼」定其权威归属，身主「火星」定其晚景依托，五行局「火六局」主其行业方向；格局定一生大势，四化定得失机枢，大限流年定当下进退——八字、宫位、星曜、四化、行运环环相扣，非一宫一星可独断。
+          - generic [ref=e490]:
+            - heading "五 星曜概览" [level=4] [ref=e491]:
+              - generic [ref=e492]: 五
+              - generic [ref=e493]: 星曜概览
+            - generic [ref=e494]:
+              - generic [ref=e495]:
+                - generic [ref=e496]: 命宫主星
+                - text: ：
+                - generic [ref=e497]: 巨门
+              - generic [ref=e498]:
+                - generic [ref=e499]: 身宫所在
+                - text: ：
+                - generic [ref=e500]: 命宫（戊子）
+              - generic [ref=e501]:
+                - generic [ref=e502]: 命局格局
+                - text: ：
+                - generic [ref=e503]: 巨门入命格
+              - generic [ref=e504]:
+                - generic [ref=e505]: 生年四化
+                - text: ：
+                - generic [ref=e506]: 4 处入局
+              - generic [ref=e507]:
+                - generic [ref=e508]: 吉星扶助
+                - text: ：
+                - generic [ref=e509]: 6 星入局
+              - generic [ref=e510]:
+                - generic [ref=e511]: 煞星侵扰
+                - text: ：
+                - generic [ref=e512]: 6 星入局
+          - generic [ref=e513]:
+            - heading "六 生年四化详解" [level=4] [ref=e514]:
+              - generic [ref=e515]: 六
+              - generic [ref=e516]: 生年四化详解
+            - generic [ref=e517]:
+              - generic [ref=e518]:
+                - generic [ref=e519]: 福德 · 天同化忌
+                - text: ：耗——执着耗损，主该宫之事多波折费心，宜以平常心化解
+              - generic [ref=e520]:
+                - generic [ref=e521]: 田宅 · 武曲化权
+                - text: ：掌——实权担当，主该宫之事可掌控、能有所为
+              - generic [ref=e522]:
+                - generic [ref=e523]: 官禄 · 太阳化禄
+                - text: ：得——财禄机遇，主该宫之事有进益、得贵人助
+              - generic [ref=e524]:
+                - generic [ref=e525]: 夫妻 · 太阴化科
+                - text: ：名——名声贵气，主该宫之事得认可、逢凶化吉
+            - paragraph [ref=e526]: 四化即命局运转的四个机关：禄为得、权为掌、科为名、忌为耗，所在宫位即一生机遇与执念之处。
+          - generic [ref=e527]:
+            - heading "七 十二宫速览" [level=4] [ref=e528]:
+              - generic [ref=e529]: 七
+              - generic [ref=e530]: 十二宫速览
+            - paragraph [ref=e531]: 标「三方」者为命宫三方四正之宫（命、财、官、迁），格局高低须看此四处联动。
+            - generic [ref=e532]:
+              - generic [ref=e533]:
+                - generic [ref=e534]:
+                  - generic [ref=e535]: 福德
+                  - generic [ref=e536]: 戊寅
+                - generic [ref=e537]: 天同（利） · 化忌
+                - paragraph [ref=e538]: 。主星天同（利）入宫，福星，温和随性，人缘极佳，知足常乐。中州断：天同守福德宫，福星入福德，一生福气深厚、知足常乐，心态平和、享受人生。宜惜福养性、以乐助人；忌安逸过度而失进取。本宫化忌，主其耗——执着耗损，主该宫之事多波折费心，宜以平常心化解。
+              - generic [ref=e539]:
+                - generic [ref=e540]:
+                  - generic [ref=e541]: 田宅
+                  - generic [ref=e542]: 己卯
+                - generic [ref=e543]: 武曲（利） · 化权
+                - paragraph [ref=e544]: 。主星武曲（利）入宫，财星，刚毅果决，务实笃行，理财有力。本宫化权，主其掌——实权担当，主该宫之事可掌控、能有所为。
+              - generic [ref=e545]:
+                - generic [ref=e546]:
+                  - generic [ref=e547]: 官禄
+                  - generic [ref=e548]: 三方
+                - generic [ref=e549]: 太阳（旺） · 化禄
+                - paragraph [ref=e550]: 。主星太阳（旺）入宫，贵星，光明磊落，热心助人，光芒外放。中州断：太阳守事业宫，宜抛头露面、利他助人的行业，如公职、公益、销售、传媒、教育。主贵近官禄，宜争取名声地位；落陷则宜幕后操劳、凭勤恳立足。本宫化禄，主其得——财禄机遇，主该宫之事有进益、得贵人助。
+              - generic [ref=e551]:
+                - generic [ref=e552]:
+                  - generic [ref=e553]: 迁移
+                  - generic [ref=e554]: 三方
+                - generic [ref=e555]: 天机（庙）
+                - paragraph [ref=e556]: 。主星天机（庙）入宫，智星，机敏善谋，思虑周详而善变。中州断：天机守迁移宫，外出多变动机遇、宜机动发展，利远行、游学、变换环境以增见闻。化禄化权则外出得助、机遇良好；宜顺势应变为贵，忌恋栈旧地。
+              - generic [ref=e557]:
+                - generic [ref=e558]:
+                  - generic [ref=e559]: 疾厄
+                  - generic [ref=e560]: 癸未
+                - generic [ref=e561]: 紫微（庙）
+                - paragraph [ref=e562]: 。主星紫微（庙）入宫，帝星，尊贵威严，具领袖气质与大局观。
+              - generic [ref=e563]:
+                - generic [ref=e564]:
+                  - generic [ref=e565]: 子女
+                  - generic [ref=e566]: 乙酉
+                - generic [ref=e567]: 天府（旺）
+                - paragraph [ref=e568]: 。主星天府（旺）入宫，库星，沉稳厚重，守成有方，善于积累。中州断：天府守子女宫，子女稳重守成、理财有方、家庭观念强，亲子关系和睦。吉则子女能守业积财、可托大事，福泽安稳。
+              - generic [ref=e569]:
+                - generic [ref=e570]:
+                  - generic [ref=e571]: 夫妻
+                  - generic [ref=e572]: 丙戌
+                - generic [ref=e573]: 太阴（旺） · 化科
+                - paragraph [ref=e574]: 。主星太阴（旺）入宫，母星，内敛细腻，温婉持重，善于照顾。中州断：太阴守夫妻宫，配偶温柔贤惠、心思细腻，易夫凭妻贵或因妻得财。见昌曲则配偶貌美才佳；化忌或见煞则易因感情或家累而生隔阂。宜多体谅、以温情维系。本宫化科，主其名——名声贵气，主该宫之事得认可、逢凶化吉。
+              - generic [ref=e575]:
+                - generic [ref=e576]:
+                  - generic [ref=e577]: 兄弟
+                  - generic [ref=e578]: 丁亥
+                - generic [ref=e579]: 廉贞（陷）
+                - paragraph [ref=e580]: 。主星廉贞（陷）入宫，次桃花星，聪慧执着，外冷内热。中州断：廉贞守兄弟宫，兄弟朋友多情善感、竞争多，宜防因感情或利益生隙。化忌则易起是非，宜大度包容、少争长短。
+              - generic [ref=e581]:
+                - generic [ref=e582]:
+                  - generic [ref=e583]: 命宫
+                  - generic [ref=e584]: 三方
+                - generic [ref=e585]: 巨门（旺）
+                - paragraph [ref=e586]: 一生命运总纲，性格气质所在 ┄ 说人话：你是哪种性格、一辈子的大方向，主要看它。主星巨门（旺）入宫，暗星，口才了得，是非分明，洞察力强。中州断：巨门坐命，暗曜口舌之星，善辩多思、心思深沉。其光在暗蔽他星，唯太阳能照。命主口才利、观察细，须以诚信与谨言化解口舌是非，最忌落陷会暗曜而多猜疑。
+              - generic [ref=e587]:
+                - generic [ref=e588]:
+                  - generic [ref=e589]: 父母
+                  - generic [ref=e590]: 己丑
+                - generic [ref=e591]: 天相（庙）
+                - paragraph [ref=e592]: 。主星天相（庙）入宫，印星，稳重端方，辅佐有力，重仪表。
+            - generic [ref=e593]:
+              - generic [ref=e594]: 空宫
+              - generic [ref=e595]:
+                - generic [ref=e596]:
+                  - generic [ref=e597]: 仆役
+                  - emphasis [ref=e598]: 辛巳
+                - generic [ref=e599]:
+                  - generic [ref=e600]: 财帛
+                  - emphasis [ref=e601]: 三方
+          - generic [ref=e602]:
+            - heading "八 十二宫星曜" [level=4] [ref=e603]:
+              - generic [ref=e604]: 八
+              - generic [ref=e605]: 十二宫星曜
+            - table [ref=e607]:
+              - rowgroup [ref=e608]:
+                - row [ref=e609]:
+                  - columnheader "宫位" [ref=e610]
+                  - columnheader "干支" [ref=e611]
+                  - columnheader "主星" [ref=e612]
+                  - columnheader "辅星" [ref=e613]
+              - rowgroup [ref=e614]:
+                - row [ref=e615]:
+                  - cell "福德" [ref=e616]
+                  - cell "戊寅" [ref=e617]
+                  - cell "天同（利）·忌、天梁（庙）" [ref=e618]
+                  - cell [ref=e619]
+                - row [ref=e620]:
+                  - cell "田宅" [ref=e621]
+                  - cell "己卯" [ref=e622]
+                  - cell "武曲（利）·权、七杀（旺）" [ref=e623]
+                  - cell [ref=e624]
+                - row [ref=e625]:
+                  - cell "官禄" [ref=e626]
+                  - cell "庚辰" [ref=e627]
+                  - cell "太阳（旺）·禄" [ref=e628]
+                  - cell "文昌" [ref=e629]
+                - row [ref=e630]:
+                  - cell "仆役" [ref=e631]
+                  - cell "辛巳" [ref=e632]
+                  - cell [ref=e633]
+                  - cell "地空、地劫" [ref=e634]
+                - row [ref=e635]:
+                  - cell "迁移" [ref=e636]
+                  - cell "壬午" [ref=e637]
+                  - cell "天机（庙）" [ref=e638]
+                  - cell "右弼" [ref=e639]
+                - row [ref=e640]:
+                  - cell "疾厄" [ref=e641]
+                  - cell "癸未" [ref=e642]
+                  - cell "紫微（庙）、破军（旺）" [ref=e643]
+                  - cell "天钺、火星、陀罗" [ref=e644]
+                - row [ref=e645]:
+                  - cell "财帛" [ref=e646]
+                  - cell "甲申" [ref=e647]
+                  - cell [ref=e648]
+                  - cell "左辅、禄存、天马" [ref=e649]
+                - row [ref=e650]:
+                  - cell "子女" [ref=e651]
+                  - cell "乙酉" [ref=e652]
+                  - cell "天府（旺）" [ref=e653]
+                  - cell "铃星、擎羊" [ref=e654]
+                - row [ref=e655]:
+                  - cell "夫妻" [ref=e656]
+                  - cell "丙戌" [ref=e657]
+                  - cell "太阴（旺）·科" [ref=e658]
+                  - cell "文曲" [ref=e659]
+                - row [ref=e660]:
+                  - cell "兄弟" [ref=e661]
+                  - cell "丁亥" [ref=e662]
+                  - cell "廉贞（陷）、贪狼（陷）" [ref=e663]
+                  - cell [ref=e664]
+                - row [ref=e665]:
+                  - cell "命宫" [ref=e666]
+                  - cell "戊子" [ref=e667]
+                  - cell "巨门（旺）" [ref=e668]
+                  - cell [ref=e669]
+                - row [ref=e670]:
+                  - cell "父母" [ref=e671]
+                  - cell "己丑" [ref=e672]
+                  - cell "天相（庙）" [ref=e673]
+                  - cell "天魁" [ref=e674]
+          - generic [ref=e675]:
+            - heading "九 命宫解析" [level=4] [ref=e676]:
+              - generic [ref=e677]: 九
+              - generic [ref=e678]: 命宫解析
+            - generic [ref=e679]:
+              - generic [ref=e680]:
+                - generic [ref=e681]: 命宫位置
+                - text: ：
+                - generic [ref=e682]: 戊子
+              - generic [ref=e683]:
+                - generic [ref=e684]: 命宫主星
+                - text: ：
+                - generic [ref=e685]: 巨门（旺）
+              - generic [ref=e686]:
+                - generic [ref=e687]: 杂曜
+                - text: ：
+                - generic [ref=e688]: 解神、台辅、天哭、天虚
+              - generic [ref=e689]:
+                - generic [ref=e690]: 格局
+                - text: ：
+                - generic [ref=e691]: 巨门入命格
+            - paragraph [ref=e692]: 命宫为先天格局之枢，主星定气质，四化定一生机遇得失之侧重。
+          - generic [ref=e693]:
+            - heading "十 命宫三方四正" [level=4] [ref=e694]:
+              - generic [ref=e695]: 十
+              - generic [ref=e696]: 命宫三方四正
+            - paragraph [ref=e697]: 命宫三方四正为命局格局之纲领：命宫定气质，财帛看求财，官禄看事业，迁移看际遇。
+            - generic [ref=e698]:
+              - generic [ref=e699]:
+                - generic [ref=e700]:
+                  - generic [ref=e701]: 命宫
+                  - generic [ref=e702]: 命·身·三方
+                  - generic [ref=e703]: 命宫
+                - generic [ref=e704]: 旺
+                - generic [ref=e706]: 巨门（旺）
+                - paragraph [ref=e707]: 一生命运总纲，性格气质所在 ┄ 说人话：你是哪种性格、一辈子的大方向，主要看它主星暗星，口才了得，是非分明，洞察力强。为命宫之根本，格局由此展开。 中州断：巨门坐命，暗曜口舌之星，善辩多思、心思深沉。其光在暗蔽他星，唯太阳能照。命主口才利、观察细，须以诚信与谨言化解口舌是非，最忌落陷会暗曜而多猜疑。 落到生活：口才了得、是非分明，洞察力强，适合靠嘴和笔吃饭，但言多易惹是非。事业宜传播、法律、教学、公关等口才型工作；财运靠口才与专业积累，动嘴不动手；感情爱讲道理、容易较真，宜学会少说多听、以柔化刚。
+              - generic [ref=e708]:
+                - generic [ref=e709]:
+                  - generic [ref=e710]: 迁移
+                  - generic [ref=e711]: 三方
+                  - generic [ref=e712]: 壬午
+                - generic [ref=e713]: 庙
+                - generic [ref=e715]: 天机（庙）
+                - paragraph [ref=e716]: 主星智星，机敏善谋，思虑周详而善变。 中州断：天机守迁移宫，外出多变动机遇、宜机动发展，利远行、游学、变换环境以增见闻。化禄化权则外出得助、机遇良好；宜顺势应变为贵，忌恋栈旧地。 落到生活：脑子转得快、点子多，善分析也易想太多，常因过度思虑而错过时机。事业适合技术、策划、咨询、教育等动脑的活；财运属细水长流型，靠本事赚钱，不宜投机；感情心思细腻但容易猜疑，宜多些直来直去的沟通。
+              - generic [ref=e717]:
+                - generic [ref=e718]:
+                  - generic [ref=e719]: 官禄
+                  - generic [ref=e720]: 三方
+                  - generic [ref=e721]: 庚辰
+                - generic [ref=e722]:
+                  - generic [ref=e723]: 化禄
+                  - generic [ref=e724]: 旺
+                - generic [ref=e725]: 太阳（旺）·化禄
+                - paragraph [ref=e726]: 主星贵星，光明磊落，热心助人，光芒外放。本宫化禄（这个领域容易来财、有福），此宫事项多得助力、顺势而上。 中州断：太阳守事业宫，宜抛头露面、利他助人的行业，如公职、公益、销售、传媒、教育。主贵近官禄，宜争取名声地位；落陷则宜幕后操劳、凭勤恳立足。 落到生活：性情光明、热心肠，到哪里都容易成为人群里发光的那一个，但也常因揽事太多而操劳。事业宜公职、公益、销售、传媒等抛头露面的行业；财运随人缘而旺，广结善缘则财来；感情大方主动，重情义，健康上要注意用眼和心火。
+            - generic [ref=e727]:
+              - generic [ref=e728]: 空宫
+              - generic [ref=e730]:
+                - generic [ref=e731]: 财帛
+                - emphasis [ref=e732]: 甲申
+          - generic [ref=e733]:
+            - heading "11 十二宫逐宫详批" [level=4] [ref=e734]:
+              - generic [ref=e735]: "11"
+              - generic [ref=e736]: 十二宫逐宫详批
+            - paragraph [ref=e737]: 「命」「身」标记宫位为先天与后天之枢；主星亮度（庙/旺/得/利为佳，平/陷稍弱）与四化共同决定该宫事项的成色与吉凶。
+            - generic [ref=e738]:
+              - generic [ref=e739]:
+                - generic [ref=e740]:
+                  - generic [ref=e741]: 福德
+                  - generic [ref=e742]: 戊寅
+                - generic [ref=e743]:
+                  - generic [ref=e744]: 化忌
+                  - generic [ref=e745]: 利
+                - generic [ref=e746]: 天同（利）·化忌、天梁（庙）
+                - paragraph [ref=e747]: 主星福星，温和随性，人缘极佳，知足常乐。本宫化忌（这个领域容易费心费力、多波折），主此宫事项多耗心力，宜以平常心经营。 中州断：天同守福德宫，福星入福德，一生福气深厚、知足常乐，心态平和、享受人生。宜惜福养性、以乐助人；忌安逸过度而失进取。 落到生活：性情温和、随遇而安，人缘好、朋友多，懂得享受生活，是典型的福气星。事业宜稳定平和的岗位，不宜高压竞争；财运平稳、不愁吃穿，属于细水长流型；感情细腻黏人，重陪伴，是很好的伴侣；健康上要注意脾胃，勿贪口腹之欲。
+              - generic [ref=e748]:
+                - generic [ref=e749]:
+                  - generic [ref=e750]: 田宅
+                  - generic [ref=e751]: 己卯
+                - generic [ref=e752]:
+                  - generic [ref=e753]: 化权
+                  - generic [ref=e754]: 利
+                - generic [ref=e755]: 武曲（利）·化权、七杀（旺）
+                - paragraph [ref=e756]: 主星财星，刚毅果决，务实笃行，理财有力。 落到生活：刚毅务实、说到做到，是典型的实干派，做事讲效率不喜虚招。事业极适合金融、技术、军警、经营等需要果决的领域；财运是十四主星里最硬气的求财星，靠自己拼出来，但易守财过度；感情偏理性木讷，不懂浪漫，宜主动表达。
+              - generic [ref=e757]:
+                - generic [ref=e758]:
+                  - generic [ref=e759]: 官禄
+                  - generic [ref=e760]: 三方
+                  - generic [ref=e761]: 庚辰
+                - generic [ref=e762]:
+                  - generic [ref=e763]: 化禄
+                  - generic [ref=e764]: 旺
+                - generic [ref=e765]: 太阳（旺）·化禄
+                - paragraph [ref=e766]: 主星贵星，光明磊落，热心助人，光芒外放。本宫化禄（这个领域容易来财、有福），此宫事项多得助力、顺势而上。 中州断：太阳守事业宫，宜抛头露面、利他助人的行业，如公职、公益、销售、传媒、教育。主贵近官禄，宜争取名声地位；落陷则宜幕后操劳、凭勤恳立足。 落到生活：性情光明、热心肠，到哪里都容易成为人群里发光的那一个，但也常因揽事太多而操劳。事业宜公职、公益、销售、传媒等抛头露面的行业；财运随人缘而旺，广结善缘则财来；感情大方主动，重情义，健康上要注意用眼和心火。
+              - generic [ref=e767]:
+                - generic [ref=e768]:
+                  - generic [ref=e769]: 迁移
+                  - generic [ref=e770]: 三方
+                  - generic [ref=e771]: 壬午
+                - generic [ref=e772]: 庙
+                - generic [ref=e774]: 天机（庙）
+                - paragraph [ref=e775]: 主星智星，机敏善谋，思虑周详而善变。 中州断：天机守迁移宫，外出多变动机遇、宜机动发展，利远行、游学、变换环境以增见闻。化禄化权则外出得助、机遇良好；宜顺势应变为贵，忌恋栈旧地。 落到生活：脑子转得快、点子多，善分析也易想太多，常因过度思虑而错过时机。事业适合技术、策划、咨询、教育等动脑的活；财运属细水长流型，靠本事赚钱，不宜投机；感情心思细腻但容易猜疑，宜多些直来直去的沟通。
+              - generic [ref=e776]:
+                - generic [ref=e777]:
+                  - generic [ref=e778]: 疾厄
+                  - generic [ref=e779]: 癸未
+                - generic [ref=e780]: 庙
+                - generic [ref=e782]: 紫微（庙）、破军（旺）
+                - paragraph [ref=e783]: 主星帝星，尊贵威严，具领袖气质与大局观。 落到生活：贵气十足、自尊心强，天生有带班带队的气场，但容易放不下身段、听不进劝。事业宜走管理、统筹或开创型路径，凭威望服众；财运不错但偏向大进大出，需学会攒钱；感情上渴望被尊重，伴侣若能顺毛捧场则关系和睦。
+              - generic [ref=e784]:
+                - generic [ref=e785]:
+                  - generic [ref=e786]: 子女
+                  - generic [ref=e787]: 乙酉
+                - generic [ref=e788]: 旺
+                - generic [ref=e790]: 天府（旺）
+                - paragraph [ref=e791]: 主星库星，沉稳厚重，守成有方，善于积累。 中州断：天府守子女宫，子女稳重守成、理财有方、家庭观念强，亲子关系和睦。吉则子女能守业积财、可托大事，福泽安稳。 落到生活：稳重厚道、守成有方，是天生会过日子的人，朋友信得过、长辈看得上。事业宜金融、地产、行政等重积累的领域，越老越吃香；财运是库星，善存钱、家底厚，但要防太过保守而错失机会；感情专一顾家，是靠谱的港湾。
+              - generic [ref=e792]:
+                - generic [ref=e793]:
+                  - generic [ref=e794]: 夫妻
+                  - generic [ref=e795]: 丙戌
+                - generic [ref=e796]:
+                  - generic [ref=e797]: 化科
+                  - generic [ref=e798]: 旺
+                - generic [ref=e799]: 太阴（旺）·化科
+                - paragraph [ref=e800]: 主星母星，内敛细腻，温婉持重，善于照顾。 中州断：太阴守夫妻宫，配偶温柔贤惠、心思细腻，易夫凭妻贵或因妻得财。见昌曲则配偶貌美才佳；化忌或见煞则易因感情或家累而生隔阂。宜多体谅、以温情维系。 落到生活：性格内敛、心思细腻，敏感又体贴，很会照顾人，但情绪容易受影响。事业宜艺术、文案、护理、财务等细致内省的领域；财运属暗中聚财型，擅长储蓄和精打细算；感情温柔重情，愿意付出，宜多表达自己而非憋在心里。
+              - generic [ref=e801]:
+                - generic [ref=e802]:
+                  - generic [ref=e803]: 兄弟
+                  - generic [ref=e804]: 丁亥
+                - generic [ref=e805]: 陷
+                - generic [ref=e807]: 廉贞（陷）、贪狼（陷）
+                - paragraph [ref=e808]: 主星次桃花星，聪慧执着，外冷内热。 中州断：廉贞守兄弟宫，兄弟朋友多情善感、竞争多，宜防因感情或利益生隙。化忌则易起是非，宜大度包容、少争长短。 落到生活：聪慧执着、外冷内热，才华锋芒外露，认准的事九头牛拉不回。事业宜创意、设计、公关、管理等多面手型工作；财运起伏大，来得快去得也快，需防冲动消费；感情热烈又别扭，容易爱得深也伤得深，宜学会放低姿态。
+              - generic [ref=e809]:
+                - generic [ref=e810]:
+                  - generic [ref=e811]: 命宫
+                  - generic [ref=e812]: 命·身·三方
+                  - generic [ref=e813]: 命宫
+                - generic [ref=e814]: 旺
+                - generic [ref=e816]: 巨门（旺）
+                - paragraph [ref=e817]: 一生命运总纲，性格气质所在 ┄ 说人话：你是哪种性格、一辈子的大方向，主要看它主星暗星，口才了得，是非分明，洞察力强。为命宫之根本，格局由此展开。 中州断：巨门坐命，暗曜口舌之星，善辩多思、心思深沉。其光在暗蔽他星，唯太阳能照。命主口才利、观察细，须以诚信与谨言化解口舌是非，最忌落陷会暗曜而多猜疑。 落到生活：口才了得、是非分明，洞察力强，适合靠嘴和笔吃饭，但言多易惹是非。事业宜传播、法律、教学、公关等口才型工作；财运靠口才与专业积累，动嘴不动手；感情爱讲道理、容易较真，宜学会少说多听、以柔化刚。
+              - generic [ref=e818]:
+                - generic [ref=e819]:
+                  - generic [ref=e820]: 父母
+                  - generic [ref=e821]: 己丑
+                - generic [ref=e822]: 庙
+                - generic [ref=e824]: 天相（庙）
+                - paragraph [ref=e825]: 主星印星，稳重端方，辅佐有力，重仪表。 落到生活：稳重端方、做事周全，是辅佐型人才，到哪里都让人放心，宜做副手或协调者。事业适合文书、行政、管理、协调等工作；财运平稳、细水长流，善打理；感情上温柔体贴、有分寸，是理想的终身伴侣，健康需防思虑伤脾。
+            - generic [ref=e826]:
+              - generic [ref=e827]: 空宫
+              - generic [ref=e828]:
+                - generic [ref=e829]:
+                  - generic [ref=e830]: 仆役
+                  - emphasis [ref=e831]: 辛巳
+                - generic [ref=e832]:
+                  - generic [ref=e833]: 财帛
+                  - emphasis [ref=e834]: 甲申
+          - generic [ref=e835]:
+            - heading "12 大限十年运程" [level=4] [ref=e836]:
+              - generic [ref=e837]: "12"
+              - generic [ref=e838]: 大限十年运程
+            - paragraph [ref=e839]: 大限以十年为一运，从命宫起逐步流转；观察各宫四化与流年飞星可断起伏。
+            - table [ref=e841]:
+              - rowgroup [ref=e842]:
+                - row [ref=e843]:
+                  - columnheader "大限宫" [ref=e844]
+                  - columnheader "干支" [ref=e845]
+                  - columnheader "虚岁" [ref=e846]
+                  - columnheader "年份" [ref=e847]
+                  - columnheader "四化" [ref=e848]
+              - rowgroup [ref=e849]:
+                - row [ref=e850]:
+                  - cell "命宫" [ref=e851]
+                  - cell "戊子" [ref=e852]
+                  - cell "6-15" [ref=e853]
+                  - cell "1995-2004" [ref=e854]
+                  - cell "贪狼、太阴、右弼、天机" [ref=e855]
+                - row [ref=e856]:
+                  - cell "父母" [ref=e857]
+                  - cell "己丑" [ref=e858]
+                  - cell "16-25" [ref=e859]
+                  - cell "2005-2014" [ref=e860]
+                  - cell "武曲、贪狼、天梁、文曲" [ref=e861]
+                - row [ref=e862]:
+                  - cell "福德" [ref=e863]
+                  - cell "戊寅" [ref=e864]
+                  - cell "26-35" [ref=e865]
+                  - cell "2015-2024" [ref=e866]
+                  - cell "贪狼、太阴、右弼、天机" [ref=e867]
+                - row [ref=e868]:
+                  - cell "田宅" [ref=e869]
+                  - cell "己卯" [ref=e870]
+                  - cell "36-45" [ref=e871]
+                  - cell "2025-2034" [ref=e872]
+                  - cell "武曲、贪狼、天梁、文曲" [ref=e873]
+                - row [ref=e874]:
+                  - cell "官禄" [ref=e875]
+                  - cell "庚辰" [ref=e876]
+                  - cell "46-55" [ref=e877]
+                  - cell "2035-2044" [ref=e878]
+                  - cell "太阳、武曲、太阴、天同" [ref=e879]
+                - row [ref=e880]:
+                  - cell "仆役" [ref=e881]
+                  - cell "辛巳" [ref=e882]
+                  - cell "56-65" [ref=e883]
+                  - cell "2045-2054" [ref=e884]
+                  - cell "巨门、太阳、文曲、文昌" [ref=e885]
+                - row [ref=e886]:
+                  - cell "迁移" [ref=e887]
+                  - cell "壬午" [ref=e888]
+                  - cell "66-75" [ref=e889]
+                  - cell "2055-2064" [ref=e890]
+                  - cell "天梁、紫微、左辅、武曲" [ref=e891]
+                - row [ref=e892]:
+                  - cell "疾厄" [ref=e893]
+                  - cell "癸未" [ref=e894]
+                  - cell "76-85" [ref=e895]
+                  - cell "2065-2074" [ref=e896]
+                  - cell "破军、巨门、太阴、贪狼" [ref=e897]
+                - row [ref=e898]:
+                  - cell "财帛" [ref=e899]
+                  - cell "甲申" [ref=e900]
+                  - cell "86-95" [ref=e901]
+                  - cell "2075-2084" [ref=e902]
+                  - cell "廉贞、破军、武曲、太阳" [ref=e903]
+                - row [ref=e904]:
+                  - cell "子女" [ref=e905]
+                  - cell "乙酉" [ref=e906]
+                  - cell "96-105" [ref=e907]
+                  - cell "2085-2094" [ref=e908]
+                  - cell "天机、天梁、紫微、太阴" [ref=e909]
+                - row [ref=e910]:
+                  - cell "夫妻" [ref=e911]
+                  - cell "丙戌" [ref=e912]
+                  - cell "106-115" [ref=e913]
+                  - cell "2095-2104" [ref=e914]
+                  - cell "天同、天机、文昌、廉贞" [ref=e915]
+                - row [ref=e916]:
+                  - cell "兄弟" [ref=e917]
+                  - cell "丁亥" [ref=e918]
+                  - cell "116-125" [ref=e919]
+                  - cell "2105-2114" [ref=e920]
+                  - cell "太阴、天同、天机、巨门" [ref=e921]
+          - generic [ref=e922]:
+            - heading "13 大限与流年" [level=4] [ref=e923]:
+              - generic [ref=e924]: "13"
+              - generic [ref=e925]: 大限与流年
+            - generic [ref=e926]:
+              - generic [ref=e927]:
+                - generic [ref=e928]:
+                  - generic [ref=e929]: 当前大限
+                  - generic [ref=e930]: 36–45 岁
+                  - generic [ref=e931]: 主十年大势
+                - generic [ref=e932]:
+                  - generic [ref=e933]: 田宅
+                  - generic [ref=e934]: 己卯
+                  - generic [ref=e935]:
+                    - text: 武曲
+                    - emphasis [ref=e936]: 利
+                  - generic [ref=e937]:
+                    - text: 七杀
+                    - emphasis [ref=e938]: 旺
+                - generic [ref=e939]:
+                  - generic [ref=e940]: 四化
+                  - paragraph [ref=e941]: 武曲化禄 · 落本命「田宅」
+                  - paragraph [ref=e942]: 贪狼化权 · 落本命「兄弟」
+                  - paragraph [ref=e943]: 天梁化科 · 落本命「福德」
+                  - paragraph [ref=e944]: 文曲化忌 · 落本命「夫妻」
+                - generic [ref=e945]:
+                  - generic [ref=e946]: 三方四正
+                  - generic [ref=e947]:
+                    - generic [ref=e948]:
+                      - generic [ref=e949]: 命
+                      - generic [ref=e950]: 田宅
+                      - generic [ref=e951]: 武曲、七杀
+                    - generic [ref=e952]:
+                      - generic [ref=e953]: 财帛
+                      - generic [ref=e954]: 兄弟
+                      - generic [ref=e955]: 廉贞、贪狼
+                    - generic [ref=e956]:
+                      - generic [ref=e957]: 官禄
+                      - generic [ref=e958]: 疾厄
+                      - generic [ref=e959]: 紫微、破军
+                    - generic [ref=e960]:
+                      - generic [ref=e961]: 迁移
+                      - generic [ref=e962]: 子女
+                      - generic [ref=e963]: 天府
+              - generic [ref=e964]:
+                - generic [ref=e965]:
+                  - generic [ref=e966]: 流年落宫
+                  - generic [ref=e967]: 断当年吉凶
+                - generic [ref=e968]:
+                  - generic [ref=e969]: 迁移
+                  - generic [ref=e970]: 丙午
+                  - generic [ref=e971]:
+                    - text: 天机
+                    - emphasis [ref=e972]: 庙
+                - generic [ref=e973]:
+                  - generic [ref=e974]: 四化
+                  - paragraph [ref=e975]: 天同化禄 · 落本命「福德」
+                  - paragraph [ref=e976]: 天机化权 · 落本命「迁移」
+                  - paragraph [ref=e977]: 文昌化科 · 落本命「官禄」
+                  - paragraph [ref=e978]: 廉贞化忌 · 落本命「兄弟」
+                - generic [ref=e979]:
+                  - generic [ref=e980]: 三方四正
+                  - generic [ref=e981]:
+                    - generic [ref=e982]:
+                      - generic [ref=e983]: 命
+                      - generic [ref=e984]: 迁移
+                      - generic [ref=e985]: 天机
+                    - generic [ref=e986]:
+                      - generic [ref=e987]: 财帛
+                      - generic [ref=e988]: 福德
+                      - generic [ref=e989]: 天同、天梁
+                    - generic [ref=e990]:
+                      - generic [ref=e991]: 官禄
+                      - generic [ref=e992]: 夫妻
+                      - generic [ref=e993]: 太阴
+                    - generic [ref=e994]:
+                      - generic [ref=e995]: 迁移
+                      - generic [ref=e996]: 命宫
+                      - generic [ref=e997]: 巨门
+                - generic [ref=e998]:
+                  - generic [ref=e999]: 流年神煞
+                  - generic [ref=e1000]: 指背、咸池、月煞、亡神、将星、攀鞍、岁驿、息神、华盖、劫煞、灾煞、天煞、白虎、天德、吊客、病符、岁建、晦气、丧门、贯索、官符、小耗、大耗、龙德
+            - paragraph [ref=e1001]: 大限主十年大势，流年断当年吉凶。四化所落之宫即此限此年得失关键：化禄宜进取取财、化权宜掌权担当、化科宜扬名求贵、化忌宜守成防损。当下36–45岁大限落「田宅」，主星「武曲（利）、七杀（旺）」，此宫所主即为十年要务；流年落「迁移」，主星「天机（庙）」，本年吉凶以此宫与四化为纲。
+          - generic [ref=e1002]:
+            - heading "14 五行局与命主详解" [level=4] [ref=e1003]:
+              - generic [ref=e1004]: "14"
+              - generic [ref=e1005]: 五行局与命主详解
+            - paragraph [ref=e1007]: 火六局：命宫之宫干属火，其数为六。火主热烈光明，命主行动力强、声名易显，宜从事传播、能源、演艺类行业。 命主为「贪狼」、身主为「火星」，主一生权威归属与晚景依托。
+          - generic [ref=e1008]:
+            - heading "吉 开运建议" [level=4] [ref=e1009]:
+              - generic [ref=e1010]: 吉
+              - generic [ref=e1011]: 开运建议
+            - generic [ref=e1012]:
+              - generic [ref=e1013]:
+                - generic [ref=e1014]: 事业
+                - paragraph [ref=e1015]: 命局成「巨门入命格」，一生大势已定，宜顺着格局气质选方向、借行运而进。宜结合命宫主星气质选择方向。 当前大限落「田宅」宫，主星「武曲」所主之事，即未来十年事业深耕方向；若此限宫位与命宫三方四正呼应，则十年内望有成。
+              - generic [ref=e1016]:
+                - generic [ref=e1017]: 财运
+                - paragraph [ref=e1018]: 事业宫主星「太阳」。中州断：太阳守事业宫，宜抛头露面、利他助人的行业，如公职、公益、销售、传媒、教育。主贵近官禄，宜争取名声地位；落陷则宜幕后操劳、凭勤恳立足。
+              - generic [ref=e1019]:
+                - generic [ref=e1020]: 感情
+                - paragraph [ref=e1021]: 夫妻宫主星「太阴」。中州断：太阴守夫妻宫，配偶温柔贤惠、心思细腻，易夫凭妻贵或因妻得财。见昌曲则配偶貌美才佳；化忌或见煞则易因感情或家累而生隔阂。宜多体谅、以温情维系。
+              - generic [ref=e1022]:
+                - generic [ref=e1023]: 健康
+                - paragraph [ref=e1024]: 注意劳逸结合，五行局宜关注对应脏腑（水局肾、火局心）；疾厄宫若有煞星加临，对应系统需定期养护。
+              - generic [ref=e1025]:
+                - generic [ref=e1026]: 开运
+                - paragraph [ref=e1027]: 五行局 火六局，可依局取色（木局青绿、火局红紫、土局黄棕、金局白金、水局黑蓝）增运；身宫落「命宫」宫为后天努力之枢，可朝身宫所主领域多加修持。命主「贪狼」主一生权威归属，身主「火星」主晚景依托；行运起伏，宜以大限四化之禄权科忌为进退之机，吉方取大限流年所落宫位对应方位。
+          - generic [ref=e1028]: 本报告由元气AI 高精度排盘引擎生成，仅供娱乐与参考。
+          - button "返回顶部" [ref=e1029] [cursor=pointer]: ↑
+  - contentinfo [ref=e271]:
+    - generic [ref=e272]:
+      - generic [ref=e284]:
+        - paragraph [ref=e285]:
+          - text: 元氣
+          - emphasis [ref=e286]: 满满
+        - paragraph [ref=e287]: 把心事交给星星，把好运留给自己
+      - generic [ref=e288]:
+        - generic [ref=e289]:
+          - paragraph [ref=e290]: 开始占卜
+          - list [ref=e291]:
+            - listitem [ref=e292]: 八字排盘
+            - listitem [ref=e293]: 紫微斗数
+            - listitem [ref=e294]: 塔罗指引
+            - listitem [ref=e295]: 元气 AI
+        - generic [ref=e296]:
+          - paragraph [ref=e297]: 发现更多
+          - list [ref=e298]:
+            - listitem [ref=e299]: 文库精选
+            - listitem [ref=e300]: 订阅黄历
+            - listitem [ref=e301]: 我的元气
+        - generic [ref=e302]:
+          - paragraph [ref=e303]: 关于
+          - list [ref=e304]:
+            - listitem [ref=e305]: 隐私政策
+            - listitem [ref=e306]: 用户协议
+            - listitem [ref=e307]: 联系我们
+            - listitem [ref=e308]: 管理控制台
+    - generic [ref=e309]:
+      - paragraph [ref=e310]: © 2025–2026 元氣滿滿 · 仅供娱乐参考 · 命由己造，相由心生
+      - paragraph [ref=e311]:
+        - generic [ref=e312]: 沪 ICP 备 XXXXXXXX 号
+        - generic [ref=e313]: ·
+        - generic [ref=e314]: 沪公网安备 XXXXXXXXXXXXXX 号
