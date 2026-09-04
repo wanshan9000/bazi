@@ -93,7 +93,9 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
                 setMessages(prev => { const last = prev[prev.length - 1]; return [...prev.slice(0, -1), { id: `r-${Date.now()}`, role: 'ai', kind: 'report', report: { title: (e.text.match(/^# (.+)$/m) || [])[1] || '测算报告', markdown: e.text }, time: timeNow(), _counted: true }, last] })
               }
               break
-            case 'error': patchLast(m => ({ ...m, text: m.text || `⚠️ ${e.message}`, streaming: false })); break
+            // 追加而不是二选一：模型已经吐了半截又报错时，丢掉已渲染的文字
+            // 会让用户看着内容凭空消失；把错误接在后面，两样都留住。
+            case 'error': patchLast(m => ({ ...m, text: (m.text ? m.text + '\n\n' : '') + `⚠️ ${e.message}`, streaming: false })); break
             case 'done': patchLast(m => ({ ...m, streaming: false })); break
             default: break
           }

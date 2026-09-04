@@ -32,6 +32,8 @@ test('chat 流式返回并镜像消息', async () => {
   try {
     const res = await fetch(`${base}/api/agent/chat`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-genki-uid': 'u1' }, body: JSON.stringify({ text: '嗨' }) })
     assert.equal(res.headers.get('content-type').split(';')[0], 'text/event-stream')
+    // 没有它，nginx 之类的反代会缓冲整条 SSE，流式回复会攒成一坨才到前端
+    assert.equal(res.headers.get('x-accel-buffering'), 'no')
     const body = await res.text()
     const frames = body.split('\n\n').filter(Boolean).map(l => JSON.parse(l.replace(/^data: /, '')))
     assert.equal(frames[0].type, 'session')
@@ -114,5 +116,19 @@ test('models 列表', async () => {
   try {
     const m = await (await fetch(`${base}/api/agent/models`)).json()
     assert.ok(m.routes.find(r => r.key === 'deepseek-flash'))
+  } finally { srv.close() }
+})
+
+test('限流覆盖整个 /agent/*（不只是 /chat）', async () => {
+  const { app } = mkApp(fakePool([]))
+  const { srv, base } = await listen(app)
+  try {
+    let last = 200
+    for (let i = 0; i < 21; i++) {
+      last = (await fetch(`${base}/api/agent/sessions`, { headers: { 'x-genki-uid': 'flood' } })).status
+    }
+    assert.equal(last, 429)
+    // /models 不带 uid，不参与限流
+    assert.equal((await fetch(`${base}/api/agent/models`)).status, 200)
   } finally { srv.close() }
 })

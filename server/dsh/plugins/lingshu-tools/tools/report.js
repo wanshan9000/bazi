@@ -5,6 +5,16 @@ import { OPTIONAL_BIRTH_PARAMS, chartFromArgs } from '../birth.js'
 const TYPES = ['bazi', 'mangpai', 'ziwei', 'liuyao', 'qimen', 'huangli', 'tarot', 'name', 'fengshui', 'hehun', 'zejiri', 'consult']
 const NEED_BIRTH = new Set(['bazi', 'mangpai', 'ziwei', 'hehun', 'zejiri', 'consult', 'name'])
 
+// 没给 hour 时 chartFromArgs 会按 12 点排盘（见 birth.js），时柱因此是编的。
+// 报告是会被截图转发的成品，必须在正文里说清楚，不能让缘主把估算当结论。
+const HOUR_NOTE = '> 未提供出生时辰，时柱按午时（12 时）估算，仅供参考；请向缘主确认时辰后重排。'
+
+// 把提示插到 `# 标题` 之后、正文之前
+function withHourNote(md) {
+  const nl = md.indexOf('\n')
+  return nl < 0 ? `${md}\n\n${HOUR_NOTE}\n` : `${md.slice(0, nl)}\n\n${HOUR_NOTE}${md.slice(nl)}`
+}
+
 export function makeReportTool(E) {
   return defineTool({
     name: 'report',
@@ -34,8 +44,9 @@ export function makeReportTool(E) {
       const rep = E.buildReport(args.type, chart, extra)
       if (!rep.ok) throw new Error(`报告生成失败：${rep.error}`)
       const body = (rep.sections && rep.sections.length) ? E.schemaToMarkdown(rep) : rep.markdown
-      if (/^#\s/.test(body)) return body
-      return `# ${rep.title || '测算报告'}\n\n${body}`
+      const md = /^#\s/.test(body) ? body : `# ${rep.title || '测算报告'}\n\n${body}`
+      const guessedHour = NEED_BIRTH.has(args.type) && args.hour == null
+      return guessedHour ? withHourNote(md) : md
     },
   })
 }

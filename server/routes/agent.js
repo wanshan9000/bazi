@@ -30,16 +30,21 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore() }
   function rateLimited(uid, ip) {
     const k = `${uid}|${ip}`
     const now = Date.now()
+    // 每次写入顺手清掉过期窗口：否则 hits 会随 uid+IP 组合无界增长（长跑进程的内存泄漏）
+    for (const [key, h] of hits) if (h.resetAt < now) hits.delete(key)
     const h = hits.get(k)
     if (!h || h.resetAt < now) { hits.set(k, { count: 1, resetAt: now + 60000 }); return false }
     h.count++
     return h.count > RATE_LIMIT
   }
 
+  // 鉴别 uid + 限流：规格 §10 要求覆盖整个 /api/agent/*，不只是 /chat
+  // （列表/删除同样能被刷）。/models 是无 uid 的静态路由表，放行。
   r.use('/agent', (req, res, next) => {
     if (req.path === '/models') return next()
     const uid = getUid(req)
     if (!uid) return res.status(400).json({ ok: false, msg: '缺少用户标识' })
+    if (rateLimited(uid, req.ip)) return res.status(429).json({ ok: false, msg: '请求太频繁，请稍后再试' })
     req.uid = uid
     next()
   })
@@ -67,7 +72,6 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore() }
     const q = String(text || '').trim()
     if (!q) return res.status(400).json({ ok: false, msg: '内容为空' })
     if (q.length > MAX_TEXT) return res.status(400).json({ ok: false, msg: `内容过长（≤${MAX_TEXT} 字）` })
-    if (rateLimited(req.uid, req.ip)) return res.status(429).json({ ok: false, msg: '请求太频繁，请稍后再试' })
 
     let session = sessionId ? store.getSession(req.uid, sessionId) : null
     if (sessionId && !session) return res.status(404).json({ ok: false, msg: '会话不存在' })
@@ -85,8 +89,12 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore() }
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no') // nginx 默认会缓冲代理响应，那样流式回复会攒成一坨才到前端
     res.flushHeaders()
     const send = e => { if (!res.writableEnded) res.write(`data: ${JSON.stringify(e)}\n\n`) }
+    // 心跳：注释帧（前端解析器只认 data: 行，会忽略它），用来在模型长时间
+    // 思考、一个字都没吐时保住中间代理和移动网络的连接。
+    const beat = setInterval(() => { if (!res.writableEnded) res.write(': ping\n\n') }, 15000)
     send({ type: 'session', sessionId: session.id, route: session.route })
 
     store.appendMessage(req.uid, session.id, { role: 'user', text: q, time: timeNow() })
@@ -120,6 +128,7 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore() }
         : (err?.message || '服务异常')
       send({ type: 'error', code, message })
     } finally {
+      clearInterval(beat)
       res.end()
     }
   })

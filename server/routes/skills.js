@@ -8,6 +8,17 @@ import { listSkills, findSkill, upsertSkill, deleteSkill } from '../store.js'
 import { adminConfigured, issueToken, requireAdmin } from '../adminAuth.js'
 import { syncAdminSkill, removeAdminSkill } from '../dsh/adminSkills.js'
 
+// 技能落盘：停用的技能必须把 SKILL.md 从 _admin 目录移走，否则 dsh 的
+// skill-filesystem 仍会热加载它——后台显示「已停用」，模型却照样能用。
+function syncSkillFile(saved) {
+  try {
+    if (saved.enabled === false) removeAdminSkill(saved.key)
+    else syncAdminSkill(saved)
+  } catch (e) {
+    console.warn('[skills] 同步 _admin 失败：', e.message)
+  }
+}
+
 const router = Router()
 
 // 内置技能 key 白名单：禁止被管理端导入覆盖（内置技能由代码维护，含精心审核的 sys）
@@ -113,7 +124,7 @@ router.post('/admin/skills', requireAdmin, (req, res) => {
   const { ok, errors, skill } = validateSkill(req.body)
   if (!ok) return res.status(400).json({ ok: false, msg: '校验失败', errors })
   const saved = upsertSkill(skill)
-  try { syncAdminSkill(saved) } catch (e) { console.warn('[skills] 同步 _admin 失败：', e.message) }
+  syncSkillFile(saved)
   res.json({ ok: true, msg: '已保存', data: saved })
 })
 
@@ -141,7 +152,7 @@ router.post('/admin/skills/import', requireAdmin, (req, res) => {
     const r = validateSkill(raw)
     if (r.ok) {
       const saved = upsertSkill(r.skill)
-      try { syncAdminSkill(saved) } catch (e) { console.warn('[skills] 同步 _admin 失败：', e.message) }
+      syncSkillFile(saved)
       imported.push(saved)
     } else {
       skipped.push({ index: i, name: raw?.name || raw?.key || `#${i + 1}`, errors: r.errors })
@@ -159,7 +170,7 @@ router.patch('/admin/skills/:key', requireAdmin, (req, res) => {
   if (typeof req.body.enabled === 'boolean') patch.enabled = req.body.enabled
   if (req.body.name != null) patch.name = String(req.body.name).trim()
   const saved = upsertSkill({ ...existing, ...patch })
-  try { syncAdminSkill(saved) } catch (e) { console.warn('[skills] 同步 _admin 失败：', e.message) }
+  syncSkillFile(saved)
   res.json({ ok: true, msg: '已更新', data: saved })
 })
 

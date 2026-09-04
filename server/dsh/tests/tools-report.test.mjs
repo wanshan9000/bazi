@@ -22,3 +22,16 @@ test('report hehun 需要 partner', async () => {
 test('report 未知类型报错', async () => {
   await assert.rejects(() => makeReportTool(E).execute({ type: 'xxx', ...birth }, exec))
 })
+
+test('report 未提供时辰：标题下方标注时柱为估算', async () => {
+  const { hour, ...noHour } = birth
+  const out = await makeReportTool(E).execute({ type: 'bazi', ...noHour }, exec)
+  const lines = out.split('\n')
+  assert.match(lines[0], /^# /)
+  assert.equal(lines[2], '> 未提供出生时辰，时柱按午时（12 时）估算，仅供参考；请向缘主确认时辰后重排。')
+})
+
+test('report 提供了时辰：不加时柱估算提示', async () => {
+  const out = await makeReportTool(E).execute({ type: 'bazi', ...birth }, exec)
+  assert.doesNotMatch(out, /时柱按午时/)
+})
