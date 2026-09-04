@@ -225,7 +225,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
       <div className="chat-scroll" ref={scrollRef}>
         {messages.map(m => (
           <div key={m.id} className={`msg ${m.role}`}>
-            <div className="avatar">{m.role === 'ai' ? '司' : '我'}</div>
+            <div className="avatar">{m.role === 'ai' ? '司' : m.role === 'tool' ? '🔧' : '我'}</div>
             <div style={{ maxWidth: '100%' }}>
               {m.kind === 'report' ? (
                 <>
@@ -235,6 +235,8 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
                   </div>
                   <div className="msg-actions"><CopyButton text={m.report.markdown} title="复制报告全文" /></div>
                 </>
+              ) : m.role === 'tool' ? (
+                <ToolCallsBlock names={m.text} />
               ) : (
                 <div className={`bubble ${m.streaming ? 'bubble-streaming' : ''}`}>
                   {m.reasoning ? <ThinkBlock content={m.reasoning} streaming={!!m.streaming && !m.text} /> : null}
