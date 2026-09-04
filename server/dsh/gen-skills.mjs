@@ -2,12 +2,20 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createHash } from 'node:crypto'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 export const SKILLS_DIR = path.join(here, 'skills')
 
 export function skillDirName(key) {
-  return String(key).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  const raw = String(key)
+  const kebab = raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  // key 全由非字母数字组成（如 "___"、"---"）时 kebab 化结果为空串：
+  // 绝不能返回空目录名——那会让调用方拼出 path.join(dir, '')（即 dir 本身），
+  // 使写入/删除操作作用到整个技能目录而非某个技能子目录。退化为按 key 内容
+  // 派生的稳定短哈希目录名，保证非空且合法 kebab-case。
+  if (kebab) return kebab
+  return `skill-${createHash('sha1').update(raw).digest('hex').slice(0, 8)}`
 }
 
 function yamlStr(s) {
