@@ -1,4 +1,5 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { textOutput } from '../toolOutput.js'
 import { OPTIONAL_BIRTH_PARAMS, chartFromArgs } from '../birth.js'
 
 export function makeNameTool(E) {
@@ -6,7 +7,7 @@ export function makeNameTool(E) {
     name: 'name',
     description: '姓名五格三才分析（给 fullName）或结合八字喜用推荐名字（给 surname + 出生信息）。问取名、改名、名字好不好时调用。',
     parameters: { fullName: { type: 'string', description: '要分析的完整姓名' }, surname: { type: 'string', description: '推荐名字时的姓氏' }, ...OPTIONAL_BIRTH_PARAMS },
-    output: { schema: { type: 'string' }, render: (_a, v) => [{ type: 'text', text: v }] },
+    output: textOutput(),
     async execute(args) {
       const chart = args.year && args.month && args.day && args.gender ? chartFromArgs(E, args) : null
       if (args.fullName) {

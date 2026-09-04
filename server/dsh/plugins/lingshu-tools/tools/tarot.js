@@ -1,11 +1,12 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { textOutput } from '../toolOutput.js'
 
 export function makeTarotTool(E) {
   return defineTool({
     name: 'tarot',
     description: '抽塔罗牌并给牌意（single 单张 / three 三张过去现在未来）。用户要抽牌、看塔罗、感情抉择指引时调用。',
     parameters: { spread: { type: 'string', enum: ['single', 'three'], description: '牌阵，默认 single' }, question: { type: 'string', description: '所问之事' } },
-    output: { schema: { type: 'string' }, render: (_a, v) => [{ type: 'text', text: v }] },
+    output: textOutput(),
     async execute(args) {
       const result = E.drawCards(args.spread || 'single', Date.now())
       if (!result) throw new Error('塔罗牌阵加载失败')

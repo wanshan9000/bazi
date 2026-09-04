@@ -1,4 +1,5 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { textOutput } from '../toolOutput.js'
 import { BIRTH_PARAMS, chartFromArgs, birthLine } from '../birth.js'
 
 const SYSTEM_NOTE = '【体系声明·必须遵守】八字大运按节气交运（阳男阴女顺排、阴男阳女逆排），起运日期/起运年龄以此处数据为准；紫微大限按五行局起限，是另一套算法，两者数字严禁混用、严禁编造。'
@@ -26,10 +27,7 @@ export function makeBaziTool(E) {
       ...BIRTH_PARAMS,
       school: { type: 'string', enum: ['ziping', 'mangpai'], description: '流派：子平(默认)或盲派' },
     },
-    output: {
-      schema: { type: 'string' },
-      render: (_args, value) => [{ type: 'text', text: value }],
-    },
+    output: textOutput(),
     async execute(args) {
       const chart = chartFromArgs(E, args)
       const segs = [`【命主】${birthLine(chart)}`, E.buildBaziFull(chart)]

@@ -1,4 +1,5 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { textOutput } from '../toolOutput.js'
 
 export function makeLiuyaoTool(E) {
   return defineTool({
@@ -8,7 +9,7 @@ export function makeLiuyaoTool(E) {
       question: { type: 'string', required: true, description: '所问之事' },
       n1: { type: 'integer' }, n2: { type: 'integer' }, n3: { type: 'integer' },
     },
-    output: { schema: { type: 'string' }, render: (_a, v) => [{ type: 'text', text: v }] },
+    output: textOutput(),
     async execute(args) {
       return `【所问】${args.question}\n${E.buildLiuyaoPan({ n1: args.n1, n2: args.n2, n3: args.n3, question: args.question })}`
     },

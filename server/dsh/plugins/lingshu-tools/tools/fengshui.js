@@ -1,4 +1,5 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { textOutput } from '../toolOutput.js'
 import { OPTIONAL_BIRTH_PARAMS, chartFromArgs } from '../birth.js'
 
 // analyzeFengshui 的 layout 只认固定英文键（living/master/kitchen/study/door/bedDir），
@@ -14,7 +15,7 @@ export function makeFengshuiTool(E) {
       rooms: { type: 'array', items: { type: 'object', properties: { name: { type: 'string', required: true }, dir: { type: 'string', required: true } }, additionalProperties: false }, description: '房间列表，如 [{name:"主卧",dir:"北"}]。房间角色限客厅/主卧/卧室/厨房/书房，其余名字会被忽略' },
       ...OPTIONAL_BIRTH_PARAMS,
     },
-    output: { schema: { type: 'string' }, render: (_a, v) => [{ type: 'text', text: v }] },
+    output: textOutput(),
     async execute(args) {
       const layout = { door: args.door }
       for (const r of args.rooms || []) {

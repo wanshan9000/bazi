@@ -1,4 +1,5 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { textOutput } from '../toolOutput.js'
 import { OPTIONAL_BIRTH_PARAMS, chartFromArgs } from '../birth.js'
 
 function today() { const t = new Date(); return `${t.getFullYear()}-${t.getMonth() + 1}-${t.getDate()}` }
@@ -9,7 +10,7 @@ export function makeHuangliTool(E) {
     name: 'huangli',
     description: '查某天老黄历宜忌、吉神凶煞、冲煞，可结合命主八字给开运建议。问黄历、宜忌、吉日、搬家开业嫁娶择日时调用。',
     parameters: { date: { type: 'string', description: 'YYYY-MM-DD，省略为今天' }, scenario: { type: 'string', description: '场景：worker/student/boss 等，可省略' }, ...OPTIONAL_BIRTH_PARAMS },
-    output: { schema: { type: 'string' }, render: (_a, v) => [{ type: 'text', text: v }] },
+    output: textOutput(),
     async execute(args) {
       const dateStr = args.date || today()
       const chart = args.year && args.month && args.day && args.gender ? chartFromArgs(E, args) : null
@@ -27,7 +28,7 @@ export function makeModernHuangliTool(E) {
     name: 'modern_huangli',
     description: '现代幽默黄历（打工人/学生/老板视角的宜忌，娱乐向）。用户说沙雕黄历、打工人黄历、摸鱼宜忌时调用。',
     parameters: { date: { type: 'string', description: 'YYYY-MM-DD，省略为今天' }, scenario: { type: 'string', description: 'worker/student/boss' } },
-    output: { schema: { type: 'string' }, render: (_a, v) => [{ type: 'text', text: v }] },
+    output: textOutput(),
     async execute(args) { return E.buildFusedHuangli(args.date || today(), args.scenario) },
   })
 }
