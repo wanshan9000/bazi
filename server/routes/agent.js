@@ -93,6 +93,7 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore() }
     const ac = new AbortController()
     req.on('close', () => ac.abort())
     const tools = []
+    let sawError = false
     try {
       const result = await pool.run({
         routeKey: session.route, sessionId: session.id, text: prompt, signal: ac.signal,
@@ -100,12 +101,13 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore() }
           if (e.type === 'tool_call') tools.push(TOOL_NAME_CN[e.name] || e.name)
           if (e.type === 'tool_result' && e.kind === 'report') store.appendMessage(req.uid, session.id, { role: 'ai', kind: 'report', name: e.name, text: e.text, time: timeNow() })
           if (e.type === 'title' && session.title.length <= 14) store.updateSession(req.uid, session.id, { title: e.title })
-          if (e.type !== 'message' && e.type !== 'done') send(e) // done 由下方统一发（带 usage）
+          if (e.type === 'error') sawError = true
+          if (e.type !== 'message' && e.type !== 'done') send(e) // done 由下方统一发（带 usage）；若已见 error 则不再发 done
         },
       })
       if (tools.length) store.appendMessage(req.uid, session.id, { role: 'tool', text: tools.join('、'), time: timeNow() })
       if (result.finalText) store.appendMessage(req.uid, session.id, { role: 'ai', text: result.finalText, time: timeNow() })
-      send({ type: 'done', reason: 'completed', usage: result.usage || undefined })
+      if (!sawError) send({ type: 'done', reason: 'completed', usage: result.usage || undefined })
     } catch (err) {
       const code = err?.code || err?.name || 'ERROR'
       const message = code === 'BUSY' ? '正在回复中，请稍候'
