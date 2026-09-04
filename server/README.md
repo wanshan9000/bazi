@@ -83,3 +83,25 @@ NODE_ENV=production BASE_URL=https://你的域名 PORT=8080 npm run server
 - 验证码、订阅数据走 HTTPS 传输。
 - 短信模板需在服务商后台完成审核。
 - 微信扫码需开放平台认证（企业主体）。
+
+## 元气 AI（dsh 基座）
+
+后端通过 `@deepseek-ai/dsh` 子进程提供 agent 能力，前端走 `/api/agent/chat`（SSE）。
+
+```bash
+# 首次：安装插件到 profile、生成技能目录、检查密钥
+npm run agent:setup
+# 冒烟（需 server/.env 里的 DEEPSEEK_API_KEY）
+npm run agent:smoke
+```
+
+| 环境变量 | 说明 |
+|---|---|
+| `DEEPSEEK_API_KEY` | DeepSeek 官方密钥（必填） |
+| `MINIMAX_API_KEY` | MiniMax 备选模型（可选） |
+| `AGENT_DEFAULT_ROUTE` | 默认路由：`deepseek-flash` / `deepseek-pro` / `minimax` |
+| `AGENT_STORE_FILE` | 会话索引文件，默认 `server/data/agent_sessions.json` |
+
+运行时数据：`server/dsh/home/sessions/`（dsh 会话日志，需挂持久卷）。密钥只在服务端，子进程 env 白名单传递，遥测已关闭。
+
+前端通过根目录 `.env.example` 中的 `VITE_AGENT_BACKEND=dsh|legacy` 切换新旧编排；`legacy` 时前端回退到浏览器内旧 agent 逻辑，不依赖本节任何后端能力。
