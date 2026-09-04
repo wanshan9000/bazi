@@ -13,6 +13,7 @@ import TarotPage from './components/TarotPage.jsx'
 import TarotReading from './components/TarotReading.jsx'
 import AdminPage from './components/AdminPage.jsx'
 import AgentChat from './components/AgentChat.jsx'
+import AgentChatDsh from './components/AgentChatDsh.jsx'
 import SubscribePage from './components/SubscribePage.jsx'
 import LoginPage from './components/LoginPage.jsx'
 import RegisterPage from './components/RegisterPage.jsx'
@@ -23,6 +24,9 @@ import { buildChart } from './engine/bazi.js'
 import { loadHistory as loadTarot } from './data/tarot.js'
 import { getSession, logout as doLogout, syncMonthlyReset } from './data/users.js'
 import { getMonthlyCredits } from './engine/membership.js'
+
+// VITE_AGENT_BACKEND=legacy 时走旧浏览器内编排；默认 dsh 基座
+const AgentChatImpl = import.meta.env.VITE_AGENT_BACKEND === 'legacy' ? AgentChat : AgentChatDsh
 
 const LS_KEY = 'sanmen-history'
 
@@ -524,7 +528,7 @@ function AgentPage({ chart, onBack, seedQuery, user, onRequireLogin }) {
         <span className="page-subtitle">问司命 · 八字 · 紫微，两门通晓</span>
       </h1>
       <div className="agent-page-card">
-        <AgentChat key={seedQuery || 'fresh'} chart={chart} seedQuery={seedQuery} user={user} onRequireLogin={onRequireLogin} />
+        <AgentChatImpl key={seedQuery || 'fresh'} chart={chart} seedQuery={seedQuery} user={user} onRequireLogin={onRequireLogin} />
       </div>
     </section>
   )
