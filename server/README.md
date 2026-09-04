@@ -89,6 +89,11 @@ NODE_ENV=production BASE_URL=https://你的域名 PORT=8080 npm run server
 后端通过 `@deepseek-ai/dsh` 子进程提供 agent 能力，前端走 `/api/agent/chat`（SSE）。
 
 ```bash
+# 前置：排盘引擎打包产物 server/dsh/plugins/lingshu-tools/dist/engines.mjs
+# （不入库，插件工具与技能目录都依赖它）。`npm run build` 会先自动构建它；
+# 也可单独跑 `npm run build:engines`；`npm run agent:setup` 在缺失时会自动补建。
+npm run build
+
 # 首次：安装插件到 profile、生成技能目录、检查密钥
 npm run agent:setup
 # 冒烟（需 server/.env 里的 DEEPSEEK_API_KEY）
