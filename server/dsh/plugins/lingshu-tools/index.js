@@ -1,8 +1,23 @@
 // dsh 插件：把灵枢命理引擎注册为模型可调用的工具
+import { pathToFileURL } from 'node:url'
+import { makeBaziTool } from './tools/bazi.js'
+
 export const name = 'lingshu-tools'
 export const inject = ['tools']
 
-export function apply(ctx) {
-  // Task 3 起在此逐个 ctx.tools.register(...)
-  console.error('[lingshu-tools] 已挂载')
+async function loadEngines() {
+  const file = process.env.LINGSHU_ENGINES
+  if (!file) throw new Error('lingshu-tools: 缺少 LINGSHU_ENGINES（engines.mjs 路径）')
+  return import(pathToFileURL(file).href)
+}
+
+export const TOOL_FACTORIES = [makeBaziTool]
+
+export async function apply(ctx) {
+  const E = await loadEngines()
+  for (const make of TOOL_FACTORIES) {
+    const tool = make(E)
+    ctx.effect(() => ctx.tools.register(tool), `lingshu.${tool.name}`)
+  }
+  console.error('[lingshu-tools] 已注册工具：', ctx.tools.schemas().map(t => t.name).join(','))
 }
