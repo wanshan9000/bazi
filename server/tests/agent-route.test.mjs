@@ -86,6 +86,28 @@ test('turn/end 错误：不再补发 done', async () => {
   } finally { srv.close() }
 })
 
+test('请求体读完不应提前中止 pool.run 的 signal', async () => {
+  let aborted
+  const pool = {
+    isBusy: () => false,
+    async run({ onEvent, signal }) {
+      await new Promise(r => setTimeout(r, 30))
+      aborted = signal.aborted
+      onEvent({ type: 'text', delta: 'ok' })
+      return { finalText: 'ok', usage: null, title: null }
+    },
+  }
+  const { app } = mkApp(pool)
+  const { srv, base } = await listen(app)
+  try {
+    const res = await fetch(`${base}/api/agent/chat`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-genki-uid': 'u1' }, body: JSON.stringify({ text: '嗨' }) })
+    const body = await res.text()
+    const frames = body.split('\n\n').filter(Boolean).map(l => JSON.parse(l.replace(/^data: /, '')))
+    assert.ok(frames.some(f => f.type === 'text' && f.delta === 'ok'))
+    assert.equal(aborted, false)
+  } finally { srv.close() }
+})
+
 test('models 列表', async () => {
   const { app } = mkApp(fakePool([]))
   const { srv, base } = await listen(app)

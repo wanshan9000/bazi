@@ -91,7 +91,10 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore() }
 
     store.appendMessage(req.uid, session.id, { role: 'user', text: q, time: timeNow() })
     const ac = new AbortController()
-    req.on('close', () => ac.abort())
+    // 用 res 而非 req 的 'close'：req 在请求体读完（express.json 已消费）就会触发
+    // 'close'，与客户端是否断开无关；res 的 'close' 只在底层 socket 关闭时触发，
+    // writableFinished 为 true 说明是我们自己 res.end() 收尾的，不是真实断开。
+    res.on('close', () => { if (!res.writableFinished) ac.abort() })
     const tools = []
     let sawError = false
     try {
