@@ -9,6 +9,7 @@ import { makeTarotTool } from './tools/tarot.js'
 import { makeNameTool } from './tools/name.js'
 import { makeFengshuiTool } from './tools/fengshui.js'
 import { makeWuyunliuqiTool } from './tools/wuyunliuqi.js'
+import { makeReportTool } from './tools/report.js'
 
 export const name = 'lingshu-tools'
 export const inject = ['tools']
@@ -21,7 +22,7 @@ async function loadEngines() {
 
 export const TOOL_FACTORIES = [
   makeBaziTool, makeZiweiTool, makeLiuyaoTool, makeQimenTool, makeHuangliTool, makeModernHuangliTool,
-  makeTarotTool, makeNameTool, makeFengshuiTool, makeWuyunliuqiTool,
+  makeTarotTool, makeNameTool, makeFengshuiTool, makeWuyunliuqiTool, makeReportTool,
 ]
 
 export async function apply(ctx) {

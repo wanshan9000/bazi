@@ -7,8 +7,8 @@ const exec = { signal: new AbortController().signal }
 const tools = Object.fromEntries(TOOL_FACTORIES.map(f => { const t = f(E); return [t.name, t] }))
 const birth = { year: 1990, month: 5, day: 6, hour: 8, gender: '男' }
 
-test('注册了全部 10 个基础工具', () => {
-  assert.deepEqual(Object.keys(tools).sort(), ['bazi', 'fengshui', 'huangli', 'liuyao', 'modern_huangli', 'name', 'qimen', 'tarot', 'wuyunliuqi', 'ziwei'])
+test('注册了全部 11 个基础工具', () => {
+  assert.deepEqual(Object.keys(tools).sort(), ['bazi', 'fengshui', 'huangli', 'liuyao', 'modern_huangli', 'name', 'qimen', 'report', 'tarot', 'wuyunliuqi', 'ziwei'])
 })
 
 test('ziwei 返回十二宫', async () => {

@@ -29,6 +29,7 @@ export { analyzeName, recommendName } from '../../../../src/engine/nameAnalysis.
 export { analyzeFengshui } from '../../../../src/engine/fengshui.js'
 export { buildWuyunliuqi } from '../../../../src/engine/wuyunliuqi.js'
 export { buildReport } from '../../../../src/engine/reports.js'
+export { schemaToMarkdown } from '../../../../src/engine/reportSchema.js'
 export { buildMangpaiContext } from '../../../../src/engine/mangpaiContext.js'
 export { lunarToSolar } from '../../../../src/utils/lunar.js'
 export { BUILTIN_SKILLS } from '../../../../src/data/skills.js'
