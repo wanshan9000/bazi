@@ -62,9 +62,13 @@ export function createAgentStore(file) {
       const d = load()
       const before = d.sessions.length
       d.sessions = d.sessions.filter(s => !(s.uid === uid && s.id === id))
+      const removed = d.sessions.length < before
+      // 只有确实删掉了「本人的」会话才清消息：否则任何人只要猜到 id
+      // 就能把别人的消息镜像删空（会话仍在，历史却没了）。
+      if (!removed) return false
       delete d.messages[id]
       save()
-      return d.sessions.length < before
+      return true
     },
   }
 }

@@ -38,3 +38,12 @@ test('持久化到文件', () => {
   const a = createAgentStore(f).createSession('u1', { route: 'deepseek-flash', title: 'X' })
   assert.equal(createAgentStore(f).getSession('u1', a.id).title, 'X')
 })
+
+test('删除别人的会话：返回 false 且不碰对方的消息', () => {
+  const s = createAgentStore(tmp())
+  const a = s.createSession('u1', { route: 'deepseek-flash' })
+  s.appendMessage('u1', a.id, { role: 'user', text: '嗨', time: 't' })
+  assert.equal(s.deleteSession('u2', a.id), false)
+  assert.equal(s.listSessions('u1').length, 1)
+  assert.deepEqual(s.listMessages('u1', a.id).map(m => m.text), ['嗨'])
+})
