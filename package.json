@@ -10,9 +10,16 @@
     "preview": "vite preview",
     "server": "node server/index.js",
     "server:dev": "node --watch server/index.js",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "agent:setup": "node server/dsh/setup.mjs",
+    "agent:smoke": "node server/dsh/smoke.mjs",
+    "build:engines": "vite build --config vite.engines.config.js",
+    "pretest": "npm run build:engines",
+    "test": "node --test \"server/**/*.test.mjs\" \"src/**/*.test.mjs\""
   },
   "dependencies": {
+    "@deepseek-ai/dsh": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-sdk-client": "0.1.2-rc.1",
     "bigfishmarquis-qimen": "^1.0.0",
     "cantian-tymext": "^0.0.26",
     "cors": "^2.8.6",

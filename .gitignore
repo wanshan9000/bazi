@@ -19,3 +19,12 @@ _verify.mjs
 
 # superpowers SDD 工作区（会话草稿）
 .superpowers/
+
+# dsh 运行时
+server/dsh/home/sessions/
+server/dsh/home/storages/
+server/dsh/home/profiles/lingshu/node_modules/
+server/dsh/home/profiles/lingshu/package-lock.json
+server/dsh/home/profiles/lingshu/.dsh-module-fallback/
+server/dsh/plugins/lingshu-tools/dist/
+server/dsh/skills/_admin/

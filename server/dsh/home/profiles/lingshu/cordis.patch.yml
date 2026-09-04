@@ -1,0 +1,84 @@
+# 灵枢 agent profile：基于 dsh-sdk-minimal（独立树，无 dsh-base），
+# 去掉 shell/编辑器/pty，只保留模型 + 会话 + 命理工具 + 技能。
+# 注意：patch 会整体替换目标行的 config，需要保留的字段必须重述。
+- id: sdk-app-startup
+  config:
+    profile: lingshu
+
+# ── 去掉一切可执行/写文件能力 ──
+- id: terminal-bash
+  disabled: true
+- id: terminal-pwsh
+  disabled: true
+- id: persistent-bash
+  disabled: true
+- id: persistent-pwsh
+  disabled: true
+- id: str-replace-editor
+  disabled: true
+- id: pty
+  disabled: true
+- id: sandbox-policy
+  config:
+    mode: read-only
+    workspaceRoot: !!js process.cwd()
+
+# ── 人设：不要 coding agent 身份与 runtime 上下文 ──
+- id: system-prompt
+  config:
+    includeHarnessIdentity: false
+    includeRuntimeContext: false
+    persona: !!js process.env.LINGSHU_PERSONA ?? '你是「司命」，玄学命理助手。'
+
+# ── 模型：DeepSeek 官方 ──
+- id: llm-deepseek
+  config:
+    apiKeyEnv: DEEPSEEK_API_KEY
+    reasoningEffort: low
+    maxTokens: 8192
+    defaultContextWindow: 1000000
+    streamIdleTimeoutMs: 300000
+
+- insert:
+    # 备选模型：MiniMax（OpenAI 兼容网关）
+    - id: llm-pi-ai
+      name: '@deepseek-ai/dsh-llm-pi-ai'
+      config:
+        providers:
+          minimax:
+            displayName: MiniMax
+            apiKeyEnv: MINIMAX_API_KEY
+            api: openai-completions
+            baseURL: https://api.minimaxi.com/v1
+            models:
+              - id: MiniMax-M2.7
+                name: MiniMax M2.7
+                contextWindow: 1000000
+                reasoningEfforts: false
+
+    # 命理工具
+    - id: lingshu-tools
+      name: 'dsh-plugin-lingshu-tools'
+
+    # 技能：只扫我们自己的目录
+    - id: skill
+      name: '@deepseek-ai/dsh-skill'
+    - id: skill-filesystem
+      name: '@deepseek-ai/dsh-skill-filesystem'
+      config:
+        includeDefaultRoots: false
+        customSkillDirs: !!js "(process.env.LINGSHU_SKILLS_DIR ? [process.env.LINGSHU_SKILLS_DIR, process.env.LINGSHU_SKILLS_DIR + '/_admin'] : [])"
+    - id: tool-skill
+      name: '@deepseek-ai/dsh-tool-skill'
+
+    # 长会话压缩（Task 1 Step 6 验证能否挂载；挂不上则删除这三行）
+    - id: token-meter
+      name: '@deepseek-ai/dsh-token-meter'
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
