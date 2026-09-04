@@ -21,6 +21,7 @@ _verify.mjs
 .superpowers/
 
 # dsh 运行时
+server/dsh/home/.anonymous-user-id
 server/dsh/home/sessions/
 server/dsh/home/storages/
 server/dsh/home/profiles/lingshu/node_modules/

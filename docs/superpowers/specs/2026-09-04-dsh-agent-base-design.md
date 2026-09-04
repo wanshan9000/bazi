@@ -136,6 +136,8 @@ Tool 描述文字沿用 `agentTools.js TOOL_SCHEMAS` 中已打磨的中文描述
 
 用户识别：本期沿用前端演示账号体系，请求头 `X-Genki-Uid`（游客用设备 id）。这不是安全边界，R2 M1 上 JWT 后原地替换 `getUid(req)` 一个函数。会话归属校验：`sessionId` 必须属于该 uid，否则 404。
 
+> 在 R2 M1 上 JWT 之前，`/api/agent/*` 不得对公网开放（uid 头可伪造、登录用户 id 可枚举）。
+
 ### 8.2 DshPool
 
 - 路由表：`{ 'deepseek-flash': {provider:'deepseek-official', model:'deepseek-v4-flash'}, 'deepseek-pro': {...'deepseek-v4-pro'}, 'minimax': {provider:'minimax', model:'MiniMax-M2.7'} }`；默认 `AGENT_DEFAULT_ROUTE=deepseek-flash`。
@@ -208,6 +210,7 @@ SDK 协议无取消。客户端断开时服务端停止转发但 turn 继续到�
 
 ## 13. 迁移与上线
 
+0. 前置：构建排盘引擎打包产物 `server/dsh/plugins/lingshu-tools/dist/engines.mjs`（不入库，插件工具与 SKILL.md 生成都依赖它）。`npm run build` 已通过 `prebuild` 自动构建；`npm run agent:setup` 在缺失时也会自动补建；也可单独 `npm run build:engines`。
 1. `npm i @deepseek-ai/dsh @deepseek-ai/dsh-sdk-client`；`npm run agent:setup`。
 2. 后端先上（`/api/agent/*` 与旧前端并存）。
 3. 前端以 `VITE_AGENT_BACKEND=dsh` 构建灰度；问题回退 `legacy`。
@@ -221,6 +224,7 @@ SDK 协议无取消。客户端断开时服务端停止转发但 turn 继续到�
 - compaction 三行在无 base 树上是否可挂载未验证。
 - 无取消协议：长回复中断只能等自然结束。
 - `role:'tool'`/report 卡片的前端渲染依赖服务端消息镜像（`server/data/agent_sessions.json`），不依赖 dsh 自身的会话 JSONL；若镜像文件丢失或裁剪，历史工具结果/报告卡片会在刷新后不可见（dsh 侧日志仍完整，但前端不读它）。
+- 登录用户 id 为时间戳派生、可枚举，公网暴露前必须上 JWT。
 - 本机（及任何未配置密钥的部署）无 `DEEPSEEK_API_KEY` 时，模型层直接返回 `MISSING_CREDENTIAL`（SSE `error` 事件），对话在 `session`/`title` 之后即终止、不产生 `done`；上线前必须在 `server/.env` 配置 `DEEPSEEK_API_KEY`（及可选 `MINIMAX_API_KEY`），否则 agent 通道对所有用户不可用。
 
 ## 15. 验收记录
@@ -229,7 +233,7 @@ SDK 协议无取消。客户端断开时服务端停止转发但 turn 继续到�
 
 | # | 成功标准 | 验证方式 | 证据 | 结果 |
 |---|---|---|---|---|
-| 1 | 模型自主调用 `bazi` 工具并基于真实排盘作答；追问"大运呢"无需重新排盘 | 本地无 `DEEPSEEK_API_KEY`，无法跑通端到端模型对话；改用无 key 复现实验确认链路通到模型层：启动 `PORT=8791 node server/index.js`，`curl -s -N -H 'content-type: application/json' -H 'x-genki-uid: t' -d '{"text":"你好"}' http://127.0.0.1:8791/api/agent/chat` | SSE 依次输出 `{"type":"session",...}` → `{"type":"title","title":"你好"}` → `{"type":"error","code":"MISSING_CREDENTIAL",...}`，无 `done`；说明 uid→session、DshPool 启动子进程、事件转发到 provider 层均正常，卡在"无密钥"这一步，而非编排逻辑 | **未验证**（需 `DEEPSEEK_API_KEY` 后跑 `npm run agent:smoke` 断言事件流含 `tool/call name=bazi`） |
+| 1 | 模型自主调用 `bazi` 工具并基于真实排盘作答；追问"大运呢"无需重新排盘 | 配置真实 `DEEPSEEK_API_KEY` 后执行 `npm run agent:smoke`（1990-05-06 08:00 男，问排八字） | 2026-09-05 `npm run agent:smoke` 通过：`tool_call:skill` → `tool_call:bazi`，回复引用 乾造 庚午 辛巳 辛未 壬辰 | **通过** |
 | 2 | 浏览器不再持有任何模型密钥 | `grep -rn "apiKey" src/components/AgentChatDsh.jsx src/api/agent.js`；`grep -n "DEEPSEEK_API_KEY" server/dsh/pool.js` | 前两个文件 grep 无匹配（exit 1）；`pool.js:39` 仅在服务端子进程 env 白名单中出现 `DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY \|\| ''` | **通过** |
 | 3 | 现有 13 个 skill 迁为 SKILL.md，模型可按需加载 | `ls server/dsh/skills \| wc -l`；`grep -c "^name:" server/dsh/skills/*/SKILL.md` | `server/dsh/skills` 下 16 个目录（`_admin` 为管理后台自定义技能落盘目录，非内置技能），其余 15 个内置技能目录均含 `SKILL.md` 且各自恰好一行 `name:` frontmatter（bazi/fengshui/health/huangli/liuyao/love/mangpai/modern-huangli/name/qimen/tarot/wealth/wuyunliuqi/yixue-taishan/ziwei） | **通过**（15 ≥ 13） |
 | 4 | 流式回复、思考过程折叠、工具调用提示、报告卡片渲染与现在体验持平或更好 | 代码走查 `src/components/AgentChatDsh.jsx` 事件分支；`npm test` 覆盖 `server/routes/agent.js` 的 SSE 事件流与镜像逻辑 | `AgentChatDsh.jsx:87-91` 分别处理 `text`（流式拼接）、`reasoning`（折叠显示）、`tool_call`（工具提示）、`tool_result` 且 `kind==='report'` 时走报告卡片渲染（`m.kind === 'report'` 分支见第 128、230 行）；`npm test` 62 个用例全部通过，含 `chat 流式返回并镜像消息`、`turn/end 错误：不再补发 done` 等路由测试 | **部分通过**（代码路径与单测齐全；无密钥环境下无法做真实模型输出的视觉/体验比对） |
@@ -239,6 +243,6 @@ SDK 协议无取消。客户端断开时服务端停止转发但 turn 继续到�
 - `npm test`：62/62 通过（`tests 62, pass 62, fail 0`）。
 - `npm run build`（默认 `VITE_AGENT_BACKEND=dsh`）：成功。
 - `npm run agent:setup`：提示 `server/.env 缺少：DEEPSEEK_API_KEY`，仍完成 profile 初始化（预期行为）。
-- `npm run agent:smoke`：输出 `[smoke] 无 DEEPSEEK_API_KEY，跳过`，退出码 0（预期行为，非失败）。
+- `npm run agent:smoke`（2026-09-05，真实 key）：事件流 `title → reasoning… → tool_call:skill → tool_result:skill → tool_call:bazi → tool_result:bazi → text… → done`，回复以 `乾造：庚午 辛巳 辛未 壬辰` 起断，`[smoke] 通过`。
 
-结论：五条成功标准中 2、3、5 通过，4 部分通过（代码与单测齐全，视觉/体验对比待真实模型环境），1 未验证（需生产密钥后用 `npm run agent:smoke` 补验）。无阻断性问题，可按 §13 上线步骤推进，上线前需完成第 1 项的真实 key 冒烟。
+结论：五条成功标准中 1、2、3、5 通过，4 部分通过（代码与单测齐全，视觉/体验对比待真人使用）。第 1 项已于 2026-09-05 用真实 `DEEPSEEK_API_KEY` 补验通过。无阻断性问题，可按 §13 上线步骤推进（注意 §13 第 0 步的引擎打包前置，以及 §8.1 关于上 JWT 前不得公网开放 `/api/agent/*` 的约束）。
