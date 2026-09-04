@@ -76,4 +76,17 @@ function isIdle(n, sessionId) {
   return !!n && n.method === 'session.status' && !!n.params && n.params.sessionId === sessionId && n.params.status === 'idle'
 }
 
-export { normalize, isIdle, TOOL_NAME_CN }
+// prompt() 返回的 messageId 被拼进会话时，dsh 会先发一条 agent/inbox/spliced 收据。
+// 收到它之前的一切通知都属于上一轮（尤其是残留的 session.status: idle），必须忽略，
+// 否则新一轮会在刚发出 prompt 时就被"上一轮的 idle"立刻结束。
+// 判定逻辑核对自 SDK 自己的 run 循环：
+//   node_modules/@deepseek-ai/dsh-sdk-client/lib/index.js 的 isInboxReceipt()（约 825 行）
+function isInboxReceipt(n, sessionId, messageId) {
+  if (!n || n.method !== 'session.event' || !n.params || n.params.sessionId !== sessionId) return false
+  const e = n.params.event
+  if (!e || e.type !== 'agent/inbox/spliced' || !e.data) return false
+  const inserted = e.data.inserted
+  return Array.isArray(inserted) && inserted.some(m => m && m.id === messageId)
+}
+
+export { normalize, isIdle, isInboxReceipt, TOOL_NAME_CN }

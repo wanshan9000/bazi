@@ -17,7 +17,7 @@
 // 停在原地直到超时。
 import fs from 'node:fs'
 import { HarnessClient } from '@deepseek-ai/dsh-sdk-client'
-import { normalize, isIdle } from './events.js'
+import { normalize, isIdle, isInboxReceipt } from './events.js'
 import { DSH_HOME, PROFILE_DIR, SKILLS_DIR, ENGINES_FILE, PERSONA_FILE } from './setup.mjs'
 
 export const ROUTES = {
@@ -28,16 +28,20 @@ export const ROUTES = {
 export const DEFAULT_ROUTE = process.env.AGENT_DEFAULT_ROUTE || 'deepseek-flash'
 const MAX_TOKENS = 8192
 const TURN_TIMEOUT_MS = 120000
+// 单条 JSON-RPC 请求（initialize / prompt）的上限：没有它，SDK 默认不超时，
+// 子进程卡在握手或 prompt 上会让这一轮永远挂着。
+const REQUEST_TIMEOUT_MS = 30000
 
-function childEnv() {
+// 子进程环境变量白名单：显式列举，绝不整份透传 process.env（里面可能有别的服务密钥）。
+export function buildChildEnv(env = process.env) {
   const persona = fs.existsSync(PERSONA_FILE) ? fs.readFileSync(PERSONA_FILE, 'utf8') : ''
   return {
-    PATH: process.env.PATH,
-    HOME: process.env.HOME,
+    PATH: env.PATH,
+    HOME: env.HOME,
     DSH_HOME,
     DSH_TELEMETRY_DISABLED: '1',
-    DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '',
-    MINIMAX_API_KEY: process.env.MINIMAX_API_KEY || '',
+    DEEPSEEK_API_KEY: env.DEEPSEEK_API_KEY || '',
+    MINIMAX_API_KEY: env.MINIMAX_API_KEY || '',
     LINGSHU_SKILLS_DIR: SKILLS_DIR,
     LINGSHU_ENGINES: ENGINES_FILE,
     LINGSHU_PERSONA: persona,
@@ -45,7 +49,10 @@ function childEnv() {
 }
 
 function defaultCreateClient() {
-  return new HarnessClient({ profile: 'lingshu', dshHome: DSH_HOME, processCwd: PROFILE_DIR, env: childEnv(), initializeTimeoutMs: 20000 })
+  return new HarnessClient({
+    profile: 'lingshu', dshHome: DSH_HOME, processCwd: PROFILE_DIR, env: buildChildEnv(),
+    initializeTimeoutMs: 20000, requestTimeoutMs: REQUEST_TIMEOUT_MS,
+  })
 }
 
 export class DshPool {
@@ -86,27 +93,63 @@ export class DshPool {
     entry.ready.then(c => c.close()).catch(() => { /* 初始化本就失败的子进程无需再关闭 */ })
   }
 
+  // 调用方已放弃这一轮（中止 / 超时），但子进程仍在为该会话生成：不要立刻释放
+  // busy，否则下一条消息会被塞进一个仍在跑的会话里，两轮输出互相串扰。保留订阅在
+  // 后台读到该会话 idle（或订阅被拒绝 / 池关闭）为止，再关闭订阅并释放 busy。
+  // 子进程彻底卡死时靠 turnTimeoutMs 的兜底定时器强制收尾，避免会话永久 busy。
+  drainToIdle(sessionId, sub, { received, messageId }) {
+    // 没拿到 messageId（prompt 本身就超时了）时无从校验收据，只能接受该会话的下一个 idle。
+    let seen = received || !messageId
+    const cap = setTimeout(() => { try { sub.close() } catch { /* 已关闭 */ } }, this.turnTimeoutMs)
+    if (cap.unref) cap.unref()
+    ;(async () => {
+      try {
+        while (true) {
+          const n = await sub.next()
+          if (!seen) { if (isInboxReceipt(n, sessionId, messageId)) seen = true; continue }
+          if (isIdle(n, sessionId)) break
+        }
+      } catch { /* 订阅关闭或传输断开：无需再等 */ }
+      clearTimeout(cap)
+      this.openSubs.delete(sub)
+      try { sub.close() } catch { /* 已关闭 */ }
+      this.busy.delete(sessionId)
+    })()
+  }
+
   async run({ routeKey, sessionId, text, onEvent, signal }) {
     if (this.busy.has(sessionId)) { const e = new Error('BUSY: 该会话正在回复中'); e.code = 'BUSY'; throw e }
     this.busy.add(sessionId)
     let sub = null
     // 单个定时器，覆盖整轮；在 finally 清理，避免每次通知都开一个新定时器导致泄漏。
     let timer = null
+    let messageId = null
+    let received = false
+    let drained = false // 已交给 drainToIdle 善后：finally 不再动 sub / busy
     const deadline = new Promise((_, reject) => {
       timer = setTimeout(() => { const e = new Error('TIMEOUT: 回复超时'); e.code = 'TIMEOUT'; reject(e) }, this.turnTimeoutMs)
     })
+    // 必须立刻挂一个 handler：deadline 早在进入下面的 Promise.race 之前就可能被
+    // reject（await this.client() / client.prompt() 期间定时器就会到点），那时它还
+    // 没有任何 handler，Node 会以 unhandledRejection 直接终止整个服务进程。
+    // race 里仍会再挂 handler，拒绝照常传播给调用方。
+    deadline.catch(() => { /* 见上：仅用于消除 unhandledRejection */ })
     try {
       // 中止信号在发出 prompt 之前就已置位：不占用子进程配额，直接返回空结果。
       if (signal && signal.aborted) return { finalText: '', usage: null, title: null }
-      const client = await this.client(routeKey)
+      // 启动握手与 prompt 也要受整轮 deadline 约束：否则子进程卡在这两步时
+      // 这一轮会永远挂着（deadline 的拒绝要到进入下面的 race 才会被消费）。
+      const client = await Promise.race([this.client(routeKey), deadline])
       sub = client.subscribeSessionTree(sessionId)
       this.openSubs.add(sub)
-      await client.prompt(sessionId, [{ type: 'text', text }])
+      messageId = await Promise.race([client.prompt(sessionId, [{ type: 'text', text }]), deadline])
+      // 客户端没有返回 messageId 时无从校验收据，只能退化为"立即开始收事件"。
+      received = !messageId
       let finalText = ''
       let usage = null
       let title = null
       while (true) {
-        if (signal && signal.aborted) break
+        if (signal && signal.aborted) { drained = true; this.drainToIdle(sessionId, sub, { received, messageId }); break }
         let n
         try {
           n = await Promise.race([sub.next(), deadline])
@@ -117,6 +160,9 @@ export class DshPool {
           if (this.closed) { const e = new Error('服务正在关闭'); e.code = 'CLOSED'; throw e }
           throw err
         }
+        // 收据门：本轮 prompt 的 messageId 被 agent/inbox/spliced 确认之前，一切
+        // 通知（含上一轮残留的 session.status: idle）都不属于这一轮，全部忽略。
+        if (!received) { if (isInboxReceipt(n, sessionId, messageId)) received = true; continue }
         if (isIdle(n, sessionId)) break
         const e = normalize(n)
         if (!e) continue
@@ -126,13 +172,17 @@ export class DshPool {
       }
       return { finalText, usage, title }
     } catch (err) {
-      // 子进程死亡或超时：丢弃该路由客户端并关闭它，下次请求会重新启动一个
-      if (err && (err.name === 'TransportClosedError' || err.code === 'TIMEOUT')) this.dropClient(routeKey)
+      // 只有传输真的断了（子进程死亡）才丢弃常驻客户端；超时不代表子进程坏了，
+      // 丢掉它反而会打断其它会话，改由 drainToIdle 在后台等这一轮自然结束。
+      if (!this.closed && err && (err.name === 'TransportClosedError' || err.code === 'CLOSED')) this.dropClient(routeKey)
+      else if (err && err.code === 'TIMEOUT' && sub) { drained = true; this.drainToIdle(sessionId, sub, { received, messageId }) }
       throw err
     } finally {
       clearTimeout(timer)
-      if (sub) { this.openSubs.delete(sub); sub.close() }
-      this.busy.delete(sessionId)
+      if (!drained) {
+        if (sub) { this.openSubs.delete(sub); sub.close() }
+        this.busy.delete(sessionId)
+      }
     }
   }
 
