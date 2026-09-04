@@ -6,6 +6,8 @@ import { startScheduler } from './scheduler.js'
 import subscribeRouter from './routes/subscribe.js'
 import shareRouter from './routes/share.js'
 import skillsRouter from './routes/skills.js'
+import agentRouter from './routes/agent.js'
+import { sharedPool } from './dsh/pool.js'
 
 const app = express()
 app.use(express.json())
@@ -24,6 +26,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api', subscribeRouter)
 app.use('/api', shareRouter)
 app.use('/api', skillsRouter)
+app.use('/api', agentRouter())
 
 app.use((err, _req, res, _next) => {
   console.error('ERR', err)
@@ -41,3 +44,6 @@ app.listen(config.port, () => {
 
   startScheduler()
 })
+
+// 退出时回收 dsh 子进程
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, async () => { await sharedPool().close(); process.exit(0) })
