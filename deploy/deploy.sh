@@ -60,7 +60,7 @@ SUBJECT="$(git log -1 --format=%s "$DEPLOY_REF")"
 
 log "预检 · $DEPLOY_REF ($COMMIT) $SUBJECT → $DEPLOY_USER@$DEPLOY_HOST"
 remote true || die "连不上服务器"
-remote "test -s $ENV_FILE" || die "服务器缺少 $ENV_FILE，按 deploy/env.example 先创建"
+remote "test -s $ENV_FILE" || die "服务器缺少 ${ENV_FILE}，按 deploy/env.example 先创建"
 remote "grep -q '^DEEPSEEK_API_KEY=.\+' $ENV_FILE" || die "$ENV_FILE 里 DEEPSEEK_API_KEY 为空"
 remote "command -v node >/dev/null && command -v rsync >/dev/null && command -v caddy >/dev/null" || die "服务器缺 node/rsync/caddy"
 remote "getent group $SERVICE_USER >/dev/null || groupadd --system $SERVICE_USER
@@ -75,7 +75,7 @@ if [[ $SKIP_INSTALL -eq 1 ]]; then
   log "复用 $APP_DIR/node_modules（--skip-install）"
   remote "test -d $APP_DIR/node_modules && cp -a $APP_DIR/node_modules $STAGE_DIR/node_modules" || die "线上没有 node_modules，去掉 --skip-install"
 else
-  log "npm ci（$NPM_REGISTRY，日志 /root/bazi-npmci.log）"
+  log "npm ci（${NPM_REGISTRY}，日志 /root/bazi-npmci.log）"
   remote "cd $STAGE_DIR && npm ci --no-audit --no-fund --registry=$NPM_REGISTRY > /root/bazi-npmci.log 2>&1" \
     || { remote "tail -25 /root/bazi-npmci.log" || true; die "npm ci 失败"; }
 fi
@@ -90,7 +90,7 @@ remote "set -e; cd $STAGE_DIR
         test -L server/dsh/home/profiles/lingshu/node_modules/dsh-plugin-lingshu-tools" \
   || die "构建失败（线上未改动）"
 
-log "切换产物 → $APP_DIR，前端 → $WEB_DIR"
+log "切换产物 → ${APP_DIR}，前端 → $WEB_DIR"
 remote "set -e
         systemctl stop $SERVICE 2>/dev/null || true
         mkdir -p $APP_DIR $WEB_DIR
