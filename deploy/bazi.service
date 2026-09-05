@@ -1,0 +1,46 @@
+# 元气/灵枢（bazi）后端：Express API + dsh agent 子进程。由 deploy/deploy.sh 安装到
+# /etc/systemd/system/bazi.service。前端是纯静态文件，由 Caddy 直接发（见 deploy/bazi.caddy）。
+[Unit]
+Description=Lingshu bazi API + dsh agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bazi
+Group=bazi
+WorkingDirectory=/opt/bazi
+EnvironmentFile=/etc/bazi/env
+Environment=NODE_ENV=production
+# 端口/监听地址钉在 unit 里，env 文件里不要再写。8787 是同机微信网关的惯用端口，故避开。
+Environment=PORT=8793
+Environment=HOST=127.0.0.1
+# dsh 子进程按白名单继承 HOME（pool.js buildChildEnv）；ProtectHome=true 下 /home 不可写，指到状态目录。
+Environment=HOME=/var/lib/bazi
+ExecStart=/usr/bin/node server/index.js
+Restart=on-failure
+RestartSec=5s
+# 停机时 pool.close() 要逐个关闭 dsh 子进程，给个上界免得卡住整机重启。
+TimeoutStopSec=30s
+UMask=0027
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+# 进程唯一会写的地方：订阅/会话 JSON、dsh 会话日志与 profile、管理台新增的技能。
+ReadWritePaths=/var/lib/bazi
+ReadWritePaths=/opt/bazi/server/data
+ReadWritePaths=/opt/bazi/server/dsh/home
+ReadWritePaths=/opt/bazi/server/dsh/skills/_admin
+# 起点值：每个模型路由常驻一个 dsh 子进程，观察真实占用后再调。
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

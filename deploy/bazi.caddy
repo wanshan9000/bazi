@@ -1,0 +1,53 @@
+# bazi.keyfocus.cn —— 元气/灵枢。由 deploy/deploy.sh 放到 /etc/caddy/conf.d/bazi.caddy，
+# 主 Caddyfile 用 `import conf.d/*.caddy` 引入（那一行由 deploy.sh 幂等补上）。
+#
+# 静态前端 + /api 反代分开处理：/api/agent/chat 是 SSE 流式输出，反代必须关缓冲、放长超时；
+# 静态资源则要长缓存。两者混在一个块里会互相拖累。
+bazi.keyfocus.cn {
+	# ⚠ 压缩只对显式列出的类型开，绝不能让 text/event-stream 进来：线上 Caddy 2.6.2 的
+	# encode 不会随 Flush 刷压缩器缓冲，SSE 一旦被压缩，帧会攒到流结束才吐给浏览器。
+	encode zstd gzip {
+		match {
+			header Content-Type text/html*
+			header Content-Type text/css*
+			header Content-Type text/plain*
+			header Content-Type text/javascript*
+			header Content-Type application/json*
+			header Content-Type application/javascript*
+			header Content-Type image/svg+xml*
+		}
+	}
+
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	@api path /api/*
+	handle @api {
+		# 接口一律不缓存：SSE 流与验证码/鉴权响应都不能被中间层留存。
+		header Cache-Control "no-store"
+		reverse_proxy 127.0.0.1:8793 {
+			# SSE：缓冲会把增量渲染压成一次性返回。
+			flush_interval -1
+			# 模型长时间思考时可能几十秒无输出；服务端每 15s 发心跳注释帧，但仍给足余量。
+			transport http {
+				response_header_timeout 300s
+				read_timeout 300s
+			}
+		}
+	}
+
+	handle {
+		root * /var/www/bazi
+		# vite 产物带内容 hash，可长缓存；index.html 不缓存以便发版即生效。
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@html path / /index.html
+		header @html Cache-Control "no-cache"
+		# hash 路由 SPA（/#/admin 等）：任何路径都回 index.html。
+		try_files {path} /index.html
+		file_server
+	}
+}

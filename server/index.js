@@ -33,10 +33,10 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ ok: false, msg: err.message || '服务器错误' })
 })
 
-app.listen(config.port, () => {
+app.listen(config.port, config.host, () => {
   console.log('\n==================================================')
   console.log('  元气黄历订阅服务已启动')
-  console.log(`  http://localhost:${config.port}`)
+  console.log(`  http://${config.host}:${config.port}`)
   console.log('--------------------------------------------------')
   console.log(`  短信通道: ${smsConfigured() ? config.sms.provider.toUpperCase() : '本地降级(mock)'}`)
   console.log(`  微信通道: ${wechatConfigured() ? '已配置' : '本地降级(mock)'}`)

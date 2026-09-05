@@ -11,6 +11,8 @@ const env = process.env
 
 export const config = {
   port: Number(env.PORT || 8787),
+  // 监听地址。生产由 Caddy 反代，钉成 127.0.0.1 不让 API 直接暴露公网；本地默认全网卡便于手机联调。
+  host: env.HOST || '0.0.0.0',
 
   // 是否本地降级模式（未配置短信/微信凭证时自动为 true）
   devMode: env.NODE_ENV !== 'production',
