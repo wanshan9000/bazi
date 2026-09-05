@@ -96,6 +96,8 @@ npm run build
 
 # 首次：安装插件到 profile、生成技能目录、检查密钥
 npm run agent:setup
+# 技能正文：BUILTIN_SKILLS.sys 为精炼人设；长文断法（表格/口诀/模板）写在
+# server/dsh/skill-docs/<name>.md，改完重跑 `node server/dsh/gen-skills.mjs` 并提交生成的 SKILL.md。
 # 冒烟（需 server/.env 里的 DEEPSEEK_API_KEY）
 npm run agent:smoke
 ```

@@ -119,6 +119,7 @@ Tool 描述文字沿用 `agentTools.js TOOL_SCHEMAS` 中已打磨的中文描述
 
 - `persona.md` = `AGENT_SOUL` 原文 + 一段工具使用规约（"排盘/起卦/择日必先调工具；用户未给出生信息先问；已在会话中排过盘不要重复调用"）。
 - 每个 `BUILTIN_SKILLS` 条目 → `server/dsh/skills/<key>/SKILL.md`：frontmatter `name`（kebab-case）、`description`（= desc + cap 摘要）、正文 = `sys`。模型通过 `tool-skill` 按需加载，取代现在"关键词打分选主技能"。
+- 长文断法正文（表格、口诀、输出模板）手写在 `server/dsh/skill-docs/<name>.md`（入库），gen-skills 生成时拼到 `sys` 之后；`sys` 只放精炼人设。2026-09-05 起 `mangpai`、`wuyunliuqi`、`yixue-taishan` 三个技能带长文正文，来源是 Hermes 版 SKILL.md 整理去除环境残留后的版本。
 - 管理后台自定义技能：`routes/skills.js` 保存时同步写 `skills/_admin/<key>/SKILL.md`（删除即删文件），`skill-filesystem` watch 热加载，无需重启。
 - `agentEvolve.js`（关键词进化）、`agentRouter.js`、`agentSkills.js`、`agentPlanner.js`、`agentReflect*.js`、`classicStudy.js` 的注入逻辑本期不迁；典籍引用（`classicStudy`）可后续做成 `classic_lookup` 工具。
 

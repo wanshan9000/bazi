@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { skillToMarkdown, writeSkills, skillDirName } from '../gen-skills.mjs'
+import { skillToMarkdown, writeSkills, skillDirName, readSkillDoc, SKILL_DOCS_DIR } from '../gen-skills.mjs'
 import { syncAdminSkill, removeAdminSkill } from '../adminSkills.js'
 
 test('skill key 转 kebab-case 目录名', () => {
@@ -15,6 +15,33 @@ test('SKILL.md 含 frontmatter 与正文', () => {
   const md = skillToMarkdown({ key: 'bazi', name: '八字解读', desc: '子平八字', cap: '能力', sys: '你是子平派宗师' })
   assert.match(md, /^---\nname: bazi\ndescription: /)
   assert.match(md, /你是子平派宗师/)
+})
+
+test('skill-docs 长文正文拼接到人设之后，缺文档的技能不受影响', () => {
+  const docsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-docs-'))
+  fs.writeFileSync(path.join(docsDir, 'mangpai.md'), '## 第一原理\n\n不看旺衰。\n')
+  assert.equal(readSkillDoc('mangpai', docsDir), '## 第一原理\n\n不看旺衰。')
+  assert.equal(readSkillDoc('bazi', docsDir), '')
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-doc-'))
+  writeSkills(dir, [
+    { key: 'mangpai', name: '盲派', desc: 'd', sys: '你是盲派宗师' },
+    { key: 'bazi', name: '八字', desc: 'd', sys: '你是子平宗师' },
+  ], docsDir)
+  const mp = fs.readFileSync(path.join(dir, 'mangpai', 'SKILL.md'), 'utf8')
+  assert.match(mp, /## 断法与人设\n\n你是盲派宗师\n\n---\n\n## 第一原理/)
+  const bz = fs.readFileSync(path.join(dir, 'bazi', 'SKILL.md'), 'utf8')
+  assert.ok(!bz.includes('---\n\n##'), '无文档技能不应出现分隔线')
+})
+
+test('入库的 skill-docs 正文不含 Hermes 环境残留与具体命例', () => {
+  for (const name of ['mangpai', 'wuyunliuqi', 'yixue-taishan']) {
+    const doc = readSkillDoc(name, SKILL_DOCS_DIR)
+    assert.ok(doc.length > 1000, `${name} 文档应存在`)
+    for (const bad of ['.hermes', 'python3', 'subprocess', 'buildBazi', 'references/', '本八字', 'skill_manage', 'Djvu']) {
+      assert.ok(!doc.includes(bad), `${name} 文档不应包含 ${bad}`)
+    }
+  }
 })
 
 test('writeSkills 生成内置技能目录', async () => {
