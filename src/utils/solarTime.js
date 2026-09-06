@@ -43,16 +43,31 @@ export function calcTrueSolar(year, month, day, hour, minute, longitude) {
   const clockMinutes = hour * 60 + minute
   const lonAdjust = (longitude - 120) * 4 // 中央经线 120°E，东 1° 快 4 分钟
   const eot = equationOfTime(year, month, day)
-  const total = ((clockMinutes + lonAdjust + eot) % 1440 + 1440) % 1440
+  const raw = clockMinutes + lonAdjust + eot
+  const total = ((raw % 1440) + 1440) % 1440
+  // ⚠ 归一化会把跨午夜的情况悄悄绕回同一天。中国最西端（喀什 ~75.99°E）与中央
+  // 经线差近 45°，经度校正接近 -3 小时：钟表 01:00 出生的人，真太阳时其实是
+  // **前一天** 22:00 出头。只返回 hour 而不返回日期偏移，日柱和时柱就会整整错一天。
+  // dayOffset：-1 表示真太阳时落在前一天，+1 表示落在次日，调用方须据此调整日期。
+  const dayOffset = Math.floor(raw / 1440)
   const h = Math.floor(total / 60)
   const m = Math.round(total % 60)
   return {
     totalMinutes: total,
     hour: h,
     minute: m === 60 ? 0 : m,
+    dayOffset,
     lonAdjust,
     eot,
   }
+}
+
+/** 把日期按 dayOffset 平移，返回 { year, month, day }（月末/年末自动进位） */
+export function shiftDate(year, month, day, dayOffset) {
+  if (!dayOffset) return { year, month, day }
+  const d = new Date(year, month - 1, day)
+  d.setDate(d.getDate() + dayOffset)
+  return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() }
 }
 
 // 时辰 hour 编码（与 ShichenPicker 一致）：晚子时 23 / 早子时 0 / 丑 2 / 寅 4 / … / 亥 22
@@ -95,9 +110,14 @@ export function trueSolarToShichen(year, month, day, clockHour, clockMinute, lon
   if (longitude == null) return null
   const solar = calcTrueSolar(year, month, day, clockHour, clockMinute, longitude)
   const hourCode = trueSolarToShichenHour(solar.hour, solar.minute)
+  // dayOffset 一并透出：真太阳时跨了午夜时，排盘用的日期必须跟着平移，
+  // 否则日柱按原日期排、时柱按新时辰排，两者对不上。
+  const shifted = shiftDate(year, month, day, solar.dayOffset)
   return {
     hourCode,
     label: shichenName(hourCode),
+    dayOffset: solar.dayOffset,
+    date: shifted,
     solar,
   }
 }

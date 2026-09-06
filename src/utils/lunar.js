@@ -52,13 +52,32 @@ export function getLunarDayCount(year, month, leap) {
  * @returns {{year:number, month:number, day:number}} 阳历
  */
 export function lunarToSolar(year, month, day, leap) {
+  const solar = tryLunarToSolar(year, month, day, leap)
+  if (solar) return solar
+  // ⚠ 这里原本「转换失败就原样返回」。看着像温和兜底，实际后果很重：
+  // 不存在的闰月、13 月、超出当月天数的日期会被原样当成**公历**继续排盘，
+  // 用户拿到一张四柱俱全、看不出任何问题的错盘。宁可显式失败。
+  const err = new Error(`无效的农历日期：${year} 年 ${leap ? '闰' : ''}${month} 月 ${day} 日`)
+  err.code = 'INVALID_LUNAR_DATE'
+  throw err
+}
+
+/** 同 lunarToSolar，但失败时返回 null，供需要自行兜底的调用方使用。 */
+export function tryLunarToSolar(year, month, day, leap) {
   try {
     const lunar = Lunar.fromYmd(year, leap ? -month : month, day)
     const solar = lunar.getSolar()
-    return { year: solar.getYear(), month: solar.getMonth(), day: solar.getDay() }
-  } catch (e) {
-    // 极少数无效农历日期兜底：返回原值
-    return { year, month, day }
+    if (!solar) return null
+    const out = { year: solar.getYear(), month: solar.getMonth(), day: solar.getDay() }
+    // lunar-typescript 对越界输入不一定抛错，可能返回一个被"修正"过的日期。
+    // 回转一次校验：换算结果对应的农历必须与输入一致，否则视为无效。
+    const back = solar.getLunar()
+    const sameMonth = Math.abs(back.getMonth()) === Number(month)
+    const sameLeap = (back.getMonth() < 0) === !!leap
+    if (back.getYear() !== Number(year) || !sameMonth || !sameLeap || back.getDay() !== Number(day)) return null
+    return out
+  } catch {
+    return null
   }
 }
 

@@ -78,10 +78,16 @@ const WUXING_MAP = {
 }
 
 // 复姓字典（常见复姓 + 笔画）
-const COMPOUND_SURNAME = {
-  欧阳: 12, 司马: 10, 上官: 11, 诸葛: 30, 东方: 8, 独孤: 18, 慕容: 18, 尉迟: 12, 皇甫: 12, 令狐: 16,
-  公孙: 10, 宇文: 12, 长孙: 14, 司徒: 14, 司空: 12, 申屠: 11, 夏侯: 14, 贺兰: 19, 南宫: 12, 完颜: 18, 拓跋: 18
-}
+// 已知复姓集合。
+// ⚠ 这里原本是「复姓 → 笔画数」的映射表，而且填的是**简体**笔画（欧阳记 12），
+// 但同一个文件里 strokesOf 走的是**康熙**笔画（欧 15 + 阳 17 = 32）。
+// 两套笔画混在一份五格里，会算出总格小于人格、外格为负这种不可能的结果
+// （欧阳修：人格 27 > 总格 22，外格 -4）。五格剖象法一律以康熙笔画为准，
+// 所以这里只保留「哪些是复姓」这一个信息，笔画统一由 strokesOf 逐字累加。
+const COMPOUND_SURNAMES = new Set([
+  '欧阳', '司马', '上官', '诸葛', '东方', '独孤', '慕容', '尉迟', '皇甫', '令狐',
+  '公孙', '宇文', '长孙', '司徒', '司空', '申屠', '夏侯', '贺兰', '南宫', '完颜', '拓跋',
+])
 
 // 笔画查询：优先康熙字典字库（全量），本地表兜底
 function strokesOf(ch) {
@@ -101,7 +107,7 @@ function splitName(surname, fullName) {
   // 优先自动识别
   if (surname && surname.length) return { surname, given: fullName.replace(surname, '') }
   const two = fullName.slice(0, 2)
-  if (COMPOUND_SURNAME[two]) return { surname: two, given: fullName.slice(2) }
+  if (COMPOUND_SURNAMES.has(two)) return { surname: two, given: fullName.slice(2) }
   return { surname: fullName.charAt(0), given: fullName.slice(1) }
 }
 
@@ -220,7 +226,8 @@ export function analyzeName({ fullName, surname, chart }) {
     givenName
   }
 
-  const surStrokes = surName.length === 1 ? strokesOf(surName) : (COMPOUND_SURNAME[surName] || surName.split('').reduce((a, c) => a + strokesOf(c), 0))
+  // 复姓也逐字用康熙笔画累加，与名字侧口径一致
+  const surStrokes = surName.split('').reduce((a, c) => a + strokesOf(c), 0)
   const givenChars = (givenName || '').split('').filter(Boolean)
   const givenStrokes = givenChars.map(g => strokesOf(g))
 
@@ -230,13 +237,19 @@ export function analyzeName({ fullName, surname, chart }) {
     ? strokesOf(givenChars[0]) + 1
     : givenStrokes.reduce((a, b) => a + b, 0)
 
-  const renGeChars = [surName.slice(-1), ...givenChars.slice(0, givenChars.length === 1 ? 0 : 1)]
+  // 人格 = 姓的最后一字 + 名的第一字。
+  // ⚠ 原来对单字名写的是 `slice(0, 0)` —— 名字那一半被整个丢掉，人格退化成
+  // 姓氏的笔画数。单字名在中文里极其常见，这条错误影响面很大。
+  // 例：王(4)明(8) 人格应为 12，原实现算成 4。
+  const renGeChars = [surName.slice(-1), ...givenChars.slice(0, 1)]
   const renGeValue = renGeChars.reduce((a, c) => a + strokesOf(c), 0)
 
   const zongGeValue = surStrokes + givenStrokes.reduce((a, b) => a + b, 0)
 
-  // 外格 = 总格 - 人格
-  const waiGeValue = zongGeValue - renGeValue
+  // 外格 = 总格 - 人格 + 1。
+  // 等价于传统定义「(姓总笔画 - 姓末字) + (名总笔画 - 名首字) + 1」，单姓/复姓、
+  // 单名/双名都成立。原来漏了 +1，单姓单名会算出 0（如王明：12 - 12 = 0，应为 1）。
+  const waiGeValue = zongGeValue - renGeValue + 1
 
   // 化为 1-81 范围（保留两位数则取模 80 后 + 1）
   const normalize = (n) => {

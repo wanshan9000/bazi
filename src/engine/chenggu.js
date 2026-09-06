@@ -1,4 +1,5 @@
 // 袁天罡称骨算命法
+import { normalizeGender } from './gender.js'
 // 核心算法：根据出生年、月、日、时的干支查询骨重数（两），累加后评定命格。
 // 说明：传统称骨表以「两」为单位，1 两 = 10 钱。此处采用广泛流传的版本，权作参考。
 
@@ -118,7 +119,11 @@ function rate(total) {
 
 // 称骨算命核心：输入公历生日 + 性别，返回完整结果
 // 支持传入 Date 或 { year, month, day, hour } 对象（内部统一转 Date，避免无效时间崩溃）
-export function weighBones(dateObj, gender = 'male') {
+export function weighBones(dateObj, gender = '男') {
+  // 全站性别口径是 '男'/'女'。这里原先只判 gender === 'female'，而称骨页传的是
+  // '女' —— 于是女性拿到的是男命感情断语；summary.gender 也原样回传，再被页面
+  // 按 === 'male' 判断，把男显示成女。归一之后两处都对。
+  const g = normalizeGender(gender)
   let lunarDate
   if (dateObj instanceof Date && !isNaN(dateObj)) {
     lunarDate = dateObj
@@ -192,10 +197,10 @@ export function weighBones(dateObj, gender = 'male') {
       ? '正财稳、偏财有，遇贵人引路可得意外之喜。忌贪，宜稳健理财。'
       : '财来财去，留心散财风险，宜记账、设止损、慎入陌生领域。',
       plain: total >= 2.5 ? '你有稳定收入，也常有额外进账，遇到合适的人指点还有惊喜；关键别贪，钱要管住、稳着花。' : '钱来得快去得也快，容易大手大脚；养成记账的习惯、设好花钱上限，别碰不懂的行当，才能攒得住。' },
-    { key: '感情', label: '感情', text: gender === 'female'
+    { key: '感情', label: '感情', text: g === '女'
       ? total >= 2.5 ? '贤淑有福，多得良人相伴，宜惜缘修心。' : '情路多波，须自立自强，良缘多现于中年后。'
       : total >= 2.5 ? '稳重可靠，宜择贤内助持家，婚姻可为事业助力。' : '婚姻晚来亦佳，宜自修品性，宁缺毋滥。',
-      plain: gender === 'female'
+      plain: g === '女'
         ? total >= 2.5 ? '你是有福之人，身边不缺合适的人，遇到了就好好珍惜，别太挑剔。' : '感情路上有点波折，先把日子过好、把自己立起来，对的人通常在中晚年才出现。'
         : total >= 2.5 ? '你踏实靠得住，找个贤内助能把家撑起来，另一半也会是你的好帮手。' : '晚点结婚反而更好，先把人品修好，宁缺毋滥，别将就。' },
     { key: '健康', label: '健康', text: '筋骨、肠胃、颈椎为三处当守之处。30 岁后每年体检，早睡胜药补。', plain: '重点留意腰腿、肠胃和颈椎这三样；过了 30 岁每年做次体检，早睡早起比吃啥补品都管用。' }
@@ -208,7 +213,7 @@ export function weighBones(dateObj, gender = 'male') {
       lunarMonth: displayMonth,
       lunarDay: displayDay,
       shiChen,
-      gender,
+      gender: g,
       total,
       grade: rating.grade,
       tone: rating.tone

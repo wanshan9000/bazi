@@ -85,7 +85,7 @@ export function analyzeFengshui({ layout = {}, birthInfo }) {
       chart = buildChart(
         birthInfo.year, birthInfo.month, birthInfo.day,
         birthInfo.hour !== undefined ? birthInfo.hour : 12,
-        birthInfo.gender || 'male'
+        birthInfo.gender || '男'
       )
     } catch (e) {}
   }

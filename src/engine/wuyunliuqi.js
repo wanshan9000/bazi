@@ -5,17 +5,59 @@
  *       年支定司天在泉（三阴三阳），主气六步固定，属相定六大体质。
  * 供 agentTools（LLM 工具上下文）与 baziReport（子平派健康养生章节）共用。
  */
+import { Solar } from 'lunar-typescript'
+
 const WY_YUN = { 甲: '土', 乙: '金', 丙: '水', 丁: '木', 戊: '火', 己: '土', 庚: '金', 辛: '水', 壬: '木', 癸: '火' }
 const WY_SITIAN = { 子: '少阴君火', 午: '少阴君火', 丑: '太阴湿土', 未: '太阴湿土', 寅: '少阳相火', 申: '少阳相火', 卯: '阳明燥金', 酉: '阳明燥金', 辰: '太阳寒水', 戌: '太阳寒水', 巳: '厥阴风木', 亥: '厥阴风木' }
 const WY_ZAIQUAN = { 子: '阳明燥金', 午: '阳明燥金', 丑: '太阳寒水', 未: '太阳寒水', 寅: '厥阴风木', 申: '厥阴风木', 卯: '少阴君火', 酉: '少阴君火', 辰: '太阴湿土', 戌: '太阴湿土', 巳: '少阳相火', 亥: '少阳相火' }
+/**
+ * 主气六步。
+ *
+ * ⚠ 原实现按**公历月份**分箱，而且分得既不均匀、区间标注也与名称对不上
+ * （厥阴风木占 1-3 月、少阴君火只占 4 月、少阳相火占了 5-8 月四个月）。
+ * 六气各约 60.9 天、以**节气**为界：大寒 → 春分 → 小满 → 大暑 → 秋分 → 小雪 → 次年大寒。
+ * 现在按当年真实节气日期判定，跨年（小雪至次年大寒属终之气）也一并处理。
+ */
 const WY_ZHUQI = [
-  { name: '厥阴风木', m: [1, 2, 3], note: '初之气（大寒-清明）' },
-  { name: '少阴君火', m: [4], note: '二之气（谷雨-小满前）' },
-  { name: '少阳相火', m: [5, 6, 7, 8], note: '三之气（小满-处暑）' },
-  { name: '太阴湿土', m: [9, 10], note: '四之气（白露-霜降后）' },
-  { name: '阳明燥金', m: [11], note: '五之气（霜降-大雪前）' },
-  { name: '太阳寒水', m: [12], note: '终之气（大雪-大寒）' },
+  { name: '厥阴风木', start: '大寒', end: '春分', note: '初之气（大寒-春分）' },
+  { name: '少阴君火', start: '春分', end: '小满', note: '二之气（春分-小满）' },
+  { name: '少阳相火', start: '小满', end: '大暑', note: '三之气（小满-大暑）' },
+  { name: '太阴湿土', start: '大暑', end: '秋分', note: '四之气（大暑-秋分）' },
+  { name: '阳明燥金', start: '秋分', end: '小雪', note: '五之气（秋分-小雪）' },
+  { name: '太阳寒水', start: '小雪', end: '大寒', note: '终之气（小雪-次年大寒）' },
 ]
+
+/** 取某公历年的六气分界日（毫秒时间戳），节气不可用时回落到多年平均近似日期 */
+function qiBoundaries(year) {
+  const NAMES = ['大寒', '春分', '小满', '大暑', '秋分', '小雪']
+  const FALLBACK = [[1, 20], [3, 21], [5, 21], [7, 23], [9, 23], [11, 22]]
+  try {
+    const table = Solar.fromYmd(year, 6, 1).getLunar().getJieQiTable()
+    const out = NAMES.map((n, i) => {
+      const s = table[n]
+      if (!s) return new Date(year, FALLBACK[i][0] - 1, FALLBACK[i][1]).getTime()
+      return new Date(s.getYear(), s.getMonth() - 1, s.getDay()).getTime()
+    })
+    return out
+  } catch {
+    return FALLBACK.map(([m, d]) => new Date(year, m - 1, d).getTime())
+  }
+}
+
+/**
+ * 判断某个公历日期落在哪一步主气。
+ * @returns {{name:string,start:string,end:string,note:string}}
+ */
+export function zhuqiOf(year, month, day) {
+  const t = new Date(year, (month || 1) - 1, day || 1).getTime()
+  const b = qiBoundaries(year)
+  // 大寒之前属于「上一年小雪起算」的终之气
+  if (t < b[0]) return WY_ZHUQI[5]
+  for (let i = 0; i < 5; i++) {
+    if (t >= b[i] && t < b[i + 1]) return WY_ZHUQI[i]
+  }
+  return WY_ZHUQI[5] // 小雪及以后
+}
 const WY_TIZHI = {
   鼠: { tz: '热性', wx: '火', risk: '心火旺、焦虑、血压高' },
   牛: { tz: '湿性', wx: '土', risk: '脾胃湿气、痰湿、腹胀' },
@@ -57,7 +99,7 @@ export function buildWuyunliuqi(chart) {
   const sitian = WY_SITIAN[yz] || '?'
   const zaiquan = WY_ZAIQUAN[yz] || '?'
   const keyun = WY_YUN[yg] || '?'
-  const zhuqi = WY_ZHUQI.find(q => q.m.includes(chart.month)) || WY_ZHUQI[0]
+  const zhuqi = zhuqiOf(chart.year, chart.month, chart.day)
   const tizhi = WY_TIZHI[sx] || null
   const result = { ok: true, yg, yz, sx, zhongyun, guojibu, sitian, zaiquan, keyun, zhuqi, tizhi }
   if (tizhi) result.yangsheng = WY_YANGSHENG[tizhi.wx] || ''

@@ -8,6 +8,9 @@ import {
   ZHI_SANHE, ZHI_LIUHE, ZHI_SANHE_WX, ZHI_SANHUI_WX, ZHI_LIUHE_WX
 } from '../data/ganzhi.js'
 import { buildBaziFromSolar } from 'cantian-tymext'
+import { normalizeGender } from './gender.js'
+// 转出：命盘相关模块历史上都从 bazi.js 取工具函数，保持这个入口可用。
+export { normalizeGender }
 
 // 近似节气分界（公历日期），用于定月柱
 // 小寒(1/6)→丑月，立春(2/4)→寅月……大雪(12/7)→子月
@@ -505,12 +508,16 @@ export function favorableElements(dayWx, strength) {
 // 参天不可用时回退为五鼠遁 + 当天日干起时。
 export function buildChart(year, month, day, hour, gender) {
   const hourVal = hour ?? 12
+  // 全站统一用 '男'/'女' 作为性别口径。页面里的下拉框历史上有写 male/female 的
+  // （起名页、风水页），而这里只判 === '女'，于是女命被当成男命排盘、且 chart.gender
+  // 原样存成 'female' 让下游「坤造/乾造」也跟着错。在引擎入口归一，调用方怎么传都不会错。
+  const g = normalizeGender(gender)
   const pad2 = n => String(n).padStart(2, '0')
   let ct = null
   try {
     ct = buildBaziFromSolar({
       solarTime: `${year}-${pad2(month)}-${pad2(day)} ${pad2(hourVal)}:00`,
-      gender: gender === '女' ? 0 : 1, // 参天约定：0 女 / 1 男
+      gender: g === '女' ? 0 : 1, // 参天约定：0 女 / 1 男
       sect: 2, // 晚子时（23:00-23:59）日柱仍算当天
     })
   } catch (e) {
@@ -554,7 +561,7 @@ export function buildChart(year, month, day, hour, gender) {
     .map(([k]) => k)
 
   const result = {
-    year, month, day, hour: hourVal, gender,
+    year, month, day, hour: hourVal, gender: g,
     pillars,
     dayMaster: dp.gan,
     dayMasterWx: GAN_WUXING[TIAN_GAN.indexOf(dp.gan)],
@@ -617,14 +624,33 @@ function realAgeFrom(qyY, qyM, qyD, bornY, bornM, bornD) {
   return { years, months, days }
 }
 
-// 当前流年干支
-export function currentYearGanzhi() {
-  const now = new Date()
-  const y = now.getFullYear()
-  const idx = ((y - 1900 + 36) % 60 + 60) % 60
-  return {
-    year: y,
-    gan: TIAN_GAN[ganIndexFromSexagenary(idx)],
-    zhi: DI_ZHI[zhiIndexFromSexagenary(idx)]
-  }
+/**
+ * 当前流年干支。
+ *
+ * ⚠ 原实现直接拿公历年号推干支 —— 但命理的年以**立春**为界，不是元旦。
+ * 每年 1 月 1 日到 2 月 4 日前后这三十几天里，流年应当仍算上一年，
+ * 原实现会整整错一位（比如 2026-01-15 报「丙午」，实际仍是「乙巳」）。
+ * 现在优先用参天历法按精确交节时刻定年柱，不可用时退回 yearPillar 的
+ * 立春近似（2/4），两条路都以立春为界。
+ *
+ * @param {Date} [at] 参考时刻，默认当下。显式传入便于测试与「指定日期」场景。
+ */
+export function currentYearGanzhi(at = new Date()) {
+  const pad2 = n => String(n).padStart(2, '0')
+  try {
+    const ct = buildBaziFromSolar({
+      solarTime: `${at.getFullYear()}-${pad2(at.getMonth() + 1)}-${pad2(at.getDate())} ${pad2(at.getHours())}:00`,
+      gender: 1,
+      sect: 2,
+    })
+    if (ct && ct.年柱 && ct.年柱.天干 && ct.年柱.地支) {
+      return {
+        year: at.getFullYear(),
+        gan: ct.年柱.天干.天干,
+        zhi: ct.年柱.地支.地支,
+      }
+    }
+  } catch { /* 参天不可用时走下面的近似 */ }
+  const yp = yearPillar(at)
+  return { year: at.getFullYear(), gan: yp.gan, zhi: yp.zhi }
 }
