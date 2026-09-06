@@ -52,10 +52,8 @@ export default function MembershipModal({
       onRequireLogin && onRequireLogin('subscribe')
       return
     }
-    if (isCurrent) {
-      onClose && onClose()
-      return
-    }
+    // 同档位 = 续费，不是「什么都不做」。此前这里直接关窗，导致 planExpiresAt
+    // 永远无法延长，个人中心写着「到期前可手动续费」却根本没有能续上的入口。
     setBusy(true)
     setErr('')
     // 模拟支付：直接调用 changePlan（演示项目）
@@ -102,12 +100,14 @@ export default function MembershipModal({
           <p className="mm-tip">订阅属于会员权益 · 请先注册/登录（注册即默认开通凡境 200 积分体验）</p>
         )}
         {user && isCurrent && (
-          <p className="mm-tip">你已是「{plan.name}」会员 · 本月已享受完整权益</p>
+          <p className="mm-tip">续费「{plan.name}」：有效期在当前到期时间之上顺延 30 天，积分用量即刻清零。</p>
         )}
         {user && !isCurrent && (
           <p className="mm-tip">
             {isDowngrade
-              ? `降级至「${plan.name}」将于下一个积分周期生效；当前 ${plan.credits} 积分将重置。`
+              // 文案要与 changePlan 的实际行为一致：它是立即切档并清零积分用量，
+              // 并没有「下一个周期才生效」这回事。
+              ? `降级至「${plan.name}」立即生效：额度调整为 ${plan.credits} 积分，本周期已用量清零。`
               : `升级至「${plan.name}」立即生效：积分用量清零并续期 30 天。`}
           </p>
         )}
@@ -123,7 +123,7 @@ export default function MembershipModal({
           >
             {busy ? '处理中…'
               : !user ? '注册 / 登录'
-              : isCurrent ? '已是当前会员'
+              : isCurrent ? '续费 30 天（模拟支付）'
               : '确认订阅（模拟支付）'}
           </button>
         </div>

@@ -14,13 +14,97 @@ export { PLANS } from '../engine/membership.js'
 
 export const AVATARS = ['🐻', '🌸', '🌟', '🦋', '🍑', '🌙', '🪷', '☁️', '🍀', '🦊']
 
-/* ---- 工具 ---- */
-function hash(str) {
+/* ---- 口令散列 ----
+ *
+ * ⚠ 旧实现是 djb2：32 位、无盐、纯整数运算。整个口令空间可以在浏览器里几秒钟枚举完，
+ * 而用户在别处大概率复用同一个口令 —— 泄漏的不只是这个演示站的账号。
+ * 现改为 Web Crypto 的 PBKDF2-SHA256 + 每用户随机盐 + 20 万轮。
+ *
+ * 兼容：库里已有的 djb2 散列（'u' 开头、无 '$' 分隔）仍可验证通过，并在下一次
+ * 成功登录/改密时自动升级为新格式，老用户不会被锁在门外。
+ *
+ * 注意：这仍是浏览器本地存储的演示实现 —— 能读到 localStorage 的人可以直接改
+ * plan 字段，散列强度保护的是「用户的口令本身」，不是这个站的权限体系。
+ * 权限的正解是服务端账号 + JWT（见 docs/Agent记忆与账号服务端隔离R2改造方案.md）。
+ */
+const PBKDF2_ITERATIONS = 200000
+const LEGACY_PREFIX = 'u'
+
+function legacyHash(str) {
   let h = 5381
   for (let i = 0; i < str.length; i++) {
     h = ((h << 5) + h + str.charCodeAt(i)) | 0
   }
-  return 'u' + (h >>> 0).toString(36)
+  return LEGACY_PREFIX + (h >>> 0).toString(36)
+}
+
+function isLegacyHash(stored) {
+  return typeof stored === 'string' && !stored.includes('$')
+}
+
+function toHex(buf) {
+  return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('')
+}
+
+function subtle() {
+  const c = globalThis.crypto
+  return c && c.subtle ? c.subtle : null
+}
+
+/** 生成 `pbkdf2$<迭代轮数>$<盐hex>$<摘要hex>`；无 Web Crypto 时退回旧算法。 */
+async function hashPassword(password, saltHex) {
+  const sub = subtle()
+  if (!sub) return legacyHash(password)
+  const salt = saltHex
+    ? Uint8Array.from(saltHex.match(/.{2}/g).map(h => parseInt(h, 16)))
+    : globalThis.crypto.getRandomValues(new Uint8Array(16))
+  const key = await sub.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'])
+  const bits = await sub.deriveBits(
+    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    key,
+    256,
+  )
+  return `pbkdf2$${PBKDF2_ITERATIONS}$${toHex(salt)}$${toHex(bits)}`
+}
+
+/** 校验口令。返回 { ok, upgrade } —— upgrade 为新格式散列时，调用方应写回。 */
+async function verifyPassword(password, stored) {
+  if (!stored) return { ok: false, upgrade: null }
+  if (isLegacyHash(stored)) {
+    if (legacyHash(password) !== stored) return { ok: false, upgrade: null }
+    // 旧散列验证通过 → 顺手升级成 PBKDF2
+    return { ok: true, upgrade: await hashPassword(password) }
+  }
+  const parts = stored.split('$')
+  if (parts.length !== 4 || parts[0] !== 'pbkdf2') return { ok: false, upgrade: null }
+  const again = await hashPassword(password, parts[2])
+  return { ok: again === stored, upgrade: null }
+}
+
+/**
+ * 用户 id：必须唯一且不可枚举。
+ *
+ * ⚠ 原实现是 `'u' + Date.now().toString(36)` —— 同一毫秒内注册的账号会拿到
+ * 完全相同的 id。实测连续注册 5 个账号得到的是同一个 id，它们于是共用同一份
+ * userScope 命名空间（会话/记忆/收藏全部串在一起），也共用服务端的 X-Genki-Uid。
+ * 而且时间戳本身单调可猜，配合 /api/agent/* 的头部鉴别就是可枚举的用户身份。
+ * 改为「时间戳 + 高熵随机后缀」：既保证单调有序便于排查，也不可预测、不会碰撞。
+ */
+function randomSuffix(len = 12) {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  const g = globalThis.crypto
+  if (g && typeof g.getRandomValues === 'function') {
+    const buf = new Uint8Array(len)
+    g.getRandomValues(buf)
+    return Array.from(buf, b => alphabet[b % alphabet.length]).join('')
+  }
+  let out = ''
+  for (let i = 0; i < len; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)]
+  return out
+}
+
+function newUserId(prefix = 'u') {
+  return prefix + Date.now().toString(36) + randomSuffix()
 }
 
 function read(key, fallback) {
@@ -38,6 +122,18 @@ function write(key, val) {
   } catch { /* ignore */ }
 }
 
+/**
+ * 对外暴露的用户对象：剔除 password，其余业务字段必须原样带出。
+ *
+ * ⚠ 这里此前漏掉了 creditsUsed / planCreditsResetAt / planExpiresAt 三个字段，
+ * 而它们正是积分体系的全部状态。后果是连锁的：
+ *   · getMonthlyCredits(user) 里 `user.creditsUsed || 0` 恒为 0 → 顶栏与个人中心
+ *     的积分余额永远显示满额，扣了分也看不出来；
+ *   · BaziPage / ZiweiPage 的「已扣过就别再扣」守卫写作 `(user.creditsUsed || 0) > 0`，
+ *     恒为假 → 每次进页面重复扣 8 分；
+ *   · 个人中心的「到期时间」永远显示「—」。
+ * 只要这里补齐，上述几处不用各自打补丁就一起好了。
+ */
 function publicUser(u) {
   return {
     id: u.id,
@@ -46,7 +142,10 @@ function publicUser(u) {
     avatar: u.avatar,
     plan: u.plan || 'earth',
     createdAt: u.createdAt,
-    lastLoginAt: u.lastLoginAt
+    lastLoginAt: u.lastLoginAt,
+    creditsUsed: u.creditsUsed || 0,
+    planCreditsResetAt: u.planCreditsResetAt || 0,
+    planExpiresAt: u.planExpiresAt || 0,
   }
 }
 
@@ -76,7 +175,7 @@ export function logout() {
 }
 
 /* ---- 注册 ---- */
-export function register({ nickname, account, password }) {
+export async function register({ nickname, account, password }) {
   nickname = (nickname || '').trim()
   account = (account || '').trim()
   if (nickname.length < 2) return { ok: false, msg: '昵称至少 2 个字符' }
@@ -93,10 +192,10 @@ export function register({ nickname, account, password }) {
 
   const now = Date.now()
   const user = {
-    id: 'u' + now.toString(36),
+    id: newUserId('u'),
     nickname,
     account,
-    password: hash(password),
+    password: await hashPassword(password),
     avatar: AVATARS[now % AVATARS.length],
     plan: 'earth',
     creditsUsed: 0,
@@ -126,7 +225,7 @@ export function registerByWechat(openid, nickname = '微信用户') {
   }
   const now = Date.now()
   const user = {
-    id: 'w' + now.toString(36) + Math.random().toString(36).slice(2, 6),
+    id: newUserId('w'),
     nickname,
     account: openid,
     wechatOpenid: openid,
@@ -157,14 +256,17 @@ function ensureMonthlyReset(user) {
 }
 
 /* ---- 登录 ---- */
-export function login(account, password) {
+export async function login(account, password) {
   account = (account || '').trim()
   if (!account || !password) return { ok: false, msg: '请输入账号和密码' }
   const users = read(USERS_KEY, [])
   const user = users.find(u => u.account === account)
-  if (!user || user.password !== hash(password)) {
+  // 账号不存在时也走一遍散列，避免用响应快慢区分「账号是否存在」
+  const { ok, upgrade } = await verifyPassword(password, user ? user.password : 'pbkdf2$1$00$00')
+  if (!user || !ok) {
     return { ok: false, msg: '账号或密码不正确' }
   }
+  if (upgrade) user.password = upgrade
   user.lastLoginAt = Date.now()
   ensureMonthlyReset(user)
   write(USERS_KEY, users)
@@ -214,13 +316,17 @@ export function changePlan(id, newKey) {
   if (!plan) return { ok: false, msg: '档位不存在' }
   const user = users[idx]
   const now = Date.now()
+  const samePlan = user.plan === plan.key
   user.plan = plan.key
   user.creditsUsed = 0
   user.planCreditsResetAt = nextResetAt(now)
-  user.planExpiresAt = nextResetAt(now)
+  // 续费（档位不变）应当在原到期时间之上顺延，否则提前续费等于把剩余天数白送掉。
+  // 换档则从当下重新起算 30 天。
+  const base = samePlan ? Math.max(now, user.planExpiresAt || 0) : now
+  user.planExpiresAt = nextResetAt(base)
   write(USERS_KEY, users)
   setSession(user)
-  return { ok: true, user: publicUser(user), plan }
+  return { ok: true, user: publicUser(user), plan, renewed: samePlan }
 }
 
 /* ---- 扣减积分（用于八字命书 / 紫微 / 塔罗 / 奇门 / 元气 AI 等消耗项） ----
@@ -246,14 +352,15 @@ export function consumeCredit(id, featureKey) {
   return { ok: true, user: publicUser(user), cost, remaining: plan.credits - user.creditsUsed }
 }
 
-export function changePassword(id, oldPwd, newPwd) {
+export async function changePassword(id, oldPwd, newPwd) {
   const users = read(USERS_KEY, [])
   const idx = users.findIndex(u => u.id === id)
   if (idx < 0) return { ok: false, msg: '用户不存在' }
   const user = users[idx]
-  if (hash(oldPwd) !== user.password) return { ok: false, msg: '当前密码不正确' }
+  const { ok } = await verifyPassword(oldPwd, user.password)
+  if (!ok) return { ok: false, msg: '当前密码不正确' }
   if (!newPwd || newPwd.length < 6) return { ok: false, msg: '新密码至少 6 位' }
-  user.password = hash(newPwd)
+  user.password = await hashPassword(newPwd)
   write(USERS_KEY, users)
   return { ok: true, msg: '密码已更新' }
 }

@@ -1,6 +1,6 @@
 // 免费配额本地存储：游客免费使用额度（注册会员自动绕过）
 //   - tarot / qimen：游客每抽 1 次计 1 次；上限 10 次（含 10）
-//   - agent     ：游客 token 累计；1 积分 ≈ 10 万 token；累计 ≥ 100 积分（= 1000 万 token）触发订阅引导
+//   - agent     ：游客 token 累计；累计 ≥ 100 积分触发订阅引导（换算见 TOKENS_PER_CREDIT）
 
 const LS_KEY = 'qw_free_quota'
 
@@ -56,13 +56,24 @@ export function addAgentTokens(textLen) {
   return q.agentTokens
 }
 
-// 元气 AI 积分 = tokens / 100000（保留 1 位小数，方便展示）
+/**
+ * token → 积分的换算率。
+ *
+ * ⚠ 这里原本写死 1 积分 = 100000 token，游客上限因此高达 1000 万 token —— 一次
+ * 对话回复撑死一两千 token，要聊上万轮才会触发额度提示，那条「游客 100 积分体验」
+ * 的产品规则形同虚设。对齐 FEATURE_COSTS 的量级（八字完整命书 8 积分、一份报告
+ * 万把 token）后，1 积分定为 2000 token：游客 100 积分 ≈ 100 次实打实的问答。
+ */
+export const TOKENS_PER_CREDIT = 2000
+
+// 游客体验额度（积分）。与 membership.js 里「游客 100 积分」的表述保持一致。
+export const AGENT_FREE_CREDITS = 100
+
 export function tokensToCredits(tokens) {
-  return (tokens || 0) / 100000
+  return (tokens || 0) / TOKENS_PER_CREDIT
 }
 
-// 元气 AI 累计 token 是否已超 100 积分（= 1000 万 token）
-export const AGENT_QUOTA_TOKENS = 100 * 100000 // 10_000_000
+export const AGENT_QUOTA_TOKENS = AGENT_FREE_CREDITS * TOKENS_PER_CREDIT // 200_000
 
 export function isAgentOverQuota(tokens) {
   return (tokens || 0) >= AGENT_QUOTA_TOKENS

@@ -8,7 +8,9 @@ const PLAN_STYLE = {
   oracle: { label: '天机境', cls: 'pr-oracle' }
 }
 
-export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, onBack, onLogout, onUpdate }) {
+// onSubscribe 由 App 传入（openSubscribe），此前漏在解构里，而第 55/168/174 行直接引用它，
+// 严格模式下就是 ReferenceError：个人中心的「升级 / 续费」按钮一点就崩。
+export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, onBack, onLogout, onUpdate, onSubscribe }) {
   const [editing, setEditing] = useState(false)
   const [nickname, setNickname] = useState(user.nickname)
   const [avatarOpen, setAvatarOpen] = useState(false)
@@ -60,9 +62,9 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
     flash(`已切换至${PLANS.find(p => p.key === key).name}`)
   }
 
-  const savePwd = () => {
+  const savePwd = async () => {
     if (newPwd !== confirm) return flash('两次输入的新密码不一致', 'err')
-    const res = changePassword(user.id, oldPwd, newPwd)
+    const res = await changePassword(user.id, oldPwd, newPwd)
     if (!res.ok) return flash(res.msg, 'err')
     setOldPwd(''); setNewPwd(''); setConfirm('')
     flash('密码已更新，下次请用新密码登录')

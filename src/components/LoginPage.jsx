@@ -18,14 +18,18 @@ export default function LoginPage({ onBack, onSwitch, onSuccess }) {
     setErr('')
     setLoading(true)
     // 模拟异步，保证交互反馈
-    setTimeout(() => {
-      const res = login(account, password)
-      setLoading(false)
-      if (!res.ok) {
-        setErr(res.msg)
-        return
+    // login 现在是异步的（PBKDF2 派生要花几十毫秒），原来那个纯装饰用的
+    // setTimeout 延时不再需要，等待本身就是真实耗时。
+    setTimeout(async () => {
+      try {
+        const res = await login(account, password)
+        if (!res.ok) { setErr(res.msg); return }
+        onSuccess(res.user)
+      } catch (e) {
+        setErr('登录失败，请重试')
+      } finally {
+        setLoading(false)
       }
-      onSuccess(res.user)
     }, 260)
   }
 
