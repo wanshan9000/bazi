@@ -50,7 +50,22 @@ cd "$REPO_ROOT"
 
 log() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 die() { printf '\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
-remote() { ssh -i "$DEPLOY_KEY" -o BatchMode=yes -o ConnectTimeout=15 "$DEPLOY_USER@$DEPLOY_HOST" "$@"; }
+# ServerAliveInterval/CountMax 不是可选项：npm ci 与前端构建会有好几分钟一个字都不输出，
+# 中间的 NAT/防火墙把这种「空闲」连接掐掉，表现就是构建走到一半 Connection closed，
+# 而线上其实什么都没发生。keepalive 让连接在静默期也有心跳。
+SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=20 -o TCPKeepAlive=yes)
+remote() { ssh -i "$DEPLOY_KEY" "${SSH_OPTS[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "$@"; }
+
+# 断线重试：只用于**幂等且只读**的探测命令。构建、rsync 这类有副作用的步骤
+# 绝不能盲目重试 —— 那可能在上一次其实成功了的基础上再跑一遍。
+remote_retry() {
+  local i
+  for i in 1 2 3; do
+    remote "$@" && return 0
+    [[ $i -lt 3 ]] && { echo "  ⟳ 连接失败，${i}/3 重试…" >&2; sleep 3; }
+  done
+  return 1
+}
 
 # 运行时数据：rsync --delete 时既不覆盖也不删除（--exclude 同时保护接收端）。
 KEEP=(
@@ -65,10 +80,14 @@ COMMIT="$(git rev-parse --short "$DEPLOY_REF")"
 SUBJECT="$(git log -1 --format=%s "$DEPLOY_REF")"
 
 log "预检 · $DEPLOY_REF ($COMMIT) $SUBJECT → $DEPLOY_USER@$DEPLOY_HOST"
-remote true || die "连不上服务器"
+remote_retry true || die "连不上服务器（试了 3 次）"
 remote "test -s $ENV_FILE" || die "服务器缺少 ${ENV_FILE}，按 deploy/env.example 先创建"
 remote "grep -q '^DEEPSEEK_API_KEY=.\+' $ENV_FILE" || die "$ENV_FILE 里 DEEPSEEK_API_KEY 为空"
-remote "command -v node >/dev/null && command -v rsync >/dev/null && command -v caddy >/dev/null" || die "服务器缺 node/rsync/caddy"
+# ⚠ 分两步：ssh 本身失败（网络抖动）和「命令跑了但工具确实缺」是两回事。
+# 合成一句的话，一次断线会被报成「服务器缺 node/rsync/caddy」，把人往错的方向带。
+MISSING="$(remote_retry "for c in node rsync caddy; do command -v \$c >/dev/null || echo \$c; done")" \
+  || die "预检时连接中断（试了 3 次），请检查网络后重跑"
+[[ -z "$MISSING" ]] || die "服务器缺少：$(echo $MISSING | tr '\n' ' ')"
 remote "getent group $SERVICE_USER >/dev/null || groupadd --system $SERVICE_USER
         getent passwd $SERVICE_USER >/dev/null || useradd --system --gid $SERVICE_USER --home-dir $STATE_DIR --shell /usr/sbin/nologin $SERVICE_USER
         install -d -o $SERVICE_USER -g $SERVICE_USER -m 0750 $STATE_DIR
