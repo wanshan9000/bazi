@@ -71,7 +71,17 @@ deploy/deploy.sh                  # 部署当前 HEAD 已提交内容；--ref <r
 | POST | `/api/update` | 更新时段 / 关注生肖 / 开关 |
 | POST | `/api/unsubscribe` | 取消订阅 |
 | POST | `/api/test-push` | 预览某订阅者的当日推送内容 |
-| GET | `/api/admin/list` | 订阅列表（**生产请加鉴权**） |
+| GET | `/api/admin/list` | 订阅列表（已挂 `requireAdmin`，需 `X-Admin-Token`） |
+| POST | `/api/admin/auth` | 管理员登录换令牌（失败有限流） |
+| GET | `/api/admin/skills` | 技能列表（未带管理员令牌时不返回 `sys` 人设正文） |
+| POST/PUT/DELETE | `/api/admin/skills/:key` | 技能增删改（需管理员令牌） |
+| POST | `/api/share` | 保存报告分享短链（按 IP 限流） |
+| GET | `/api/share/:id` | 读取分享（超过 TTL 即不可读） |
+| POST | `/api/agent/chat` | 元气 AI 对话（SSE 流式） |
+| GET | `/api/agent/sessions` | 会话列表（按 `X-Genki-Uid` 隔离） |
+| GET | `/api/agent/sessions/:id/messages` | 会话消息镜像 |
+| DELETE | `/api/agent/sessions/:id` | 删除会话 |
+| GET | `/api/agent/models` | 可用模型路由 |
 
 ## 定时推送
 
@@ -82,15 +92,32 @@ deploy/deploy.sh                  # 部署当前 HEAD 已提交内容；--ref <r
 
 ## 前端接入
 
-前端通过 `src/api/client.js` 调用后端。后端地址默认 `http://localhost:8787`，
-生产环境用环境变量 `VITE_API_BASE` 指向真实后端，例如 `VITE_API_BASE=https://你的域名/api`。
+前端通过 `src/api/client.js` 调用后端。后端地址默认 `http://localhost:8787`（本地开发；
+生产由 systemd 钉在 8793，见上文部署段）。生产用环境变量 `VITE_API_BASE` 指向真实后端。
+
+⚠ `VITE_API_BASE` 只写到**域名**，不要带 `/api` —— 客户端各方法自己会拼 `/api/...`，
+写成 `https://你的域名/api` 会得到 `/api/api/...`。同域部署（Caddy 反代 `/api/*`）
+可以完全不设这个变量。
+
+```bash
+VITE_API_BASE=https://你的域名      # ✅
+VITE_API_BASE=https://你的域名/api  # ❌ 会拼出 /api/api
+```
 
 ## 安全提醒（上线前必读）
 
-- `/api/admin/list` 仅用于调试，**上线务必加登录鉴权**或移除。
+- `/api/admin/*` 已统一挂 `requireAdmin`；`ADMIN_PASSWORD` 未设置时管理接口直接 403。
+  务必设置一个强口令，**不要沿用 `deploy/env.example` 里的 `change-me`**。
+- 生产环境（`NODE_ENV=production`）默认关闭「模拟短信/微信」：未配置真实凭证时
+  `/api/sms/send-code` 不再回显验证码，`/api/wechat/mock-done` 直接 503。
+  确需在生产联调时才设 `ALLOW_MOCK_CHANNELS=1`。
 - 验证码、订阅数据走 HTTPS 传输。
-- 短信模板需在服务商后台完成审核。
+- 短信模板需在服务商后台完成审核；**每日推送与验证码必须是两个不同的模板**
+  （见 `SMS_TEMPLATE_CODE` / `SMS_PUSH_TEMPLATE_CODE`）。
 - 微信扫码需开放平台认证（企业主体）。
+- ⚠ `/api/agent/*` 目前仅凭客户端自报的 `X-Genki-Uid` 归属会话，uid 可伪造。
+  已有按 uid 与按 IP 的双层限流兜底，但这不是鉴权 —— 服务端账号 + JWT 见
+  `docs/Agent记忆与账号服务端隔离R2改造方案.md`，未落地前不要在此存放敏感内容。
 
 ## 元气 AI（dsh 基座）
 

@@ -1,5 +1,9 @@
 # 元气AI Agent 能力检测 + GitHub 玄学 Agent 竞品学习报告
 
+> ⚠ **时效声明（2026-09-06）**：文中「llm.js 全部 stream:false」的判断已不成立
+> （`chatLLMStream` / `chatLLMTools` 均为流式，仅 `chatLLM` 仍是非流式），
+> 且该文件只服务于 legacy 回退路径。默认路径是服务端 dsh。
+
 > 生成日期：2026-08-29
 
 ---

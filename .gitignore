@@ -3,15 +3,32 @@ node_modules/
 dist/
 
 # 密钥与环境变量（保留 .env.example 模板）
+# 根目录的 .env 同样要挡：根 .env.example 正引导开发者在这里创建它。
+.env
+.env.*
+!.env.example
 server/.env
+server/.env.*
+!server/.env.example
 
 # 运行时用户数据（含订阅者手机号/八字等个人信息，勿上传）
 server/data/
 
-# 本地开发调试脚本（如需提交请 git add -f）
+# 本地开发调试脚本与一次性产物（如需提交请 git add -f）
 _dbg*.mjs
 _smoke_test*.mjs
 _verify.mjs
+tmp_*.mjs
+scripts/tmp-*.mjs
+.mp_reports_bundle.mjs
+.mp_bundle_test*.mjs
+
+# Playwright 手工快照与截图（调试痕迹，不是资产）
+.playwright-cli/
+shot-*.png
+
+# 页面结构快照（*.yaml 是 playwright 的 aria 快照，不是配置）
+/*.yaml
 
 # 系统与编辑器
 .DS_Store

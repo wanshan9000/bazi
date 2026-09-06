@@ -17,6 +17,9 @@ Environment=PORT=8793
 Environment=HOST=127.0.0.1
 # dsh 子进程按白名单继承 HOME（pool.js buildChildEnv）；ProtectHome=true 下 /home 不可写，指到状态目录。
 Environment=HOME=/var/lib/bazi
+# 时区必须固定。调度器按「进程本地时区」算推送时段、黄历按本地日期算「今天」，
+# 宿主机若是 UTC，早 7 点的推送会在北京时间下午 3 点发出去。
+Environment=TZ=Asia/Shanghai
 ExecStart=/usr/bin/node server/index.js
 Restart=on-failure
 RestartSec=5s
@@ -39,8 +42,12 @@ ReadWritePaths=/var/lib/bazi
 ReadWritePaths=/opt/bazi/server/data
 ReadWritePaths=/opt/bazi/server/dsh/home
 ReadWritePaths=/opt/bazi/server/dsh/skills/_admin
-# 起点值：每个模型路由常驻一个 dsh 子进程，观察真实占用后再调。
-MemoryMax=1G
+# ⚠ MemoryMax 是整个 cgroup 的上限，主进程与每个模型路由的 dsh 子进程都算在内。
+# 1G 太紧：触顶时内核会挑一个进程杀掉，被杀的很可能是正在服务请求的主进程，
+# 表现为整站间歇性 502 而不是「某个 agent 会话失败」。放宽到 2G，并加
+# MemoryHigh 做软限：先触发回收与限流，而不是直接 OOM kill。
+MemoryHigh=1500M
+MemoryMax=2G
 
 [Install]
 WantedBy=multi-user.target

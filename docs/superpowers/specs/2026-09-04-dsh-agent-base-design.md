@@ -196,17 +196,23 @@ SDK 协议无取消。客户端断开时服务端停止转发但 turn 继续到�
 
 | 场景 | 行为 |
 |---|---|
-| dsh 进程未启动/崩溃 | pool 重启一次；仍失败返回 503 `命理助手暂不可用`，前端提示稍后重试 |
-| 模型 AUTH/QUOTA | SSE `error` 带 code；前端文案区分"服务配置问题"与"额度用尽" |
-| 工具抛错 | dsh 返回结构化错误给模型，模型自行解释；SSE 仍发 `tool_result ok:false` |
-| 上下文超限 | 依赖 compaction；若本期未挂 compaction，则服务端对镜像消息数 >150 的会话提示"建议新开会话" |
-| 客户端断开 | 停止转发，镜像仍完整写入 |
+> 下表已按 2026-09-06 的实现修订（此前描述与代码不符）。
+
+| 场景 | 行为 |
+|---|---|
+| dsh 进程未启动/崩溃 | 传输断开时 `dropClient` 丢弃该路由的常驻客户端并关闭子进程，下一次请求重新拉起；本次请求以 `CLOSED` 结束，SSE `error` 文案「命理助手暂不可用，请稍后重试」。**不是 503**——响应头此时已发出，只能走 SSE error 帧。 |
+| 模型 AUTH/QUOTA | SSE `error` 带 code；未在 KNOWN 表里的 code 一律回笼统文案，详情只进服务端日志（避免把上游返回体泄漏给客户端）。 |
+| 工具抛错 | dsh 返回结构化错误给模型，模型自行解释；SSE 发 `tool_result ok:false`，且该结果**不会**被当作报告卡片写进镜像。 |
+| 单轮静默超时 | `TURN_TIMEOUT_MS`（120s）是**静默**超时，收到任何通知即续期；触发后本轮以 `TIMEOUT` 结束，`drainToIdle` 在后台等该会话真正 idle 再释放 busy。 |
+| 上下文超限 | 依赖 profile 里的 compaction 插件（`dsh --dump-config` 已确认挂载）。**「>150 条提示新开会话」未实现**，也不打算实现。 |
+| 客户端断开 | 停止转发；已流出的正文写入镜像（`streamed` 兜底），子进程那一轮由 `drainToIdle` 在后台收尾。 |
 
 ## 12. 测试
 
 - 单元（`node --test`）：每个工具的 `execute` 对固定生辰输出稳定断言（四柱干支等）；`events.js` 映射表；`DshPool` 用 fake `HarnessClient` 测重启/409/路由绑定。
 - 集成：`server/dsh/smoke.mjs` 用真实 key 跑"1990-05-06 08:00 男 排八字"，断言事件流含 `tool/call name=bazi` 且最终文本含四柱；CI 无 key 时跳过。
-- 前端：Playwright 用现有 `.playwright-cli` 流程，mock SSE 断言渲染（text → reasoning 折叠 → report 卡片）。
+- 前端：**未落地**。`.playwright-cli/` 只是 2026-09-01 的一批手工快照（已从仓库移除），
+  没有可重复执行的前端用例；38 个 React 组件目前零自动化测试。
 - 验收：§1 成功标准逐条人工核对。
 
 ## 13. 迁移与上线
@@ -216,16 +222,24 @@ SDK 协议无取消。客户端断开时服务端停止转发但 turn 继续到�
 2. 后端先上（`/api/agent/*` 与旧前端并存）。
 3. 前端以 `VITE_AGENT_BACKEND=dsh` 构建灰度；问题回退 `legacy`。
 4. 一个发布周期后删除旧编排与死模块。
-5. 部署：PM2 守护 `server/index.js`，dsh 为其子进程；`server/dsh/home/sessions` 挂持久卷。
+5. 部署：**systemd** 守护（`deploy/bazi.service`，非 PM2），dsh 为其子进程；
+   密钥在 `/etc/bazi/env`（不是 `server/.env`）；`server/dsh/home/sessions` 与
+   `server/data/` 需持久化，`deploy/deploy.sh` 的 rsync 已把它们列入保留清单。
+   一键部署见 `deploy/deploy.sh`（发布前会跑 `npm test`，失败即中止并回滚）。
 
 ## 14. 已知风险
 
 - dsh 处于 developer preview，协议无版本协商；锁定 `0.1.2-rc.1`，升级需回归 smoke。
 - 引擎 Vite lib 打包首次可能遇到浏览器全局依赖，需逐个 shim。
-- compaction 三行在无 base 树上是否可挂载未验证。
-- 无取消协议：长回复中断只能等自然结束。
+- ~~compaction 三行在无 base 树上是否可挂载未验证。~~ 已验证：`dsh --profile lingshu --dump-config`
+  显示 token-meter / compaction-basic / tool-result-pruner 均在组合树中。
+- 无取消协议：前端「停止生成」只中断本地的 SSE 读取并标记该轮不计费，
+  子进程那一轮仍会自然跑完（由 `drainToIdle` 收尾），期间仍在消耗 token。
 - `role:'tool'`/report 卡片的前端渲染依赖服务端消息镜像（`server/data/agent_sessions.json`），不依赖 dsh 自身的会话 JSONL；若镜像文件丢失或裁剪，历史工具结果/报告卡片会在刷新后不可见（dsh 侧日志仍完整，但前端不读它）。
-- 登录用户 id 为时间戳派生、可枚举，公网暴露前必须上 JWT。
+- ~~登录用户 id 为时间戳派生、可枚举~~ → 2026-09-06 已改为「时间戳 + 高熵随机后缀」
+  （此前同一毫秒注册的账号甚至会拿到完全相同的 id，共用同一份数据作用域）。
+  但 `/api/agent/*` 仍只凭 `X-Genki-Uid` 请求头归属会话，该头可伪造 —— 已加
+  按 uid 与按 IP 的双层限流兜底，那是限流不是鉴权，**JWT 仍是必须项**。
 - 本机（及任何未配置密钥的部署）无 `DEEPSEEK_API_KEY` 时，模型层直接返回 `MISSING_CREDENTIAL`（SSE `error` 事件），对话在 `session`/`title` 之后即终止、不产生 `done`；上线前必须在 `server/.env` 配置 `DEEPSEEK_API_KEY`（及可选 `MINIMAX_API_KEY`），否则 agent 通道对所有用户不可用。
 
 ## 15. 验收记录

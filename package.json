@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "description": "灵枢 — 随时随地在身边的玄学 AI 助手",
+  "engines": {
+    "node": ">=20.6.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -30,12 +33,10 @@
     "iztro": "^2.6.0",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "shunshi-naming-core": "^0.1.0"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
-    "playwright-core": "^1.62.1",
     "vite": "^6.0.7"
   }
 }
