@@ -65,7 +65,20 @@ async function loadBuiltin() {
   return E.BUILTIN_SKILLS
 }
 
+/**
+ * 生成全部技能目录。供 setup.mjs 直接调用。
+ *
+ * ⚠ setup.mjs 原先写的是 `await import('./gen-skills.mjs')` —— 而下面那段主逻辑
+ * 有 `process.argv[1] === 本文件` 的守卫，从 setup 里 import 时条件不成立，
+ * 什么都不会发生。setup 却照常打印「已生成技能目录」，实际一个文件都没写。
+ * 抽成具名导出，让调用方显式调用，别再依赖模块副作用。
+ */
+export async function generateSkills(dir = SKILLS_DIR) {
+  const n = writeSkills(dir, await loadBuiltin())
+  return n
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const n = writeSkills(SKILLS_DIR, await loadBuiltin())
+  const n = await generateSkills()
   console.log(`[gen-skills] 已生成 ${n} 个技能 → ${SKILLS_DIR}`)
 }

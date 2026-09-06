@@ -132,3 +132,107 @@ test('限流覆盖整个 /agent/*（不只是 /chat）', async () => {
     assert.equal((await fetch(`${base}/api/agent/models`)).status, 200)
   } finally { srv.close() }
 })
+
+// uid 是客户端自报的，只按 uid 分桶等于没有闸门：每次换一个新 uid 计数就清零。
+// 必须还有一层只按来源 IP 的桶把总量摁住。
+test('限流：轮换 uid 也绕不过按 IP 的闸门', async () => {
+  const { app } = mkApp(fakePool([]))
+  const { srv, base } = await listen(app)
+  try {
+    let last = 200
+    let sent = 0
+    // 每个 uid 只发 1 次，uid 桶永远只有 1 —— 唯一能拦住的只有 IP 桶。
+    for (let i = 0; i < 80 && last !== 429; i++) {
+      last = (await fetch(`${base}/api/agent/sessions`, { headers: { 'x-genki-uid': `flood-${i}` } })).status
+      sent++
+    }
+    assert.equal(last, 429, `轮换 ${sent} 个 uid 后仍未被限流`)
+    assert.ok(sent > 20, '不应把单 uid 的额度算到 IP 桶上，IP 闸门要比 uid 闸门宽')
+  } finally { srv.close() }
+})
+
+// chart 里的字段会被直接拼进 prompt。不校验的话，MAX_TEXT（2000 字）那道闸门
+// 可以被绕开：把几十 KB 文本塞进 chart.gender 即可。
+test('chart 字段非法/超长时不得进入 prompt', async () => {
+  const captured = []
+  const pool = {
+    isBusy: () => false,
+    async run({ text, onEvent }) {
+      captured.push(text)
+      onEvent({ type: 'done', reason: 'completed' })
+      return { finalText: '好', usage: null, title: null }
+    },
+  }
+  const { app } = mkApp(pool)
+  const { srv, base } = await listen(app)
+  try {
+    const huge = 'A'.repeat(50000)
+    await fetch(`${base}/api/agent/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-genki-uid': 'u-chart' },
+      body: JSON.stringify({ text: '你好', chart: { year: 1990, month: 5, day: 6, hour: 8, gender: huge } }),
+    })
+    assert.equal(captured.length, 1)
+    assert.ok(!captured[0].includes('AAAA'), '非法 gender 不该出现在 prompt 里')
+    assert.ok(captured[0].length < 500, `prompt 被撑大到 ${captured[0].length} 字`)
+    assert.ok(!captured[0].includes('当前缘主命盘'), '命盘非法时不应拼命盘行')
+  } finally { srv.close() }
+})
+
+test('合法 chart 会拼出命盘行；时辰未知不伪装成 12 时', async () => {
+  const captured = []
+  const pool = {
+    isBusy: () => false,
+    async run({ text, onEvent }) {
+      captured.push(text)
+      onEvent({ type: 'done', reason: 'completed' })
+      return { finalText: '好', usage: null, title: null }
+    },
+  }
+  const { app } = mkApp(pool)
+  const { srv, base } = await listen(app)
+  try {
+    await fetch(`${base}/api/agent/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-genki-uid': 'u-c1' },
+      body: JSON.stringify({ text: '排盘', chart: { year: 1990, month: 5, day: 6, hour: 8, gender: '男' } }),
+    })
+    assert.match(captured[0], /当前缘主命盘.*1990年5月6日 8时 男/)
+
+    await fetch(`${base}/api/agent/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-genki-uid': 'u-c2' },
+      body: JSON.stringify({ text: '排盘', chart: { year: 1990, month: 5, day: 6, gender: '女' } }),
+    })
+    assert.match(captured[1], /时辰未知/, '缺 hour 应标注未知，而不是补成 12 时')
+  } finally { srv.close() }
+})
+
+// 游客聊过之后登录，uid 从 anon:xxx 变成账号 id；不做过户的话之前的会话直接消失。
+test('登录后可认领游客会话，且只能认领匿名 uid 的', async () => {
+  const { app, store } = mkApp(fakePool([]))
+  const guest = 'anon:dev123'
+  store.createSession(guest, { route: 'deepseek-flash', title: '游客聊的' })
+  store.createSession('u-other', { route: 'deepseek-flash', title: '别人的' })
+  const { srv, base } = await listen(app)
+  try {
+    const r = await (await fetch(`${base}/api/agent/sessions/claim`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-genki-uid': 'u-me' },
+      body: JSON.stringify({ from: guest }),
+    })).json()
+    assert.equal(r.ok, true)
+    assert.equal(r.moved, 1)
+    assert.equal(store.listSessions('u-me').length, 1)
+    assert.equal(store.listSessions(guest).length, 0)
+
+    // 非匿名来源必须拒绝，否则这就成了「把别人会话搬走」的接口
+    const bad = await fetch(`${base}/api/agent/sessions/claim`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-genki-uid': 'u-me' },
+      body: JSON.stringify({ from: 'u-other' }),
+    })
+    assert.equal(bad.status, 400)
+    assert.equal(store.listSessions('u-other').length, 1, '别人的会话必须原封不动')
+  } finally { srv.close() }
+})

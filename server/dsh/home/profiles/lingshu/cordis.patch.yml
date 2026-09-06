@@ -28,7 +28,10 @@
   config:
     includeHarnessIdentity: false
     includeRuntimeContext: false
-    persona: !!js process.env.LINGSHU_PERSONA ?? '你是「司命」，玄学命理助手。'
+    # ?? 只在 null/undefined 时兜底，而 pool.js 总会把 LINGSHU_PERSONA 设成字符串
+    # （persona.md 读不到时是空串），于是兜底文案永远不生效，模型拿到的是空人设。
+    # 用 || 才能把空串也算作"没有"。
+    persona: !!js process.env.LINGSHU_PERSONA || '你是「司命」，玄学命理助手。'
 
 # ── 模型：DeepSeek 官方 ──
 - id: llm-deepseek

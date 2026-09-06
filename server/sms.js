@@ -100,11 +100,16 @@ export async function sendVerifySms(phone, code) {
 
 // 推送订阅用户当日黄历
 export async function sendDailyPush(sub, text, { type = 'daily' } = {}) {
-  const code = ''
   if (!smsConfigured()) return sendLocal(sub.phone, `${text}`, type)
-  const { provider, templateCode } = config.sms
+  // ⚠ 用推送专用模板，不能复用验证码模板：验证码模板只声明了 {code} 一个变量，
+  // 拿它发黄历正文会被服务商以「模板变量不匹配」整批拒掉 —— 而且是配置了真实
+  // 通道之后才会暴露，本地降级模式永远测不出来。
+  const { provider, pushTemplateCode } = config.sms
+  if (!pushTemplateCode) {
+    throw new Error('未配置每日推送短信模板（SMS_PUSH_TEMPLATE_CODE）')
+  }
   const param = { text, time: new Date().toLocaleString('zh-CN', { hour12: false }).slice(0, 16) }
-  if (provider === 'aliyun') return sendAliyun(sub.phone, templateCode, param)
-  if (provider === 'tencent') return sendTencent(sub.phone, templateCode, param)
+  if (provider === 'aliyun') return sendAliyun(sub.phone, pushTemplateCode, param)
+  if (provider === 'tencent') return sendTencent(sub.phone, pushTemplateCode, param)
   return sendLocal(sub.phone, text, type)
 }

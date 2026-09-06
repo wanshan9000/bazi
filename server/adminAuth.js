@@ -10,10 +10,47 @@ export function adminConfigured() {
   return Boolean(config.admin.password)
 }
 
+// 登录失败计数（按来源 IP）。管理口令是单一静态口令，没有失败限制就等于
+// 允许公网无限次在线爆破 —— 尤其 deploy/env.example 里的示例值还是 change-me。
+const LOGIN_WINDOW_MS = 15 * 60 * 1000
+const LOGIN_MAX_FAILS = 8
+const fails = new Map() // ip -> { count, until }
+
+export function loginBlocked(ip) {
+  const rec = fails.get(ip)
+  if (!rec) return false
+  if (Date.now() > rec.until) { fails.delete(ip); return false }
+  return rec.count >= LOGIN_MAX_FAILS
+}
+
+export function noteLoginFail(ip) {
+  const now = Date.now()
+  for (const [k, v] of fails) if (now > v.until) fails.delete(k)
+  const rec = fails.get(ip)
+  if (!rec || now > rec.until) fails.set(ip, { count: 1, until: now + LOGIN_WINDOW_MS })
+  else rec.count++
+}
+
+export function noteLoginOk(ip) {
+  fails.delete(ip)
+}
+
 export function issueToken() {
   const token = crypto.randomBytes(24).toString('hex')
-  sessions.set(token, Date.now() + config.admin.tokenTtlHours * 60 * 60 * 1000)
+  // 顺手清掉过期令牌：sessions 原先只增不减，长跑进程里会一直堆积。
+  const now = Date.now()
+  for (const [t, exp] of sessions) if (now > exp) sessions.delete(t)
+  sessions.set(token, now + config.admin.tokenTtlHours * 60 * 60 * 1000)
   return token
+}
+
+/** 令牌是否有效（不改动响应，供需要「有则更详细」的读接口使用） */
+export function isValidAdminToken(token) {
+  if (!adminConfigured() || !token) return false
+  const exp = sessions.get(token)
+  if (!exp) return false
+  if (Date.now() > exp) { sessions.delete(token); return false }
+  return true
 }
 
 // 中间件：校验管理员令牌

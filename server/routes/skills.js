@@ -5,7 +5,7 @@ import { Router } from 'express'
 import crypto from 'crypto'
 import { config } from '../config.js'
 import { listSkills, findSkill, upsertSkill, deleteSkill } from '../store.js'
-import { adminConfigured, issueToken, requireAdmin } from '../adminAuth.js'
+import { adminConfigured, issueToken, requireAdmin, isValidAdminToken, loginBlocked, noteLoginFail, noteLoginOk } from '../adminAuth.js'
 import { syncAdminSkill, removeAdminSkill } from '../dsh/adminSkills.js'
 
 // 技能落盘：停用的技能必须把 SKILL.md 从 _admin 目录移走，否则 dsh 的
@@ -35,19 +35,35 @@ router.post('/admin/auth', (req, res) => {
   if (!adminConfigured()) {
     return res.status(403).json({ ok: false, msg: '管理后台未启用（请设置 ADMIN_PASSWORD 环境变量）' })
   }
+  if (loginBlocked(req.ip)) {
+    return res.status(429).json({ ok: false, msg: '尝试次数过多，请稍后再试' })
+  }
   const { password } = req.body || {}
   // 常量时间比较，避免时序侧信道
   const a = Buffer.from(String(password || ''))
   const b = Buffer.from(config.admin.password)
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    noteLoginFail(req.ip)
     return res.status(401).json({ ok: false, msg: '密码错误' })
   }
+  noteLoginOk(req.ip)
   res.json({ ok: true, token: issueToken(), ttlHours: config.admin.tokenTtlHours })
 })
 
-// ---- 2. 技能列表（读操作不鉴权：管理员查看 + 前端 Agent 拉取共用）----
-router.get('/admin/skills', (_req, res) => {
-  res.json({ ok: true, data: listSkills() })
+// ---- 2. 技能列表 ----
+// ⚠ 此前这个读接口完全不鉴权，而技能记录里的 sys 就是管理员写的完整人设提示词，
+// 公网任何人 GET 一下就能把它整段拿走。现在分成两个口径：
+//   · 鉴权后（管理后台）返回完整记录；
+//   · 未鉴权（前端 Agent 只需要知道有哪些技能可用）只返回 key/name/desc，不含 sys。
+function publicSkill(s) {
+  const { sys, prompt, ...rest } = s || {}
+  return rest
+}
+
+router.get('/admin/skills', (req, res) => {
+  const token = req.headers['x-admin-token'] || ''
+  if (token && isValidAdminToken(token)) return res.json({ ok: true, data: listSkills() })
+  res.json({ ok: true, data: listSkills().map(publicSkill), redacted: true })
 })
 
 // ---- 3. 导出模板（须在 :key 之前定义，避免被参数路由拦截）----

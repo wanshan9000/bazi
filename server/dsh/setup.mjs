@@ -41,7 +41,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   installPlugin()
   let skillsOk = true
   try {
-    await import('./gen-skills.mjs')
+    // 显式调用，不能只 import：那个模块的主逻辑有 argv[1] 守卫，
+    // 被 import 时不会执行，setup 会在什么都没做的情况下报告成功。
+    const { generateSkills } = await import('./gen-skills.mjs')
+    const n = await generateSkills()
+    console.log(`[agent:setup] 已生成 ${n} 个技能目录`)
   } catch (e) {
     // 技能目录生成失败 = 模型没有任何 SKILL.md 可加载，等于装了个哑巴 agent。
     // 这里绝不能只是 warn 后打印“完成”，必须让 CI/部署脚本看到非零退出码。
