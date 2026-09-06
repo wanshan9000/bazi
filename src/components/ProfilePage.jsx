@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import { PLANS, AVATARS, updateProfile, changePassword, changePlan, logout } from '../data/users.js'
-import { planByKey, getMonthlyCredits, getMonthlyProgress } from '../engine/membership.js'
+import { planByKey, getMonthlyCredits, getMonthlyProgress, nextPlanKey } from '../engine/membership.js'
 
 const PLAN_STYLE = {
+  // free 是「未订阅 / 已过期」的落点，不在可购买的 PLANS 里，但个人中心一定会
+  // 渲染到它 —— 漏了这一项就是 PLAN_STYLE[plan].cls 读 undefined，
+  // 过期用户一进个人中心整页白屏。
+  free: { label: '凡人', cls: 'pr-free' },
   earth: { label: '凡境', cls: 'pr-earth' },
   heaven: { label: '玄境', cls: 'pr-heaven' },
   oracle: { label: '天机境', cls: 'pr-oracle' }
@@ -21,7 +25,9 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
   const [msgType, setMsgType] = useState('ok')
 
   const days = Math.max(1, Math.ceil((Date.now() - user.createdAt) / 86400000))
-  const plan = PLANS.find(p => p.key === user.plan) || PLANS[0]
+  // 必须走 planByKey：PLANS 里没有 free，用 find 会静默回落到 PLANS[0]（凡境），
+  // 于是一个已过期的账号在个人中心显示成付费档，额度和到期时间也跟着错。
+  const plan = planByKey(user.plan)
   const remaining = getMonthlyCredits(user)
   const used = user.creditsUsed || 0
   const progress = getMonthlyProgress(user)
@@ -61,7 +67,7 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
     changePlan(user.id, key).then(res => {
       if (!res.ok) return flash(res.msg, 'err')
       onUpdate(res.user)
-      flash(`已切换至${PLANS.find(p => p.key === key).name}`)
+      flash(`已切换至${planByKey(key).name}`)
     })
   }
 
@@ -118,7 +124,7 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
             <p className="pr-join">加入第 {days} 天 · {new Date(user.createdAt).toLocaleDateString('zh-CN')} 加入</p>
           </div>
           <div className="pr-badge">
-            <span className={`pr-badge-tag ${PLAN_STYLE[user.plan].cls}`}>{PLAN_STYLE[user.plan].label}</span>
+            <span className={`pr-badge-tag ${(PLAN_STYLE[user.plan] || PLAN_STYLE.free).cls}`}>{(PLAN_STYLE[user.plan] || PLAN_STYLE.free).label}</span>
             <span className="pr-badge-meta">{plan.tag}会员</span>
           </div>
         </div>
@@ -170,9 +176,9 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
           <div className="pr-cr-actions">
             <button
               className="pr-set-btn"
-              onClick={() => plan.key !== 'oracle' && onSubscribe && onSubscribe(plan.key === 'earth' ? 'heaven' : 'oracle')}
+              onClick={() => nextPlanKey(plan.key) && onSubscribe && onSubscribe(nextPlanKey(plan.key))}
             >
-              {plan.key === 'oracle' ? '已是最高档位' : `升级至${plan.key === 'earth' ? '玄境' : '天机境'}`}
+              {plan.key === 'oracle' ? '已是最高档位' : `升级至${PLAN_STYLE[nextPlanKey(plan.key)].label}`}
             </button>
             <button
               className="pr-set-btn ghost"

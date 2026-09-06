@@ -6,7 +6,7 @@ import ReportLock from './ReportLock.jsx';
 import UpgradePrompt from './UpgradePrompt.jsx';
 import { loadQuota, incQimen, FREE_LIMIT, isQimenOverLimit } from '../engine/freeQuota.js';
 import { consumeCredit } from '../data/users.js';
-import { getMonthlyCredits, planByKey } from '../engine/membership.js';
+import { getMonthlyCredits, planByKey, nextPlanKey } from '../engine/membership.js';
 
 const SHICHEN = [
   { value: '子时 (23-01点)', start: 23, end: 1 },
@@ -169,7 +169,7 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
               cost={5}
               remaining={getMonthlyCredits(user)}
               planLabel={planByKey(user.plan).name}
-              onUpgrade={onUpgrade ? () => onUpgrade(user.plan === 'earth' ? 'heaven' : 'oracle') : null}
+              onUpgrade={onUpgrade ? () => onUpgrade(nextPlanKey(user.plan)) : null}
               onClose={() => setInsufficient(false)}
             />
           </div>

@@ -17,12 +17,27 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  // 健康检查（用于判断后端是否可用）
+  /**
+   * 健康检查。
+   *
+   * ⚠ /api/health 在**元气 AI 不可用**时会返回 503（缺 DEEPSEEK_API_KEY、
+   * 缺引擎产物），那是给部署与监控用的信号。但它不能被当成「整个后端挂了」——
+   * 此前走 request()，503 直接抛异常 → 订阅页与注册页一律显示服务不可用，
+   * 哪怕短信和微信通道好好的。
+   *
+   * 这里改为不看状态码、只读响应体，并把「服务器有没有应答」（reachable）
+   * 与「AI 通道是否就绪」（ok）分开，调用方各取所需。
+   */
   async health() {
     try {
-      const r = await request('/api/health')
-      return r.ok ? { ok: true, sms: r.sms, wechat: r.wechat } : { ok: false }
-    } catch { return { ok: false } }
+      const res = await fetch(`${BASE}/api/health`, { headers: { 'Content-Type': 'application/json' } })
+      const r = await res.json().catch(() => null)
+      if (!r) return { ok: false, reachable: false }
+      return { ok: Boolean(r.ok), reachable: true, sms: r.sms, wechat: r.wechat, agent: r.agent }
+    } catch {
+      // 只有真的连不上（网络错误）才算不可达
+      return { ok: false, reachable: false }
+    }
   },
   // 发送短信验证码
   async sendCode(phone) {

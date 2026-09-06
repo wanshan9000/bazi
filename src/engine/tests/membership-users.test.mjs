@@ -120,3 +120,15 @@ test('迁移：不覆盖新账号已有的数据', () => {
   remapScopedKeys('old1', 'new1')
   assert.equal(ls.getItem('genki-memory::new1'), '["新账号自己的"]')
 })
+
+// 「积分不足 → 去升级」的引导档位。此前各页面各写一遍
+// `plan === 'earth' ? 'heaven' : 'oracle'`，free 档不等于 earth，
+// 于是刚过期的账号会被直接推到最贵的天机境。
+test('nextPlanKey：free / earth 推玄境，玄境推天机境，天机境到顶', async () => {
+  const { nextPlanKey } = await import('../membership.js')
+  assert.equal(nextPlanKey('free'), 'heaven')
+  assert.equal(nextPlanKey('earth'), 'heaven')
+  assert.equal(nextPlanKey('heaven'), 'oracle')
+  assert.equal(nextPlanKey('oracle'), null)
+  assert.equal(nextPlanKey(undefined), 'heaven', '档位缺失时按最低档处理，不该推最贵的')
+})

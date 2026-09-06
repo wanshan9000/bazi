@@ -50,7 +50,9 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
   const [channels, setChannels] = useState({ sms: null, wechat: null })
   useEffect(() => {
     api.health().then(h => {
-      setServerOk(h.ok)
+      // 订阅只依赖短信/微信通道，与元气 AI 是否就绪无关。
+      // 用 reachable 而不是 ok：否则没配 AI 密钥时，订阅页会谎称后端不可用。
+      setServerOk(Boolean(h.reachable))
       setChannels({ sms: h.sms || null, wechat: h.wechat || null })
     }).catch(() => setServerOk(false))
   }, [])

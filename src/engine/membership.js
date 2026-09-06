@@ -236,6 +236,18 @@ export const PLAN_LABEL = {
   oracle: '天机境',
 }
 
+/**
+ * 当前档位的「下一档」——用于「积分不足，去升级」的引导。
+ *
+ * 此前各页面各写一遍 `plan === 'earth' ? 'heaven' : 'oracle'`：free 档不等于
+ * earth，于是一个刚过期的账号会被直接推到最贵的天机境，而他本该先看到玄境。
+ * 已是最高档时返回 null，调用方据此显示「已是最高档位」。
+ */
+export function nextPlanKey(planKey) {
+  if (planKey === 'oracle') return null
+  return planKey === 'heaven' ? 'oracle' : 'heaven'
+}
+
 /** 是否属于游客完全免费项 */
 export function isFree(featureKey) {
   return FREE_FEATURES.has(featureKey)

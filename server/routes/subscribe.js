@@ -57,7 +57,10 @@ router.post('/sms/send-code', async (req, res) => {
   try {
     await sendVerifySms(phone, code)
   } catch (e) {
-    return res.status(500).json({ ok: false, msg: e.message })
+    // 短信服务商的报错里常带着签名名称、模板号、AccessKey 相关提示，
+    // 原样回给客户端等于把配置细节交出去。详情只进日志。
+    console.error('[sms/send-code] 发送失败', e)
+    return res.status(502).json({ ok: false, msg: '验证码发送失败，请稍后重试' })
   }
   // devCode 只在允许降级的环境回显，生产绝不把验证码交给客户端
   res.json({ ok: true, msg: '验证码已发送', devCode: smsConfigured() || !mockAllowed() ? undefined : code })

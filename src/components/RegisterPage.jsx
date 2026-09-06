@@ -23,7 +23,8 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
     let alive = true
     api.health().then(r => {
       if (alive) {
-        setServerOk(Boolean(r && r.ok))
+        // 看「服务器答不答话」，不看 AI 通道就绪与否 —— 注册用不到 AI。
+        setServerOk(Boolean(r && r.reachable))
         setServerChecked(true)
       }
     }).catch(() => {

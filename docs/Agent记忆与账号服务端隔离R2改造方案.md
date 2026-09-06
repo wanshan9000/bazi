@@ -1,13 +1,29 @@
 # Agent 记忆与账号服务端隔离（R2）改造方案
 
-> **进度校订（2026-09-06）**
+> **进度校订（2026-09-06 · 第二次）**
 > - M0 存储作用域隔离：已落地（`src/engine/userScope.js`），并修掉了「旧游客数据被
 >   复制进每一个新登录账号」的串号问题 —— 现在只有第一个认领它的账号会继承。
-> - M1 服务端账号 + JWT：**未开始**。`/api/agent/*` 仍只凭 `X-Genki-Uid` 请求头归属会话。
->   已补按 uid 与按 IP 的双层限流作为兜底，但那是限流不是鉴权。
-> - M2 llm.js 密钥下掉：**未完成**。该文件只服务 legacy 回退路径，密钥仍明文存
->   localStorage；文件头已加醒目说明。默认路径（dsh）密钥只在服务器上。
-> - 文中提到的 `POST /api/import`：改以 `POST /api/agent/sessions/claim` 实现
+> - M1 服务端账号 + JWT：**已落地**。
+>   - `server/jwt.js`（HS256，钉死 alg）、`server/accounts.js`（scrypt 加盐、原子写、
+>     损坏另存）、`server/routes/auth.js`（注册/登录/资料/改密/切档/扣积分/注销）。
+>   - `/api/agent/*` 改为 `Authorization: Bearer <jwt>` 归属，**不再接受自报的账号 uid**；
+>     游客仍可用 `anon:*`，但单桶额度更紧。
+>   - 前端 `src/api/auth.js` + `src/data/users.js` 全面走接口，本地只留一份供首屏
+>     同步渲染的镜像；401 会就地清 token 并把界面切回未登录。
+>   - 老的本地账号在登录时自动迁移（`src/data/legacyMigrate.js`），并把 `::<旧uid>`
+>     的存储键改挂到新 uid，避免老用户被锁在门外、本地数据变成孤儿。
+> - M2 配额可信：**部分落地**。积分额度与扣减已在服务端（`/auth/credits/consume`，
+>   以及 `/agent/chat` 每轮自动扣减、无产出自动退还），客户端改不动余额了。
+>   仍未完成的是 `llm.js` 那条 legacy 直连路径的密钥下掉 —— 该文件只服务回退路径，
+>   默认路径（dsh）的密钥只在服务器上。
+> - M3 支付：**未开始**，且不能只在代码层推进（见下）。`/auth/plan` 目前等于
+>   「点一下就升级」，只是把这个动作从 localStorage 挪到了服务端。
+>   真实收费必须在服务端插入「下单 → 支付回调验签 → 再改档位」。
+> - 会员到期：已生效。新增 `free` 档作为「未订阅/已过期」的落点，
+>   `planExpiresAt` 到期即降级，额度随之按 free 算。free 不在 `PLANS` 里，
+>   不进购买列表，也不能通过切档接口切进去。
+> - 数据备份：`server/backup.js` 定期快照 + 轮转（原子写只防写坏，防不了误删）。
+> - 文中提到的 `POST /api/import`：以 `POST /api/agent/sessions/claim` 实现
 >   （登录后把 `anon:*` 名下的会话过户给账号），只接受匿名来源。
 
 > 关联：`docs/会员与权限模块-开发盘点.md`（现状基线）、`src/engine/userScope.js`（本地隔离，已完成）
@@ -176,12 +192,14 @@ export const STORE = import.meta.env.VITE_STORAGE === 'remote' ? remoteStore : l
 
 ## 九、上线安全检查清单
 
-- [ ] `server/.env` 配置 `JWT_SECRET`、各 `LLM_API_KEY_*`，不进代码库
-- [ ] `/api/admin/*` 增加管理员鉴权（或移除）
-- [ ] 登录/聊天接口限流；全站 HTTPS
-- [ ] 注销账号 API 连坐清除用户数据（隐私）
-- [ ] CORS 白名单收窄；`dist/` 由后端或 CDN 托管并开启 TLS
-- [ ] 数据文件目录 `server/data/` 挂持久卷 + 每日备份
+- [x] `server/.env` 配置 `JWT_SECRET`（未配时自动生成随机密钥存到 `data/.jwt-secret`，
+      单机可用；多实例必须显式配同一个值），密钥不进代码库
+- [x] `/api/admin/*` 增加管理员鉴权（口令 + 失败限流）
+- [x] 登录/聊天接口限流；全站 HTTPS（Caddy）
+- [x] 注销账号 API 连坐清除用户数据（账号 + AI 会话与消息）
+- [x] CORS 白名单收窄；`dist/` 由 Caddy 托管并开启 TLS
+- [x] 数据文件目录 `server/data/` 定期快照（`server/backup.js`）
+- [ ] `server/data/` 挂持久卷 —— 需要服务器侧操作，代码这边管不到
 
 ---
 

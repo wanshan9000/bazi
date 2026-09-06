@@ -105,3 +105,42 @@ for (const mod of ['../BaziPage.jsx', '../ZiweiPage.jsx', '../ChartView.jsx', '.
     r.unmount()
   })
 }
+
+// 会员到期后 plan 会变成 free。它不在 PLANS 里，个人中心却一定会渲染到它 ——
+// 漏一处映射就是过期用户一进个人中心整页白屏。
+test('冒烟：ProfilePage 在会员已过期（free 档）时不崩且显示为凡人', async () => {
+  const { default: ProfilePage } = await import('../ProfilePage.jsx')
+  const expired = { ...user, plan: 'free', planExpiresAt: 0, creditsUsed: 0 }
+  let r
+  try {
+    r = render(ProfilePage, {
+      user: expired, historyCount: 0, tarotCount: 0,
+      onBack: noop, onLogout: noop, onUpdate: noop, onSubscribe: noop,
+    })
+    await flush()
+  } catch (e) {
+    assert.fail(`过期用户的个人中心崩了：${e && e.stack ? e.stack : e}`)
+  }
+  // 只盯当前档位的徽章：页面下方本来就会列出三个可购买档位，那里出现「凡境」是对的
+  const badge = r.$('.pr-badge-tag')
+  assert.ok(badge, '找不到档位徽章')
+  assert.equal(badge.textContent.trim(), '凡人', '过期账号不该显示成付费档')
+  r.unmount()
+})
+
+// 过期用户的下一档应该是玄境，不是最贵的天机境。
+test('冒烟：ProfilePage 给 free 用户推荐玄境', async () => {
+  const { default: ProfilePage } = await import('../ProfilePage.jsx')
+  let asked = null
+  const r = render(ProfilePage, {
+    user: { ...user, plan: 'free', planExpiresAt: 0 },
+    historyCount: 0, tarotCount: 0,
+    onBack: noop, onLogout: noop, onUpdate: noop, onSubscribe: k => { asked = k },
+  })
+  await flush()
+  const btn = r.findByText('升级至')
+  assert.ok(btn, `找不到升级按钮：${r.text().slice(0, 200)}`)
+  r.click(btn)
+  assert.equal(asked, 'heaven')
+  r.unmount()
+})

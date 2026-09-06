@@ -4,7 +4,7 @@ import { createAgentApi } from '../api/agent.js'
 import { buildChart } from '../engine/bazi.js'
 import { listCollection, saveToCollection, removeFromCollection } from '../engine/chartCollection.js'
 import { refreshSession } from '../data/users.js'
-import { canAfford } from '../engine/membership.js'
+import { canAfford, nextPlanKey } from '../engine/membership.js'
 import { loadQuota, addAgentTokens, tokensToCredits, isAgentOverQuota } from '../engine/freeQuota.js'
 import { renderMarkdown } from '../utils/markdown.jsx'
 import { ThinkBlock, ToolCallsBlock, CopyButton, renderAiText, timeNow, fmtSessionTime, QUICK } from './agent/ChatParts.jsx'
@@ -84,7 +84,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
     // 额度必须在发请求之前拦。此前是「先聊完再扣、扣不动只弹个可关闭的窗」，
     // 游客关掉弹窗就能接着无限聊，登录用户余额为 0 也照样能把请求打到付费模型上。
     if (user) {
-      if (!canAfford(user, 'agent.chat')) { onUpgrade && onUpgrade(user.plan === 'earth' ? 'heaven' : 'oracle'); return }
+      if (!canAfford(user, 'agent.chat')) { onUpgrade && onUpgrade(nextPlanKey(user.plan)); return }
     } else if (isAgentOverQuota(agentTokens)) {
       setQuotaDismissed(false)
       return
@@ -126,7 +126,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
         setMessages(prev => prev.slice(0, -2))
         setInput(q)
         refreshSession().then(u => { if (u) onUserChange && onUserChange(u) })
-        onUpgrade && onUpgrade(user && user.plan === 'earth' ? 'heaven' : 'oracle')
+        onUpgrade && onUpgrade(nextPlanKey(user && user.plan))
         return
       }
       // 登录态失效（401）：token 过期或账号已注销。api 层已清掉 token，

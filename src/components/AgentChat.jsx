@@ -708,7 +708,9 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
       clearCurrentSession()
     }
     // 异步拉取管理后台导入的技能，刷新本地缓存（供技能路由命中）
-    syncAdminSkills().then(() => { /* 刷新完成，loadCustomSkills 下次调用即为最新 */ })
+    // 后端不可达时这里会 reject；不接住的话每次进页面都在控制台留一条
+    // 未处理的 Promise 拒绝，把真正的报错淹掉。技能拉不到不影响对话。
+    syncAdminSkills().catch(err => console.warn('[skills] 管理技能同步失败', err))
     // 开场白基于当前激活命盘（含从"上下文记忆"恢复的命盘）
     const cur = activeChart || chartProp
     const lines = cur ? openingLine(cur) : openingNoChart()

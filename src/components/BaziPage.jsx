@@ -17,7 +17,7 @@ import { getLunarMonths, getLunarDayCount, tryLunarToSolar } from '../utils/luna
 import { shiftDate } from '../utils/solarTime.js'
 import { consumeCredit } from '../data/users.js'
 import { hasPaid, markPaid } from '../engine/entitlements.js'
-import { getMonthlyCredits, planByKey } from '../engine/membership.js'
+import { getMonthlyCredits, planByKey, nextPlanKey } from '../engine/membership.js'
 
 const SHICHEN = [
   ['子时', '23-01'], ['丑时', '01-03'], ['寅时', '03-05'], ['卯时', '05-07'],
@@ -327,7 +327,7 @@ function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, o
             cost={8}
             remaining={getMonthlyCredits(user)}
             planLabel={planByKey(user.plan).name}
-            onUpgrade={onUpgrade ? () => onUpgrade(user.plan === 'earth' ? 'heaven' : 'oracle') : null}
+            onUpgrade={onUpgrade ? () => onUpgrade(nextPlanKey(user.plan)) : null}
           />
         )}
       </div>
