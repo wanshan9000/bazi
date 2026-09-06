@@ -123,12 +123,17 @@ remote "set -euo pipefail
         rsync -a --delete --chown=root:root $APP_DIR/dist/ $WEB_DIR/
         chmod -R a+rX $WEB_DIR"
 
-# 从这里开始线上目录已被改动，失败必须回滚而不是撒手不管
+# 从这里开始线上目录已被改动，失败必须回滚而不是撒手不管。
+#
+# ⚠ 回滚同样要带上 KEEP 的排除项。$BACKUP_DIR 是 cp -a 出来的整目录快照，
+# 里面含着**部署那一刻**的 server/data；不排除的话，一次回滚就会把用户在这段时间里
+# 新注册的账号、新产生的会话和订阅悉数覆盖成旧的 —— 代码回退是想要的，
+# 数据回退不是。data 目录归运行时所有，任何方向的同步都不该碰它。
 rollback() {
-  echo "  ↩ 回滚到 $BACKUP_DIR" >&2
+  echo "  ↩ 回滚到 $BACKUP_DIR（代码回退，运行时数据保持现状）" >&2
   remote "set -euo pipefail
           if [ -d $BACKUP_DIR ]; then
-            rsync -a --delete $BACKUP_DIR/ $APP_DIR/
+            rsync -a --delete ${KEEP[*]} $BACKUP_DIR/ $APP_DIR/
             chown -R $SERVICE_USER:$SERVICE_USER $APP_DIR
             rsync -a --delete --chown=root:root $APP_DIR/dist/ $WEB_DIR/ || true
             chmod -R a+rX $WEB_DIR || true
@@ -167,7 +172,7 @@ remote "set -e
 log "公网验活 https://$DOMAIN/api/health（首次要等签证书）"
 for i in $(seq 1 30); do
   if out="$(curl -fsS -m 10 "https://$DOMAIN/api/health" 2>/dev/null)"; then echo "$out"; break; fi
-  [[ $i -eq 30 ]] && die "https://$DOMAIN 未通：查 journalctl -u caddy 与 DNS（本地回环已通过，未自动回滚；如需回退：rsync -a --delete $BACKUP_DIR/ $APP_DIR/ && systemctl restart $SERVICE）"
+  [[ $i -eq 30 ]] && die "https://$DOMAIN 未通：查 journalctl -u caddy 与 DNS（本地回环已通过，未自动回滚；如需回退：rsync -a --delete ${KEEP[*]} $BACKUP_DIR/ $APP_DIR/ && systemctl restart $SERVICE）"
   sleep 3
 done
 curl -fsS -m 10 "https://$DOMAIN/" | grep -q '<div id="root"' || die "首页没拿到前端 index.html"

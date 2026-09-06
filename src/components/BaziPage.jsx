@@ -40,17 +40,22 @@ export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin,
     // 一份报告 = 一次消费：同一用户、同一张盘、同一功能只在首次生成时扣分。
     // 此前用 useRef 记「已扣过」，而 ref 随组件挂载重置，返回首页再进来就重复扣 8 分。
     if (hasPaid(user.id, 'bazi.full', chart)) { setPaid(true); setReason(null); return }
-    const res = consumeCredit(user.id, 'bazi.full')
-    if (res.ok) {
-      markPaid(user.id, 'bazi.full', chart)
-      setPaid(true)
-      setReason(null)
-      // 扣分后把最新的用户对象抛回 App，否则顶栏/个人中心的积分余额一直是旧值
-      if (res.user) onUserChange && onUserChange(res.user)
-    } else if (res.reason === 'insufficient') {
-      setPaid(false)
-      setReason('insufficient')
-    }
+    // 扣分走服务端 → 异步。effect 卸载后不要再 setState（换盘/返回首页很容易触发）。
+    let alive = true
+    consumeCredit(user.id, 'bazi.full').then(res => {
+      if (!alive) return
+      if (res.ok) {
+        markPaid(user.id, 'bazi.full', chart)
+        setPaid(true)
+        setReason(null)
+        // 扣分后把最新的用户对象抛回 App，否则顶栏/个人中心的积分余额一直是旧值
+        if (res.user) onUserChange && onUserChange(res.user)
+      } else if (res.reason === 'insufficient') {
+        setPaid(false)
+        setReason('insufficient')
+      }
+    })
+    return () => { alive = false }
   }, [chart, user, onUserChange])
 
   return (

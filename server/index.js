@@ -10,7 +10,10 @@ import subscribeRouter from './routes/subscribe.js'
 import shareRouter from './routes/share.js'
 import skillsRouter from './routes/skills.js'
 import agentRouter from './routes/agent.js'
+import { createAuthRouter } from './routes/auth.js'
 import { sharedPool } from './dsh/pool.js'
+import { sharedStore } from './dsh/agentStore.js'
+import { startBackups } from './backup.js'
 
 const app = express()
 // 生产由 Caddy 反代到 127.0.0.1，不声明信任代理的话 req.ip 恒为 127.0.0.1，
@@ -47,6 +50,10 @@ app.get('/api/health', (_req, res) => {
   })
 })
 
+// 账号与鉴权。注销时连坐清掉该用户的 AI 会话与消息（隐私合规）。
+app.use('/api', createAuthRouter({
+  onRemoveUser: uid => sharedStore().deleteAllSessions(uid),
+}))
 app.use('/api', subscribeRouter)
 app.use('/api', shareRouter)
 app.use('/api', skillsRouter)
@@ -78,6 +85,7 @@ app.listen(config.port, config.host, () => {
   console.log('==================================================\n')
 
   startScheduler()
+  startBackups()
 })
 
 // 退出时回收 dsh 子进程

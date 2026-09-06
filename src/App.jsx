@@ -22,7 +22,8 @@ import ReportView from './components/ReportView.jsx'
 import MembershipModal from './components/MembershipModal.jsx'
 import { buildChart } from './engine/bazi.js'
 import { loadHistory as loadTarot } from './data/tarot.js'
-import { getSession, logout as doLogout, syncMonthlyReset, consumeCredit } from './data/users.js'
+import { getSession, logout as doLogout, refreshSession, consumeCredit } from './data/users.js'
+import { setUnauthorizedHandler } from './api/auth.js'
 import { loadQuota, incTarot, isTarotOverLimit } from './engine/freeQuota.js'
 import { getMonthlyCredits } from './engine/membership.js'
 import { createAgentApi } from './api/agent.js'
@@ -157,12 +158,25 @@ export default function App() {
   // 订阅 Modal 状态：null=关闭；否则为待开通/续费的档位 key
   const [subscribeModal, setSubscribeModal] = useState(null)
 
-  // 启动 / user 变化时做一次月度重置（积分自动续期）
+  // 启动 / 切换账号时向服务端确认登录态并拉取权威状态
+  // （月度重置与到期降级都由服务端推进，这里只负责把结果同步到界面）。
   useEffect(() => {
     if (!user) return
-    const u2 = syncMonthlyReset(user.id)
-    if (u2 && u2.creditsUsed !== user.creditsUsed) setUser(u2)
+    let alive = true
+    refreshSession().then(u2 => {
+      if (!alive) return
+      if (!u2) { setUser(null); return } // token 已失效
+      if (u2.creditsUsed !== user.creditsUsed || u2.plan !== user.plan) setUser(u2)
+    })
+    return () => { alive = false }
   }, [user?.id])
+
+  // token 过期或账号被注销时，任何一次接口调用都会触发这里，把界面切回未登录。
+  // 没有它的话，用户会停留在「看起来已登录、每一次操作都失败」的状态里。
+  useEffect(() => {
+    setUnauthorizedHandler(() => setUser(null))
+    return () => setUnauthorizedHandler(null)
+  }, [])
 
   useEffect(() => {
     try {
@@ -281,9 +295,9 @@ export default function App() {
   // 塔罗一次解读的计费闸门：游客扣免费配额，会员扣 5 积分。
   // 首次抽牌由 TarotPage 在跳转前扣，这里服务于解读页里的「换一批 / 重抽这组」——
   // 那两个按钮此前直接重新 drawCards，把配额与扣费彻底绕过去了。
-  const chargeTarotReading = () => {
+  const chargeTarotReading = async () => {
     if (user) {
-      const res = consumeCredit(user.id, 'tarot.reading')
+      const res = await consumeCredit(user.id, 'tarot.reading')
       if (!res.ok) return { ok: false, reason: res.reason }
       if (res.user) setUser(res.user)
       return { ok: true }
@@ -298,7 +312,7 @@ export default function App() {
     // 把游客期间产生的 AI 会话认领到这个账号名下。
     // 不做的话，uid 从 anon:xxx 变成账号 id，之前聊的内容全部「消失」。
     // 失败不影响登录本身，静默重试没有意义，记一条日志即可。
-    createAgentApi(() => u.id).claimGuestSessions()
+    createAgentApi().claimGuestSessions()
       .catch(err => console.warn('游客会话认领失败', err))
     // 若排盘后曾要求登录 → 登录成功直接回到原排盘结果页
     if (pendingView) {

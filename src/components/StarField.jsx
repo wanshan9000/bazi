@@ -6,7 +6,11 @@ export default function StarField() {
 
   useEffect(() => {
     const canvas = ref.current
-    const ctx = canvas.getContext('2d')
+    // getContext 可以返回 null：canvas 被禁用、显存耗尽、无头环境等。
+    // 不判空的话，下面的动画循环每一帧都会抛 "clearRect of null" ——
+    // 一个纯装饰的背景层能把整页的控制台刷满，甚至压垮性能。
+    const ctx = canvas && canvas.getContext ? canvas.getContext('2d') : null
+    if (!ctx) return
     let raf = 0
     let w = 0, h = 0
     const stars = []

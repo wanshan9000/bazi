@@ -19,7 +19,7 @@
     "agent:smoke": "node server/dsh/smoke.mjs",
     "build:engines": "vite build --config vite.engines.config.js",
     "pretest": "npm run build:engines",
-    "test": "node --test \"server/**/*.test.mjs\" \"src/**/*.test.mjs\""
+    "test": "node --import ./src/test/setup.mjs --test \"server/**/*.test.mjs\" \"src/**/*.test.mjs\""
   },
   "dependencies": {
     "@deepseek-ai/dsh": "0.1.2-rc.1",
@@ -37,6 +37,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^30.0.1",
     "vite": "^6.0.7"
   }
 }

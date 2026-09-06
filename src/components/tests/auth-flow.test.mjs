@@ -1,0 +1,145 @@
+// 登录 / 注册 / 计费闸门的行为测试。
+//
+// 冒烟测试只保证「渲染不崩」，这里验证真正会出错的地方：
+// 表单提交后有没有把结果交出去、失败时给不给提示、扣费失败会不会照样放行。
+import { test, beforeEach } from 'node:test'
+import assert from 'node:assert/strict'
+import { render, flush } from '../../test/render.mjs'
+import { clearAuth } from '../../api/auth.js'
+
+/** 把 fetch 换成按路径返回预设响应的桩，并记录所有请求 */
+function stubFetch(routes) {
+  const calls = []
+  globalThis.fetch = async (url, opts = {}) => {
+    const path = String(url)
+    calls.push({ path, method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : null, headers: opts.headers || {} })
+    const match = Object.keys(routes).find(k => path.includes(k))
+    const r = match ? routes[match] : { status: 404, body: { ok: false, msg: '没有这个接口' } }
+    const payload = typeof r.body === 'function' ? r.body(calls.at(-1)) : r.body
+    return {
+      ok: (r.status || 200) < 400,
+      status: r.status || 200,
+      json: async () => payload,
+      text: async () => JSON.stringify(payload),
+      headers: { get: () => null },
+    }
+  }
+  return calls
+}
+
+const USER = {
+  id: 'u-1', nickname: '缘主', account: 'tester', avatar: '🐻', plan: 'earth',
+  creditsUsed: 0, planCreditsResetAt: Date.now() + 8.64e7, planExpiresAt: Date.now() + 8.64e7,
+}
+
+beforeEach(() => { clearAuth(); localStorage.clear() })
+
+const { default: LoginPage } = await import('../LoginPage.jsx')
+const { default: MembershipModal } = await import('../MembershipModal.jsx')
+
+test('登录成功：把服务端返回的用户交给 onSuccess，并存下 token', async () => {
+  stubFetch({ '/api/auth/login': { body: { ok: true, token: 'jwt-abc', user: USER } } })
+  let got = null
+  const r = render(LoginPage, { onBack: () => {}, onSwitch: () => {}, onSuccess: u => { got = u } })
+  const [acct, pwd] = r.$$('input')
+  r.type(acct, 'tester')
+  r.type(pwd, 'secret123')
+  r.click(r.$('button[type="submit"]'))
+  // 提交里有一段 260ms 的延时
+  await new Promise(res => setTimeout(res, 400))
+  await flush()
+
+  assert.ok(got, '登录成功必须把用户交出去')
+  assert.equal(got.id, 'u-1')
+  assert.equal(localStorage.getItem('genki-token'), 'jwt-abc', 'token 必须落地，否则一刷新就掉线')
+  r.unmount()
+})
+
+test('登录失败：显示服务端的提示，不调用 onSuccess', async () => {
+  stubFetch({ '/api/auth/login': { status: 401, body: { ok: false, msg: '账号或密码不正确' } } })
+  let called = false
+  const r = render(LoginPage, { onBack: () => {}, onSwitch: () => {}, onSuccess: () => { called = true } })
+  const [acct, pwd] = r.$$('input')
+  r.type(acct, 'tester')
+  r.type(pwd, 'wrong')
+  r.click(r.$('button[type="submit"]'))
+  await new Promise(res => setTimeout(res, 400))
+  await flush()
+
+  assert.equal(called, false, '登录失败不得放行')
+  assert.ok(r.text().includes('账号或密码不正确'), `没有显示错误提示：${r.text().slice(0, 200)}`)
+  assert.equal(localStorage.getItem('genki-token'), null)
+  r.unmount()
+})
+
+test('登录请求不把口令写进 URL', async () => {
+  const calls = stubFetch({ '/api/auth/login': { body: { ok: true, token: 't', user: USER } } })
+  const r = render(LoginPage, { onBack: () => {}, onSwitch: () => {}, onSuccess: () => {} })
+  const [acct, pwd] = r.$$('input')
+  r.type(acct, 'tester')
+  r.type(pwd, 'secret123')
+  r.click(r.$('button[type="submit"]'))
+  await new Promise(res => setTimeout(res, 400))
+  await flush()
+  const login = calls.find(c => c.path.includes('/api/auth/login'))
+  assert.equal(login.method, 'POST')
+  assert.ok(!login.path.includes('secret123'), '口令绝不能出现在 URL 里（会进日志和 Referer）')
+  assert.equal(login.body.password, 'secret123')
+  r.unmount()
+})
+
+test('订阅弹窗：确认后调服务端切档接口，成功才回调', async () => {
+  const calls = stubFetch({
+    '/api/auth/plan': { body: { ok: true, user: { ...USER, plan: 'heaven' }, plan: { key: 'heaven', name: '玄境' }, renewed: false } },
+  })
+  localStorage.setItem('genki-token', 'jwt-abc')
+  let succeeded = null
+  const r = render(MembershipModal, {
+    open: true, planKey: 'heaven', user: USER,
+    onClose: () => {}, onSuccess: u => { succeeded = u }, onRequireLogin: () => {},
+  })
+  const confirm = r.findByText('确认') || r.findByText('订阅') || r.$('.mm-confirm')
+  assert.ok(confirm, `找不到确认按钮：${r.text().slice(0, 200)}`)
+  r.click(confirm)
+  await flush()
+
+  const planCall = calls.find(c => c.path.includes('/api/auth/plan'))
+  assert.ok(planCall, '切档必须走服务端接口，不能只改本地存储')
+  assert.equal(planCall.body.plan, 'heaven')
+  assert.ok(succeeded, '成功后应把新用户对象交出去')
+  assert.equal(succeeded.plan, 'heaven')
+  r.unmount()
+})
+
+test('订阅弹窗：服务端拒绝时不回调，并显示原因', async () => {
+  stubFetch({ '/api/auth/plan': { status: 400, body: { ok: false, msg: '档位不存在' } } })
+  localStorage.setItem('genki-token', 'jwt-abc')
+  let succeeded = null
+  const r = render(MembershipModal, {
+    open: true, planKey: 'heaven', user: USER,
+    onClose: () => {}, onSuccess: u => { succeeded = u }, onRequireLogin: () => {},
+  })
+  const confirm = r.findByText('确认') || r.findByText('订阅') || r.$('.mm-confirm')
+  r.click(confirm)
+  await flush()
+  assert.equal(succeeded, null, '服务端拒绝时不得当作订阅成功')
+  assert.ok(r.text().includes('档位不存在'), `没有显示失败原因：${r.text().slice(0, 200)}`)
+  r.unmount()
+})
+
+test('未登录时点订阅走登录引导，不发切档请求', async () => {
+  const calls = stubFetch({ '/api/auth/plan': { body: { ok: true } } })
+  let asked = null
+  const r = render(MembershipModal, {
+    open: true, planKey: 'heaven', user: null,
+    onClose: () => {}, onSuccess: () => {}, onRequireLogin: v => { asked = v || 'subscribe' },
+  })
+  // 未登录时主按钮的文案是「注册 / 登录」，不是「确认订阅」
+  const confirm = r.findByText('注册 / 登录')
+  assert.ok(confirm, `找不到主按钮：${r.text().slice(0, 200)}`)
+  r.click(confirm)
+  await flush()
+  assert.ok(asked, '未登录必须先引导登录')
+  assert.equal(calls.filter(c => c.path.includes('/api/auth/plan')).length, 0)
+  r.unmount()
+})

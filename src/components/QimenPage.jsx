@@ -103,10 +103,14 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
     // 扣分失败时报告其实已经生成并塞进 state，只是没切到 report 阶段；
     // 顺序反了既容易漏，也让「不足」这条路径依赖后续分支才不被看到。
     if (user) {
-      const res = consumeCredit(user.id, 'qimen.reading')
-      if (!res.ok && res.reason === 'insufficient') {
-        setError('本月积分不足，升级到更高档位可继续起盘解读')
-        setInsufficient(true)
+      const res = await consumeCredit(user.id, 'qimen.reading')
+      if (!res.ok) {
+        if (res.reason === 'insufficient') {
+          setError('本月积分不足，升级到更高档位可继续起盘解读')
+          setInsufficient(true)
+        } else {
+          setError(res.msg || '扣减积分失败，请稍后再试')
+        }
         return
       }
       setInsufficient(false)

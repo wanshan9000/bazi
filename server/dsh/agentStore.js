@@ -135,6 +135,20 @@ export function createAgentStore(file) {
       if (n) save()
       return n
     },
+    /** 注销账号时连坐清除该用户的全部会话与消息（隐私合规要求） */
+    deleteAllSessions(uid) {
+      if (!uid) return 0
+      const d = load()
+      const mine = d.sessions.filter(s => s.uid === uid)
+      if (!mine.length) return 0
+      d.sessions = d.sessions.filter(s => s.uid !== uid)
+      for (const s of mine) {
+        delete d.messages[s.id]
+        removeDshSessionDir(s.id)
+      }
+      save()
+      return mine.length
+    },
     deleteSession(uid, id) {
       const d = load()
       const before = d.sessions.length

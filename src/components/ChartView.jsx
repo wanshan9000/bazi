@@ -5,6 +5,10 @@ const WX_LABEL = { 木: '木 · 仁', 火: '火 · 礼', 土: '土 · 信', 金:
 
 export default function ChartView({ chart }) {
   const now = currentYearGanzhi()
+  // 没有命盘就什么都不画。此前直接读 chart.wuxing —— 命盘还没排出来
+  // （用户没填出生信息、异步加载中、父组件条件判断漏了一处）就整页白屏，
+  // React 里一个组件抛异常会带走整棵树，代价远大于这一行判空。
+  if (!chart || !chart.wuxing || !Array.isArray(chart.pillars)) return null
   const total = Object.values(chart.wuxing).reduce((a, b) => a + b, 0)
 
   return (

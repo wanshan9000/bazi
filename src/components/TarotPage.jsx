@@ -176,15 +176,17 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
                   </div>
                   <button
                     className="btn small sc-go"
-                    onClick={() => {
+                    onClick={async () => {
                       if (!user && isTarotOverLimit(tarotUsed)) {
                         onRequireLogin && onRequireLogin('tarot')
                         return
                       }
                       if (user) {
-                        const res = consumeCredit(user.id, 'tarot.reading')
-                        if (!res.ok && res.reason === 'insufficient') {
-                          setInsufficient(true)
+                        // 扣分走服务端，所以必须 await —— 不等结果就 onStart 的话，
+                        // 积分不足时用户已经进了抽牌页，闸门形同虚设。
+                        const res = await consumeCredit(user.id, 'tarot.reading')
+                        if (!res.ok) {
+                          if (res.reason === 'insufficient') setInsufficient(true)
                           return
                         }
                         setInsufficient(false)

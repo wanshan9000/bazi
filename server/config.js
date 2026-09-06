@@ -1,5 +1,7 @@
 // 后端统一配置：全部通过环境变量注入，未配置时进入「本地降级模式」便于开发演示。
 import dotenv from 'dotenv'
+import fs from 'node:fs'
+import crypto from 'node:crypto'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -99,6 +101,30 @@ export const config = {
     ttlDays: Number(env.SHARE_TTL_DAYS || 30),
   },
 
+  // ---- 账号与鉴权（R2 M1）----
+  auth: {
+    // 账号库（与订阅数据分文件存放，互不干扰）
+    accountsFile: env.ACCOUNTS_FILE || path.join(__dirname, 'data', 'accounts.json'),
+    // JWT 密钥。未配 JWT_SECRET 时自动生成并持久化到 data/.jwt-secret，
+    // 见 resolveJwtSecret()。绝不内置默认值 —— 硬编码密钥等于没有鉴权。
+    jwtSecret: env.JWT_SECRET || '',
+    secretFile: env.JWT_SECRET_FILE || path.join(__dirname, 'data', '.jwt-secret'),
+    // 登录态有效期（天）
+    tokenTtlDays: Number(env.AUTH_TOKEN_TTL_DAYS || 7),
+    // 登录/注册限流：同一「账号+IP」在窗口内的失败次数上限
+    loginWindowMin: Number(env.AUTH_LOGIN_WINDOW_MIN || 15),
+    loginMaxAttempts: Number(env.AUTH_LOGIN_MAX_ATTEMPTS || 5),
+  },
+
+  // ---- 数据备份 ----
+  backup: {
+    dir: env.BACKUP_DIR || path.join(__dirname, 'data', 'backups'),
+    // 每日快照保留份数
+    keep: Number(env.BACKUP_KEEP || 14),
+    // 快照间隔（小时）。0 表示关闭。
+    intervalHours: Number(env.BACKUP_INTERVAL_HOURS || 24),
+  },
+
   // ---- 管理后台 ----
   admin: {
     // 管理后台密码（环境变量 ADMIN_PASSWORD）。配置后，技能的新增/修改/删除/导入
@@ -116,3 +142,36 @@ export const smsConfigured = () =>
 
 // 判断微信是否已配置
 export const wechatConfigured = () => Boolean(config.wechat.appId && config.wechat.appSecret)
+
+/**
+ * 取 JWT 密钥。
+ *
+ * 优先用 JWT_SECRET 环境变量。没配时**不能**退回某个硬编码常量 —— 那等于把
+ * 签名密钥公开在代码库里，任何人都能自签一个 token 冒充任意账号。
+ * 这里改为在 data/ 下生成一个随机密钥并持久化（0600）：
+ *   · 随机 → 没人能预测；
+ *   · 持久化 → 重启不会把所有人踢下线（每次随机会导致 token 全失效）。
+ * 生产仍建议显式配置 JWT_SECRET，便于多实例共享与轮换。
+ */
+let cachedSecret = null
+export function resolveJwtSecret() {
+  if (cachedSecret) return cachedSecret
+  if (config.auth.jwtSecret) { cachedSecret = config.auth.jwtSecret; return cachedSecret }
+  const file = config.auth.secretFile
+  try {
+    if (fs.existsSync(file)) {
+      const v = fs.readFileSync(file, 'utf-8').trim()
+      if (v.length >= 32) { cachedSecret = v; return cachedSecret }
+    }
+  } catch { /* 读不到就重新生成 */ }
+  const generated = crypto.randomBytes(48).toString('base64url')
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, generated, { mode: 0o600 })
+    console.warn(`[auth] 未配置 JWT_SECRET，已生成随机密钥并保存到 ${file}（生产建议显式配置）`)
+  } catch (e) {
+    console.warn(`[auth] 未配置 JWT_SECRET 且密钥文件写入失败（${e.message}），本次启动使用内存密钥，重启后登录态会失效`)
+  }
+  cachedSecret = generated
+  return cachedSecret
+}

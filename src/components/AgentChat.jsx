@@ -659,10 +659,13 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
       return
     }
     if (user) {
-      // 登录用户：按对话轮次扣 1 积分（FEATURE_COSTS.agent.chat）；不足 → 弹订阅 Modal
-      const res = consumeCredit(user.id, 'agent.chat')
-      if (!res.ok && res.reason === 'insufficient' && onUpgrade) onUpgrade()
-      else if (res.ok && res.user) onUserChange && onUserChange(res.user)
+      // 登录用户：按对话轮次扣 1 积分（FEATURE_COSTS.agent.chat）；不足 → 弹订阅 Modal。
+      // 这是 legacy 直连路径，请求没经过服务端 /api/agent/chat，所以扣分仍由此处发起；
+      // 但扣减本身在服务端完成（consumeCredit 是接口调用），客户端改不了余额。
+      consumeCredit(user.id, 'agent.chat').then(res => {
+        if (!res.ok && res.reason === 'insufficient' && onUpgrade) onUpgrade()
+        else if (res.ok && res.user) onUserChange && onUserChange(res.user)
+      })
     } else {
       // 游客：按 token 估算累加到 freeQuota；累计 ≥ 100 积分提示订阅
       const est = Math.ceil(last.text.length / 3)

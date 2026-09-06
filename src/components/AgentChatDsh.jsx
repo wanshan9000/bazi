@@ -1,16 +1,15 @@
 // 元气 AI · dsh 基座版：只做渲染与流式接管，编排/工具/记忆全在服务端 dsh
 import { useEffect, useRef, useState } from 'react'
 import { createAgentApi } from '../api/agent.js'
-import { currentUid } from '../engine/userScope.js'
 import { buildChart } from '../engine/bazi.js'
 import { listCollection, saveToCollection, removeFromCollection } from '../engine/chartCollection.js'
-import { consumeCredit } from '../data/users.js'
+import { refreshSession } from '../data/users.js'
 import { canAfford } from '../engine/membership.js'
 import { loadQuota, addAgentTokens, tokensToCredits, isAgentOverQuota } from '../engine/freeQuota.js'
 import { renderMarkdown } from '../utils/markdown.jsx'
 import { ThinkBlock, ToolCallsBlock, CopyButton, renderAiText, timeNow, fmtSessionTime, QUICK } from './agent/ChatParts.jsx'
 
-const api = createAgentApi(currentUid)
+const api = createAgentApi()
 const ROUTE_KEY = 'genki-agent-route'
 const OPENING = ['我是「司命」。八字、紫微、六爻、奇门、黄历、塔罗、取名、风水，心有所问，尽管开口。', '把出生年月日时和性别告诉我，我先为你排盘；也可以直接问今年运势、事业、姻缘。']
 
@@ -49,9 +48,9 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
     return () => { clearTimeout(t); document.removeEventListener('click', close) }
   }, [pickerOpen])
 
-  // 计费：每条「成功完成」的 AI 回复扣 1 积分（登录）或累加 token 估算（游客）。
-  // _failed 的回复不计费 —— 网络中断、服务端报错、用户中途停止都会留下半截文字，
-  // 此前一律照扣，用户为一条没读到的答案付了钱。
+  // 计费：登录用户的每轮扣分**已经在服务端 /api/agent/chat 里完成**
+  // （客户端扣分意味着改 localStorage 就能白嫖，且没产出时无法自动退还）。
+  // 这里只负责把服务端的最新余额同步到界面。游客仍按 token 估算走本地免费配额。
   useEffect(() => {
     const last = messages[messages.length - 1]
     if (!last || last.role !== 'ai' || last.streaming || last._counted || !last.text) return
@@ -60,9 +59,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
       return
     }
     if (user) {
-      const res = consumeCredit(user.id, 'agent.chat')
-      if (!res.ok && res.reason === 'insufficient' && onUpgrade) onUpgrade()
-      else if (res.ok && res.user) onUserChange && onUserChange(res.user)
+      refreshSession().then(u => { if (u) onUserChange && onUserChange(u) })
     } else {
       const n = addAgentTokens(Math.ceil(last.text.length / 3))
       setAgentTokens(n)
@@ -121,6 +118,23 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
         },
       })
     } catch (err) {
+      // 服务端说积分不足（402）。本地的 canAfford 是拿镜像算的，可能偏旧或被改过，
+      // 服务端才是权威 —— 这里把那一条空气泡撤掉并引导升级，而不是给用户看一句报错。
+      if (err && (err.reason === 'insufficient' || err.status === 402)) {
+        // 这一轮根本没发生：把刚插进去的「提问 + 空回复」两条一起撤掉，
+        // 并把问题放回输入框，用户升级完可以直接再发一次，不用重打。
+        setMessages(prev => prev.slice(0, -2))
+        setInput(q)
+        refreshSession().then(u => { if (u) onUserChange && onUserChange(u) })
+        onUpgrade && onUpgrade(user && user.plan === 'earth' ? 'heaven' : 'oracle')
+        return
+      }
+      // 登录态失效（401）：token 过期或账号已注销。api 层已清掉 token，
+      // 这里只需给出一句能让人知道该干什么的提示。
+      if (err && err.status === 401) {
+        patchLast(m => ({ ...m, text: '⚠️ 登录已失效，请重新登录后继续', streaming: false, _failed: true }))
+        return
+      }
       // 会话在服务端已不存在（重启/淘汰/删除）→ 清掉本地 sessionId，
       // 否则之后每一次发送都会打到同一个 404 上，用户只能刷新页面。
       if (/会话不存在|404/.test(String(err && err.message))) setSessionId(null)

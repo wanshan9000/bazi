@@ -113,6 +113,39 @@ export const PLANS = [
   },
 ]
 
+/* ---- 免费档（不可购买，仅作为「未订阅 / 已过期」的落点） ----
+ *
+ * 三档 PLANS 全是付费档，注册时直接发 30 天 earth，planExpiresAt 到期后
+ * 却没有任何去处 —— 于是「到期」这个字段写了也白写，谁都不会真的降级。
+ * 设计方案里本来就写着「游客：本地功能全免费 + 元氣 AI 100 积分体验额度」，
+ * 这里把那句话落成一个具体档位，作为过期用户的落点。
+ * 它不出现在 PLANS 里，所以不会进购买列表、不影响定价页。
+ */
+export const FREE_PLAN = {
+  key: 'free',
+  icon: '○',
+  en: 'Mortal',
+  name: '凡人',
+  tag: '未订阅',
+  price: 0,
+  credits: 100,
+  unit: '',
+  desc: '本地排盘全部免费，AI 解读每月 100 积分体验额度。',
+  perks: [
+    '本地排盘全部免费（八字 / 紫微 / 塔罗 / 奇门 / 称骨 / 风水 / 星座 / 姓名）',
+    '每月 100 积分体验额度',
+  ],
+  benefits: ['本地排盘 全部免费', 'AI 体验额度 100 积分/月'],
+}
+
+/** 会员是否已过期（free 档不会过期） */
+export function isPlanExpired(user, now = Date.now()) {
+  if (!user) return false
+  if (!user.plan || user.plan === FREE_PLAN.key) return false
+  const exp = user.planExpiresAt || 0
+  return exp > 0 && exp <= now
+}
+
 /* ---- 游客完全免费的功能（不消耗 token 的本地计算/展示） ----
  * 路径与 App 路由对齐；下方所有未列出的「消耗 token」功能 → 登录 + 积分
  */
@@ -147,13 +180,16 @@ export const FEATURE_COSTS = {
 
 /* ---- 工具 ---- */
 export function planByKey(key) {
+  if (key === FREE_PLAN.key) return FREE_PLAN
   return PLANS.find(p => p.key === key) || PLANS[0]
 }
 
 /** 用户的「本月积分余额」—— 若周期已过期，先做月度重置 */
 export function getMonthlyCredits(user) {
   if (!user) return 0
-  const plan = planByKey(user.plan)
+  // 过期后额度按 free 档算。否则「到期不降级」在余额上完全看不出来：
+  // 一个三个月前就过期的天机境账号，顶栏照样显示 1000 积分可用。
+  const plan = isPlanExpired(user) ? FREE_PLAN : planByKey(user.plan)
   const resetAt = user.planCreditsResetAt || 0
   const now = Date.now()
   let used = user.creditsUsed || 0
@@ -167,7 +203,7 @@ export function getMonthlyCredits(user) {
 /** 月度进度：已用 / 总额，0~1 */
 export function getMonthlyProgress(user) {
   if (!user) return 0
-  const plan = planByKey(user.plan)
+  const plan = isPlanExpired(user) ? FREE_PLAN : planByKey(user.plan)
   const total = Math.max(1, plan.credits)
   const used = Math.min(plan.credits, user.creditsUsed || 0)
   return used / total
@@ -194,6 +230,7 @@ export function nextResetAt(now = Date.now()) {
 
 /* ---- 文案 ---- */
 export const PLAN_LABEL = {
+  free: '凡人',
   earth: '凡境',
   heaven: '玄境',
   oracle: '天机境',

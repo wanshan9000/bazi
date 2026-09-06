@@ -117,11 +117,13 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
     firstDrawRef.current = true
   }, [spreadId])
 
-  /** 抽牌前的计费闸门。返回 false 表示这次抽牌不该发生。 */
-  const passCharge = () => {
+  /** 抽牌前的计费闸门。返回 false 表示这次抽牌不该发生。
+   *  扣积分现在要走服务端，所以是异步的 —— 调用方必须 await，
+   *  否则拿到的是一个恒为真的 Promise，闸门等于不存在。 */
+  const passCharge = async () => {
     if (firstDrawRef.current) { firstDrawRef.current = false; return true }
     if (!onCharge) return true
-    const res = onCharge()
+    const res = await onCharge()
     if (!res || !res.ok) {
       setChargeErr(res && res.reason === 'quota'
         ? '游客免费次数已用完，登录后可继续抽牌'
@@ -143,8 +145,8 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
     )
   }
 
-  const startShuffle = () => {
-    if (!passCharge()) return
+  const startShuffle = async () => {
+    if (!(await passCharge())) return
     setStage(STAGES.SHUFFLE)
     setTimeout(() => {
       const result = drawCards(spreadId, Date.now())
@@ -203,8 +205,8 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
   }
 
   // 换一批：保留问题重新随机抽牌，跳过输入/洗牌动画。先过计费闸门。
-  const reshuffle = () => {
-    if (!passCharge()) return
+  const reshuffle = async () => {
+    if (!(await passCharge())) return
     const result = drawCards(spreadId, Date.now())
     setDrawn(result.cards)
     setRevealed(0)

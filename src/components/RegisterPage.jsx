@@ -56,24 +56,6 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
     }, 320)
   }
 
-  // 本机专属的演示 openid：首次生成后存本地，同一浏览器重复演示落到同一账号，
-  // 不同浏览器/不同人各自独立。
-  const localDemoOpenid = () => {
-    const KEY = 'genki-demo-openid'
-    try {
-      const cached = localStorage.getItem(KEY)
-      if (cached) return cached
-      const rnd = globalThis.crypto && globalThis.crypto.getRandomValues
-        ? Array.from(globalThis.crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('')
-        : Math.random().toString(36).slice(2) + Date.now().toString(36)
-      const id = `demo-local-${rnd}`
-      localStorage.setItem(KEY, id)
-      return id
-    } catch {
-      return `demo-local-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
-    }
-  }
-
   // 扫码注册：后端已配置则跳转真实微信授权，未连接/未配置则本地演示（模拟扫码即自动建号登录）
   const handleWechat = async () => {
     setErr('')
@@ -105,17 +87,14 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
     setBusy(true)
     try {
       if (!serverChecked || !serverOk) {
-        // 后端不可达：本地建号。
-        // ⚠ 这里原先写死 'demo-local-guest' —— 所有人拿到同一个 openid，于是同一台
-        // 设备（甚至同一个演示环境）上后来的人会直接登进前一个人的账号。演示身份
-        // 必须一人一份：本机生成一次随机 openid 并记住，重复演示才落到同一账号。
-        const res = registerByWechat(localDemoOpenid(), '元气新友')
-        if (!res.ok) { setErr(res.msg); return }
-        onSuccess(res.user)
+        // 账号已迁到服务端（R2 M1）：没有后端就没有账号可建。
+        // 此前这里会在本地凭空造一个账号，那种账号换台设备就不存在、也拿不到
+        // 任何服务端额度，等于给用户一个看着像登录成功、实际什么都不是的状态。
+        setErr('服务暂不可用，请稍后重试')
         return
       }
       const done = await api.wechatMockDone({})
-      const res = registerByWechat(done.openid || done.token, '微信用户')
+      const res = await registerByWechat(done.openid || done.token, '微信用户')
       if (!res.ok) {
         setErr(res.msg)
         return

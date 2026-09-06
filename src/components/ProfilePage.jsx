@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { PLANS, AVATARS, updateProfile, changePassword, logout } from '../data/users.js'
+import { PLANS, AVATARS, updateProfile, changePassword, changePlan, logout } from '../data/users.js'
 import { planByKey, getMonthlyCredits, getMonthlyProgress } from '../engine/membership.js'
 
 const PLAN_STYLE = {
@@ -35,16 +35,16 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
     setTimeout(() => setMsg(''), 2600)
   }
 
-  const saveNickname = () => {
-    const res = updateProfile(user.id, { nickname })
+  const saveNickname = async () => {
+    const res = await updateProfile(user.id, { nickname })
     if (!res.ok) return flash(res.msg, 'err')
     setEditing(false)
     onUpdate(res.user)
     flash('昵称已更新')
   }
 
-  const pickAvatar = (a) => {
-    const res = updateProfile(user.id, { avatar: a })
+  const pickAvatar = async (a) => {
+    const res = await updateProfile(user.id, { avatar: a })
     setAvatarOpen(false)
     if (!res.ok) return flash(res.msg, 'err')
     onUpdate(res.user)
@@ -55,11 +55,14 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
     if (key === user.plan) return
     // 走订阅 Modal（确认即 changePlan，自动重置积分与到期）
     if (onSubscribe) { onSubscribe(key); return }
-    // 兜底（无 Modal 时）：直接切档
-    const res = updateProfile(user.id, { plan: key })
-    if (!res.ok) return flash(res.msg, 'err')
-    onUpdate(res.user)
-    flash(`已切换至${PLANS.find(p => p.key === key).name}`)
+    // 兜底（无 Modal 时）：走服务端的切档接口。
+    // ⚠ 这里此前调的是 updateProfile({ plan })，而服务端根本不接受用 PUT 改档位
+    //   （那等于把「改本地存储即可提权」原样搬到服务端），必须走 /auth/plan。
+    changePlan(user.id, key).then(res => {
+      if (!res.ok) return flash(res.msg, 'err')
+      onUpdate(res.user)
+      flash(`已切换至${PLANS.find(p => p.key === key).name}`)
+    })
   }
 
   const savePwd = async () => {

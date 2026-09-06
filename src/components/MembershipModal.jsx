@@ -47,7 +47,7 @@ export default function MembershipModal({
   if (!open) return null
   if (!plan) return null
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!user) {
       onRequireLogin && onRequireLogin('subscribe')
       return
@@ -57,7 +57,7 @@ export default function MembershipModal({
     setBusy(true)
     setErr('')
     // 模拟支付：直接调用 changePlan（演示项目）
-    const res = changePlan(user.id, plan.key)
+    const res = await changePlan(user.id, plan.key)
     setBusy(false)
     if (!res.ok) {
       setErr(res.msg || '订阅失败，请稍后再试')
