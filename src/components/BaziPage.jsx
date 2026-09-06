@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   TIAN_GAN, DI_ZHI, GAN_WUXING, GAN_YINYANG, ZHI_WUXING, ZHI_CANGGAN,
   SHENGXIAO, WUXING_COLOR, WUXING_ICON, WUXING_SHENG
@@ -13,8 +13,10 @@ import ReportLock from './ReportLock.jsx'
 import UpgradePrompt from './UpgradePrompt.jsx'
 import ShichenPicker from './ShichenPicker.jsx'
 import TrueSolarField from './TrueSolarField.jsx'
-import { getLunarMonths, getLunarDayCount, lunarToSolar } from '../utils/lunar.js'
+import { getLunarMonths, getLunarDayCount, tryLunarToSolar } from '../utils/lunar.js'
+import { shiftDate } from '../utils/solarTime.js'
 import { consumeCredit } from '../data/users.js'
+import { hasPaid, markPaid } from '../engine/entitlements.js'
 import { getMonthlyCredits, planByKey } from '../engine/membership.js'
 
 const SHICHEN = [
@@ -25,29 +27,31 @@ const SHICHEN = [
 const SHICHEN_HOUR = { 子: 0, 丑: 2, 寅: 4, 卯: 6, 辰: 8, 巳: 10, 午: 12, 未: 14, 申: 16, 酉: 18, 戌: 20, 亥: 22 }
 const WX_LABEL = { 木: '木 · 仁', 火: '火 · 礼', 土: '土 · 信', 金: '金 · 义', 水: '水 · 智' }
 
-export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin, onUpgrade }) {
+export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin, onUpgrade, onUserChange }) {
   const [editing, setEditing] = useState(!chart)
   const [tab, setTab] = useState('ziping')
   // 命书扣减状态：paid=true 表示本次会话已成功扣分；reason=null 表示无错误；
   // reason='insufficient' 表示积分不足（展示升级卡）
   const [paid, setPaid] = useState(false)
   const [reason, setReason] = useState(null)
-  const chargedRef = useRef(false)
 
   useEffect(() => {
     if (!chart || !user) return
-    // 若积分月度已被重置（creditsUsed=0）或 plan 档位变更 → 允许重新尝试扣减
-    if (chargedRef.current && (user.creditsUsed || 0) > 0) return
-    chargedRef.current = false
+    // 一份报告 = 一次消费：同一用户、同一张盘、同一功能只在首次生成时扣分。
+    // 此前用 useRef 记「已扣过」，而 ref 随组件挂载重置，返回首页再进来就重复扣 8 分。
+    if (hasPaid(user.id, 'bazi.full', chart)) { setPaid(true); setReason(null); return }
     const res = consumeCredit(user.id, 'bazi.full')
     if (res.ok) {
-      chargedRef.current = true
+      markPaid(user.id, 'bazi.full', chart)
       setPaid(true)
       setReason(null)
+      // 扣分后把最新的用户对象抛回 App，否则顶栏/个人中心的积分余额一直是旧值
+      if (res.user) onUserChange && onUserChange(res.user)
     } else if (res.reason === 'insufficient') {
+      setPaid(false)
       setReason('insufficient')
     }
-  }, [chart, user, user?.creditsUsed, user?.planCreditsResetAt])
+  }, [chart, user, onUserChange])
 
   return (
     <div className="page-wrap">
@@ -102,6 +106,8 @@ function BirthFormComp({ onDone }) {
   // 太阳真时校正：开启后，排盘时辰用换算后的 trueSolarHour
   const [useTrueSolar, setUseTrueSolar] = useState(false)
   const [trueSolarHour, setTrueSolarHour] = useState(null)
+  // 真太阳时跨午夜时排盘日期要平移（-1 / +1），见 utils/solarTime.js 的 dayOffset
+  const [trueSolarOffset, setTrueSolarOffset] = useState(0)
   const [placeLabel, setPlaceLabel] = useState('')
 
   const daysInMonth = (y, m) => new Date(y, m, 0).getDate()
@@ -124,11 +130,20 @@ function BirthFormComp({ onDone }) {
   const submit = () => {
     let outYear = year, outMonth = month, outDay = day
     if (calendar === 'lunar') {
-      const sol = lunarToSolar(year, month, day, lunarLeap)
+      const sol = tryLunarToSolar(year, month, day, lunarLeap)
+      // 农历下拉已按年份/闰月约束过取值，这里只是防御：换算不出来就不要提交，
+      // 绝不能把无效农历原样当公历排盘（那会排出一张看不出问题的错盘）。
+      if (!sol) return
       outYear = sol.year; outMonth = sol.month; outDay = sol.day
     }
     // 太阳真时开启且换算成功 → 排盘用换算后的时辰
-    const finalHour = timeKnown ? (useTrueSolar && trueSolarHour != null ? trueSolarHour : hour) : 12
+    const useTS = timeKnown && useTrueSolar && trueSolarHour != null
+    const finalHour = useTS ? trueSolarHour : (timeKnown ? hour : 12)
+    // 换算跨了午夜就把日期一起挪过去，否则日柱按旧日期、时柱按新时辰，两者打架
+    if (useTS && trueSolarOffset) {
+      const d = shiftDate(outYear, outMonth, outDay, trueSolarOffset)
+      outYear = d.year; outMonth = d.month; outDay = d.day
+    }
     onDone({ year: outYear, month: outMonth, day: outDay, hour: finalHour, gender, name, timeKnown, sourceCalendar: calendar, useTrueSolar, trueSolarHour, placeLabel })
   }
 
@@ -207,7 +222,8 @@ function BirthFormComp({ onDone }) {
           day={day}
           hour={hour}
           useTrueSolar={useTrueSolar}
-          onChange={({ useTrueSolar: u, trueSolarHour: ts, placeLabel: pl }) => {
+          onChange={({ useTrueSolar: u, trueSolarHour: ts, trueSolarDayOffset: off, placeLabel: pl }) => {
+            setTrueSolarOffset(off || 0)
             setUseTrueSolar(u)
             setTrueSolarHour(ts)
             setPlaceLabel(pl)
@@ -234,7 +250,12 @@ const HOUR_LABEL = (h) => {
 }
 
 function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, onUpgrade }) {
-  const report = tab === 'ziping' ? buildBaziReport(chart) : buildMangpaiReport(chart)
+  // 同上：完整命书是重计算，不能挂在渲染路径上每次重跑。
+  // 依赖只有命盘与流派，两者不变则复用。
+  const report = useMemo(
+    () => (tab === 'ziping' ? buildBaziReport(chart) : buildMangpaiReport(chart)),
+    [chart, tab],
+  )
   const school = tab === 'ziping' ? '子平派' : '盲派'
   const reportRef = useRef(null)
   const handleMd = () => reportRef.current?.exportMd?.()

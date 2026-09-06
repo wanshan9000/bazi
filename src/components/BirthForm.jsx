@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ShichenPicker from './ShichenPicker.jsx'
 import TrueSolarField from './TrueSolarField.jsx'
-import { getLunarMonths, getLunarDayCount, lunarToSolar } from '../utils/lunar.js'
+import { getLunarMonths, getLunarDayCount, tryLunarToSolar } from '../utils/lunar.js'
 
 const SHICHEN = [
   { label: '子时', range: '23:00 - 01:00' },
@@ -81,7 +81,10 @@ export default function BirthForm({ onBack, onGenerate }) {
     let outYear = year, outMonth = month, outDay = day
     if (calendar === 'lunar') {
       // 农历日期 → 阳历，再走原有阳历排盘流程
-      const sol = lunarToSolar(year, month, day, lunarLeap)
+      const sol = tryLunarToSolar(year, month, day, lunarLeap)
+      // 农历下拉已按年份/闰月约束过取值，这里只是防御：换算不出来就不要提交，
+      // 绝不能把无效农历原样当公历排盘（那会排出一张看不出问题的错盘）。
+      if (!sol) return
       outYear = sol.year; outMonth = sol.month; outDay = sol.day
     }
     // 太阳真时开启且换算成功 → 排盘用换算后的时辰

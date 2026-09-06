@@ -32,6 +32,10 @@ export const api = {
   async smsSubscribe({ phone, code, birth, time, favZodiac }) {
     return request('/api/sms/subscribe', { method: 'POST', body: JSON.stringify({ phone, code, birth, time, favZodiac }) })
   },
+  // 凭手机号 + 验证码找回订阅令牌（换设备/清缓存后仍能管理自己的订阅）
+  async smsRecover({ phone, code }) {
+    return request('/api/sms/recover', { method: 'POST', body: JSON.stringify({ phone, code }) })
+  },
   // 获取微信扫码链接
   async wechatQr() {
     return request('/api/wechat/qr')
@@ -42,7 +46,7 @@ export const api = {
   },
   // 查询订阅状态
   async status(token) {
-    return request(`/api/status?token=${token}`)
+    return request(`/api/status?token=${encodeURIComponent(token)}`)
   },
   // 更新订阅偏好
   async update(token, patch) {

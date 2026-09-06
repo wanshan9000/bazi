@@ -22,8 +22,10 @@ import ReportView from './components/ReportView.jsx'
 import MembershipModal from './components/MembershipModal.jsx'
 import { buildChart } from './engine/bazi.js'
 import { loadHistory as loadTarot } from './data/tarot.js'
-import { getSession, logout as doLogout, syncMonthlyReset } from './data/users.js'
+import { getSession, logout as doLogout, syncMonthlyReset, consumeCredit } from './data/users.js'
+import { loadQuota, incTarot, isTarotOverLimit } from './engine/freeQuota.js'
 import { getMonthlyCredits } from './engine/membership.js'
+import { createAgentApi } from './api/agent.js'
 
 // VITE_AGENT_BACKEND=legacy 时走旧浏览器内编排；默认 dsh 基座
 const AgentChatImpl = import.meta.env.VITE_AGENT_BACKEND === 'legacy' ? AgentChat : AgentChatDsh
@@ -168,10 +170,15 @@ export default function App() {
     } catch { /* ignore */ }
   }, [history])
 
-  // 可被 hash 直达/恢复的视图白名单
-  const HASH_VIEWS = ['home', 'agent', 'bazi', 'ziwei', 'liuyao', 'qimen', 'hehun',
-    'chenggu', 'huangli', 'name', 'tarot', 'tarot-reading', 'wenku', 'article',
-    'profile', 'login', 'admin', 'share']
+  // 可被 hash 直达/恢复的视图白名单。
+  // 必须与下方实际渲染的 view 分支保持一致：
+  //  · 名单里有、但没有渲染分支 → 直达该 hash 得到一个空白页（此前的 liuyao、hehun，
+  //    这两个页面根本不存在，已移除）；
+  //  · 有渲染分支、但名单里没有 → goNav 不写 hash，刷新后回落首页
+  //    （此前的 astro、fengshui、register，已补上）。
+  const HASH_VIEWS = ['home', 'agent', 'bazi', 'ziwei', 'qimen', 'chenggu', 'huangli',
+    'name', 'fengshui', 'astro', 'tarot', 'tarot-reading', 'wenku', 'article',
+    'profile', 'login', 'register', 'admin', 'share']
 
   // 启动时检测 URL hash：
   //   #share=...     → 完整报告直接序列化在 URL 里，解码为只读报告
@@ -190,11 +197,20 @@ export default function App() {
       }
     }
     if (hash.startsWith('#share=')) {
-      const encoded = hash.slice('#share='.length)
-      const json = typeof atob !== 'undefined'
-        ? decodeURIComponent(escape(atob(encoded)))
-        : decodeURIComponent(encoded)
-      parseShare(json)
+      // atob 对非法 base64 会抛 InvalidCharacterError，decodeURIComponent 对残缺
+      // 百分号转义也会抛。这两步原先在 parseShare 的 try 之外，异常直接冒到
+      // useEffect，整个 App 白屏——别人转发时被聊天软件截断的长链就足以触发。
+      let json = null
+      try {
+        const encoded = hash.slice('#share='.length)
+        json = typeof atob !== 'undefined'
+          ? decodeURIComponent(escape(atob(encoded)))
+          : decodeURIComponent(encoded)
+      } catch (err) {
+        console.warn('分享链接解码失败', err)
+        setSharedReport(null)
+      }
+      if (json !== null) parseShare(json)
     } else if (hash.startsWith('#share-id=')) {
       const id = hash.slice('#share-id='.length)
       fetch(`/api/share/${encodeURIComponent(id)}`)
@@ -262,8 +278,28 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // 塔罗一次解读的计费闸门：游客扣免费配额，会员扣 5 积分。
+  // 首次抽牌由 TarotPage 在跳转前扣，这里服务于解读页里的「换一批 / 重抽这组」——
+  // 那两个按钮此前直接重新 drawCards，把配额与扣费彻底绕过去了。
+  const chargeTarotReading = () => {
+    if (user) {
+      const res = consumeCredit(user.id, 'tarot.reading')
+      if (!res.ok) return { ok: false, reason: res.reason }
+      if (res.user) setUser(res.user)
+      return { ok: true }
+    }
+    if (isTarotOverLimit(loadQuota().tarot || 0)) return { ok: false, reason: 'quota' }
+    incTarot()
+    return { ok: true }
+  }
+
   const handleLogin = (u) => {
     setUser(u)
+    // 把游客期间产生的 AI 会话认领到这个账号名下。
+    // 不做的话，uid 从 anon:xxx 变成账号 id，之前聊的内容全部「消失」。
+    // 失败不影响登录本身，静默重试没有意义，记一条日志即可。
+    createAgentApi(() => u.id).claimGuestSessions()
+      .catch(err => console.warn('游客会话认领失败', err))
     // 若排盘后曾要求登录 → 登录成功直接回到原排盘结果页
     if (pendingView) {
       const v = pendingView
@@ -353,6 +389,7 @@ export default function App() {
             onChart={handleChart}
             onRequireLogin={() => requireLogin('bazi')}
             onUpgrade={openSubscribe}
+            onUserChange={setUser}
           />
         )}
         {view === 'huangli' && (
@@ -371,6 +408,7 @@ export default function App() {
             user={user}
             onRequireLogin={() => requireLogin('ziwei')}
             onUpgrade={openSubscribe}
+            onUserChange={setUser}
           />
         )}
         {view === 'chenggu' && (
@@ -391,6 +429,7 @@ export default function App() {
             onBack={() => goNav('home')}
             user={user}
             onRequireLogin={() => requireLogin('qimen')}
+            onUserChange={setUser}
             onUpgrade={openSubscribe}
           />
         )}
@@ -409,6 +448,7 @@ export default function App() {
             user={user}
             onRequireLogin={() => requireLogin('tarot')}
             onUpgrade={openSubscribe}
+            onUserChange={setUser}
           />
         )}
         {view === 'tarot-reading' && (
@@ -416,6 +456,7 @@ export default function App() {
             spreadId={spreadId}
             onBack={() => goNav('tarot')}
             onReading={setTarotHistory}
+            onCharge={chargeTarotReading}
           />
         )}
         {view === 'agent' && (
@@ -426,6 +467,7 @@ export default function App() {
             user={user}
             onRequireLogin={() => requireLogin('agent')}
             onUpgrade={openSubscribe}
+            onUserChange={setUser}
           />
         )}
         {view === 'wenku' && (
@@ -514,7 +556,9 @@ function loadHistory() {
   }
 }
 
-function AgentPage({ chart, onBack, seedQuery, user, onRequireLogin }) {
+// onUpgrade 由调用处传入（App 里绑的是 openSubscribe），此前没解构也没往下传，
+// 于是元气 AI 里积分不足的分支永远拿不到回调，用户点了没有任何反应。
+function AgentPage({ chart, onBack, seedQuery, user, onRequireLogin, onUpgrade, onUserChange }) {
   return (
     <section className="agent-page page-shell">
       <button className="page-back" onClick={onBack} aria-label="返回首页">
@@ -528,11 +572,18 @@ function AgentPage({ chart, onBack, seedQuery, user, onRequireLogin }) {
         <span className="page-subtitle">问司命 · 八字 · 紫微，两门通晓</span>
       </h1>
       <div className="agent-page-card">
-        <AgentChatImpl key={seedQuery || 'fresh'} chart={chart} seedQuery={seedQuery} user={user} onRequireLogin={onRequireLogin} />
+        <AgentChatImpl key={seedQuery || 'fresh'} chart={chart} seedQuery={seedQuery} user={user} onRequireLogin={onRequireLogin} onUpgrade={onUpgrade} onUserChange={onUserChange} />
       </div>
     </section>
   )
 }
+
+// 站点合规信息全部来自构建期环境变量：没配就不渲染，绝不摆占位符。
+const ICP_NO = import.meta.env.VITE_ICP_NO || ''
+const POLICE_NO = import.meta.env.VITE_POLICE_NO || ''
+const PRIVACY_URL = import.meta.env.VITE_LEGAL_PRIVACY_URL || ''
+const TERMS_URL = import.meta.env.VITE_LEGAL_TERMS_URL || ''
+const CONTACT_EMAIL = import.meta.env.VITE_CONTACT_EMAIL || ''
 
 function TailBand({ onNav, hideOnMobile }) {
   return (
@@ -578,9 +629,12 @@ function TailBand({ onNav, hideOnMobile }) {
           <div className="tail-col">
             <p className="tail-col-title">关于</p>
             <ul>
-              <li><a>隐私政策</a></li>
-              <li><a>用户协议</a></li>
-              <li><a>联系我们</a></li>
+              {/* 隐私政策 / 用户协议是法律文本，必须由本人撰写后再挂出来。
+                  此前这三项是没有任何 onClick 的死链接，点了毫无反应 ——
+                  与其摆着不如先不放。配了 VITE_LEGAL_* 就会显示为真实链接。 */}
+              {PRIVACY_URL && <li><a href={PRIVACY_URL} target="_blank" rel="noreferrer">隐私政策</a></li>}
+              {TERMS_URL && <li><a href={TERMS_URL} target="_blank" rel="noreferrer">用户协议</a></li>}
+              {CONTACT_EMAIL && <li><a href={`mailto:${CONTACT_EMAIL}`}>联系我们</a></li>}
               <li><a onClick={() => onNav('admin')}>管理控制台</a></li>
             </ul>
           </div>
@@ -589,11 +643,15 @@ function TailBand({ onNav, hideOnMobile }) {
 
       <div className="tail-bottom">
         <p className="tail-copy">© 2025–2026 元氣滿滿 · 仅供娱乐参考 · 命由己造，相由心生</p>
-        <p className="tail-icp">
-          <span>沪 ICP 备 XXXXXXXX 号</span>
-          <span className="dot-sep">·</span>
-          <span>沪公网安备 XXXXXXXXXXXXXX 号</span>
-        </p>
+        {/* 备案号原先写死成 XXXXXXXX 占位。公网站点挂一个假的备案号比不挂更糟，
+            所以改成读环境变量，没配就整行不渲染。 */}
+        {(ICP_NO || POLICE_NO) && (
+          <p className="tail-icp">
+            {ICP_NO && <span>{ICP_NO}</span>}
+            {ICP_NO && POLICE_NO && <span className="dot-sep">·</span>}
+            {POLICE_NO && <span>{POLICE_NO}</span>}
+          </p>
+        )}
       </div>
     </footer>
   )

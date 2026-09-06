@@ -10,7 +10,7 @@ import TrueSolarField from './TrueSolarField.jsx'
 import FusedHuangliCard from './FusedHuangliCard.jsx'
 import ReportLock from './ReportLock.jsx'
 import { api } from '../api/client.js'
-import { getLunarMonths, getLunarDayCount, lunarToSolar } from '../utils/lunar.js'
+import { getLunarMonths, getLunarDayCount, tryLunarToSolar } from '../utils/lunar.js'
 
 const IDENTITY_OPTIONS = [
   { key: 'worker', name: '打工人', emoji: '💼' },
@@ -44,9 +44,27 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
   // 若外部八字变化，同步（App 里排完盘再来订阅）
   useEffect(() => { if (extChart) setChart(extChart) }, [extChart])
 
-  // 启动时探测后端是否可用
+  // 启动时探测后端是否可用，并记下短信/微信通道的真实状态。
+  // 「开发降级模式」这类文案只有在通道确实处于 mock 时才该出现 —— 此前是硬编码，
+  // 生产上配好了真实通道也照样显示，用户以为订阅只在本机生效。
+  const [channels, setChannels] = useState({ sms: null, wechat: null })
   useEffect(() => {
-    api.health().then(h => setServerOk(h.ok))
+    api.health().then(h => {
+      setServerOk(h.ok)
+      setChannels({ sms: h.sms || null, wechat: h.wechat || null })
+    }).catch(() => setServerOk(false))
+  }, [])
+
+  // 微信授权回调会带着结果跳回本页（#/huangli?wechat=ok|failed|state_invalid）
+  const [wechatResult, setWechatResult] = useState('')
+  useEffect(() => {
+    const m = (window.location.hash || '').match(/[?&]wechat=([a-z_]+)/)
+    if (!m) return
+    setWechatResult(m[1])
+    const tok = (window.location.hash || '').match(/[?&]token=([^&]+)/)
+    if (m[1] === 'ok' && tok) { try { setSubToken(decodeURIComponent(tok[1])) } catch { /* ignore */ } }
+    // 结果读走后清掉 query，避免刷新反复提示
+    try { window.history.replaceState(null, '', window.location.pathname + '#/huangli') } catch { /* ignore */ }
   }, [])
 
   // 订阅持久化
@@ -63,7 +81,24 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
 
   // 浏览器通知授权统一交给 SubscribeBar 内部处理（弹层内可一并开启）
   // 保留占位 prop，避免破坏父组件 onToggleNotify 接口
-  const toggleNotify = () => { /* 由 SubscribeBar.handleSwitchClick 接管 */ }
+  // 浏览器通知：此前是个空函数，开关点了什么都不发生。
+  // 现在真的申请权限并给出结果反馈（后端不可用时这是唯一的提醒方式）。
+  const toggleNotify = async () => {
+    if (typeof Notification === 'undefined') {
+      window.alert('当前浏览器不支持桌面通知')
+      return
+    }
+    if (Notification.permission === 'granted') {
+      new Notification('元气黄历', { body: '通知已开启，每日黄历将在此提醒你。' })
+      return
+    }
+    if (Notification.permission === 'denied') {
+      window.alert('通知权限已被拒绝，请在浏览器站点设置里重新允许')
+      return
+    }
+    const p = await Notification.requestPermission()
+    if (p === 'granted') new Notification('元气黄历', { body: '通知已开启，每日黄历将在此提醒你。' })
+  }
 
   return (
     <div className="page-wrap hl-page">
@@ -104,6 +139,8 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
                   subToken={subToken}
                   onSubscribed={token => setSubToken(token)}
                   serverOk={serverOk}
+                  channels={channels}
+                  wechatResult={wechatResult}
                   user={user}
                   onRequireLogin={onRequireLogin}
                 />
@@ -172,7 +209,10 @@ function BirthForm({ onDone }) {
   const submit = () => {
     let outYear = year, outMonth = month, outDay = day
     if (calendar === 'lunar') {
-      const sol = lunarToSolar(year, month, day, lunarLeap)
+      const sol = tryLunarToSolar(year, month, day, lunarLeap)
+      // 农历下拉已按年份/闰月约束过取值，这里只是防御：换算不出来就不要提交，
+      // 绝不能把无效农历原样当公历排盘（那会排出一张看不出问题的错盘）。
+      if (!sol) return
       outYear = sol.year; outMonth = sol.month; outDay = sol.day
     }
     // 太阳真时开启且换算成功 → 排盘用换算后的时辰
@@ -322,7 +362,11 @@ function birthFromChart(chart) {
   }
 }
 
-function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscribed, serverOk, user, onRequireLogin }) {
+function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscribed, serverOk, channels = {}, wechatResult = '', user, onRequireLogin }) {
+  // 通道是否处于本地降级（未配置真实凭证）。null 表示还没探测到，按「已配置」处理，
+  // 避免探测期间闪一下「开发降级模式」。
+  const smsMock = channels.sms === 'local(mock)'
+  const wechatMock = channels.wechat === 'local(mock)'
   const fav = pref.favZodiac || []
   const [tab, setTab] = useState(serverOk ? 'sms' : 'local') // sms | wechat | local
   const [phone, setPhone] = useState('')
@@ -394,7 +438,7 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
         // 降级：模拟扫码完成，直接生成一个微信订阅
         const done = await api.wechatMockDone({ phone: phone || undefined, birth: birthFromChart(chart), time: pref.time, favZodiac: fav })
         if (done.token) onSubscribed(done.token)
-        flash('ok', '微信订阅成功（开发降级模式）')
+        flash('ok', wechatMock ? '微信订阅成功（本地降级模式）' : '微信订阅成功')
       } else if (r.url) {
         window.location.href = r.url
       }
@@ -544,12 +588,17 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
               <button className="hl-modal-close" onClick={() => setShowModal(false)} aria-label="关闭">×</button>
             </div>
 
-            <div className="hl-modal-dev-note">
-              <span className="hl-modal-dev-ic">🛠️</span>
-              <span>
-                <b>后续配置：</b>短信供应商 API · 微信扫码服务密钥接入后即可上线真实推送。当前为开发降级模式，订阅仅在本机生效。
-              </span>
-            </div>
+            {(smsMock || wechatMock) && (
+              <div className="hl-modal-dev-note">
+                <span className="hl-modal-dev-ic">🛠️</span>
+                <span>
+                  <b>当前为本地降级模式：</b>短信 / 微信通道尚未配置真实凭证，订阅仅在本机生效。
+                </span>
+              </div>
+            )}
+            {wechatResult === 'ok' && <div className="hl-modal-dev-note">✅ 微信订阅已开通</div>}
+            {wechatResult === 'failed' && <div className="hl-modal-dev-note">⚠️ 微信授权失败，请重试</div>}
+            {wechatResult === 'state_invalid' && <div className="hl-modal-dev-note">⚠️ 授权链接已失效，请重新发起扫码</div>}
 
             <div className="hl-sub-methods">
               <button className={`hl-sub-method ${tab === 'sms' ? 'active' : ''}`} onClick={() => setTab('sms')}>📱 手机短信</button>
@@ -568,7 +617,7 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
                   </button>
                 </div>
                 {devCode && (
-                  <div className="hl-dev-code">开发模式验证码：<b>{devCode}</b></div>
+                  <div className="hl-dev-code">本地降级模式验证码：<b>{devCode}</b></div>
                 )}
                 <button className="hl-sub-btn" onClick={handleSmsSubscribe} disabled={busy}>
                   {busy ? '提交中…' : '✦ 立即订阅'}
@@ -580,7 +629,7 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
                 <button className="hl-sub-btn wx" onClick={handleWechat} disabled={busy}>
                   {busy ? '处理中…' : '💬 打开微信扫码订阅'}
                 </button>
-                <div className="hl-dev-code">开发降级模式：点击后直接生成模拟微信订阅</div>
+                {wechatMock && <div className="hl-dev-code">本地降级模式：点击后直接生成模拟微信订阅</div>}
               </div>
             )}
 

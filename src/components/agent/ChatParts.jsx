@@ -86,6 +86,16 @@ export function ThinkBlock({ content, streaming = false }) {
   )
 }
 
+// 工具英文名 → 中文名。必须与 server/dsh/events.js 的 TOOL_NAME_CN 保持一致：
+// 服务端在写入镜像时会把名字转成中文，而 SSE 的 tool_call 事件带的是英文原名。
+// 前端不做同样的转换的话，实时对话里显示 "bazi"、刷新恢复历史后显示"八字排盘"，
+// 同一件事两个样子。
+export const TOOL_NAME_CN = {
+  bazi: '八字排盘', ziwei: '紫微排盘', liuyao: '六爻起卦', qimen: '奇门排盘', huangli: '黄历查询',
+  modern_huangli: '幽默黄历', tarot: '塔罗抽牌', name: '姓名分析', fengshui: '风水分析', wuyunliuqi: '五运六气',
+  report: '测算报告', skill: '加载技能',
+}
+
 // 工具调用：可折叠块，列出本次会话实际触发的工具（中文名 + 数量）
 export function ToolCallsBlock({ names }) {
   const [open, setOpen] = useState(false)
@@ -103,7 +113,7 @@ export function ToolCallsBlock({ names }) {
           {list.map((n, i) => (
             <div className="tool-item" key={`t${i}`}>
               <span className="tool-item-dot" />
-              <span className="tool-item-name">{n}</span>
+              <span className="tool-item-name">{TOOL_NAME_CN[n] || n}</span>
             </div>
           ))}
         </div>
@@ -169,16 +179,17 @@ export function renderAiText(text, streaming = false) {
   // ### 一、xxx 之类的章节标题，没有正文。这种情况下视觉上是一个"几乎空"的框，
   // 追加一行小提示，引导用户重发，避免误判为"啥都没有"。
   if (!streaming) {
-    const onlyTitles = nodes.length > 0 && nodes.every(n => {
-      if (!n.props || !n.props.children) return false
-      const inner = String(n.props.children)
-      // 只匹配像 "### 一、事业" / "## 财运" 之类的标题行（允许少量换行/空白）
-      return /^\s*(#{1,4})\s+.+?\s*$/.test(inner.trim()) || inner.replace(/[\s#\d一二三四五六七八九十、章节标题话\s]/g, '').length < 4
-    })
+    // ⚠ 这里原先用 `String(n.props.children)` 判断 —— children 多数是 React 元素
+    // 数组，String() 出来是 "[object Object]" 之类，正则永远不匹配，
+    // 这条兜底提示实际上从来没有触发过。改为从渲染后的纯文本判断。
+    const plain = String(text || '').trim()
+    const lines = plain.split('\n').map(l => l.trim()).filter(Boolean)
+    const onlyTitles = lines.length > 0 && lines.every(l => /^#{1,4}\s+\S/.test(l))
+      && plain.replace(/^#{1,4}\s+/gm, '').replace(/\s/g, '').length < 40
     if (onlyTitles) {
       nodes.push(
         <div key="incomplete" className="md-block" style={{ color: '#a07a8c', fontSize: 12, marginTop: 8, opacity: 0.85 }}>
-          ✦ 看起来这次只输出了章节标题，正文未生成完整（可能是网络或 token 截断）。可点击「重新生成」或换一句话再试。
+          ✦ 看起来这次只输出了章节标题，正文未生成完整（可能是网络或 token 截断）。换一句话再问一次试试。
         </div>
       )
     }

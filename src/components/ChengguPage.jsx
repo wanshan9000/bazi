@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { weighBones } from '../engine/chenggu.js'
 import ShichenPicker from './ShichenPicker.jsx'
-import { getLunarMonths, getLunarDayCount, lunarToSolar } from '../utils/lunar.js'
+import { getLunarMonths, getLunarDayCount, tryLunarToSolar } from '../utils/lunar.js'
 
 const SHICHEN = [
   ['子时', '23-01'], ['丑时', '01-03'], ['寅时', '03-05'], ['卯时', '05-07'],
@@ -53,7 +53,7 @@ export default function ChengguPage({ onBack }) {
                 <span className="cg-grade-tone">{result.summary.tone}</span>
               </div>
               <div className="cg-summary-meta">
-                {result.summary.lunarYear} 年 · {result.summary.lunarMonth} · {result.summary.lunarDay} · {result.summary.shiChen}时 · {result.summary.gender === 'male' ? '男' : '女'}
+                {result.summary.lunarYear} 年 · {result.summary.lunarMonth} · {result.summary.lunarDay} · {result.summary.shiChen}时 · {result.summary.gender === '女' ? '女' : '男'}
               </div>
               <p className="cg-summary-desc">{result.verdict.desc}</p>
               <p className="cg-summary-plain">{result.verdict.plain}</p>
@@ -127,7 +127,10 @@ function ChengguForm({ onDone }) {
   const submit = () => {
     let outYear = year, outMonth = month, outDay = day
     if (calendar === 'lunar') {
-      const sol = lunarToSolar(year, month, day, lunarLeap)
+      const sol = tryLunarToSolar(year, month, day, lunarLeap)
+      // 农历下拉已按年份/闰月约束过取值，这里只是防御：换算不出来就不要提交，
+      // 绝不能把无效农历原样当公历排盘（那会排出一张看不出问题的错盘）。
+      if (!sol) return
       outYear = sol.year; outMonth = sol.month; outDay = sol.day
     }
     onDone({ year: outYear, month: outMonth, day: outDay, hour: timeKnown ? hour : 12, gender, name, sourceCalendar: calendar })

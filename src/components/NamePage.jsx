@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { analyzeName, recommendName } from '../engine/nameAnalysis.js'
 import { buildChart } from '../engine/bazi.js'
-import { getLunarMonths, getLunarDayCount, lunarToSolar } from '../utils/lunar.js'
+import { getLunarMonths, getLunarDayCount, tryLunarToSolar } from '../utils/lunar.js'
 
 export default function NamePage({ chart, onBack, onChart }) {
   const [fullName, setFullName] = useState('')
@@ -187,7 +187,7 @@ function BaziMiniForm({ onGenerate }) {
   const [day, setDay] = useState(1)
   const [lunarLeap, setLunarLeap] = useState(false)
   const [hour, setHour] = useState(12)
-  const [gender, setGender] = useState('male')
+  const [gender, setGender] = useState('男')
   const daysInMonth = (yy, mm) => new Date(yy, mm, 0).getDate()
   const lunarMonths = calendar === 'lunar' ? getLunarMonths(year) : []
   const maxDay = calendar === 'lunar' ? getLunarDayCount(year, month, lunarLeap) : daysInMonth(year, month)
@@ -201,7 +201,10 @@ function BaziMiniForm({ onGenerate }) {
   const submit = () => {
     let outMonth = month, outDay = day
     if (calendar === 'lunar') {
-      const sol = lunarToSolar(year, month, day, lunarLeap)
+      const sol = tryLunarToSolar(year, month, day, lunarLeap)
+      // 农历下拉已按年份/闰月约束过取值，这里只是防御：换算不出来就不要提交，
+      // 绝不能把无效农历原样当公历排盘（那会排出一张看不出问题的错盘）。
+      if (!sol) return
       outMonth = sol.month; outDay = sol.day
     }
     onGenerate({ year, month: outMonth, day: outDay, hour, gender, sourceCalendar: calendar })
@@ -234,8 +237,8 @@ function BaziMiniForm({ onGenerate }) {
         <label><span>时</span><input type="number" min="0" max="23" value={hour} onChange={e => setHour(+e.target.value)} /></label>
         <label><span>性别</span>
           <select value={gender} onChange={e => setGender(e.target.value)}>
-            <option value="male">男</option>
-            <option value="female">女</option>
+            <option value="男">男</option>
+            <option value="女">女</option>
           </select>
         </label>
         <button className="btn small" onClick={submit}>排盘</button>

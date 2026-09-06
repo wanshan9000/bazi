@@ -5,6 +5,7 @@ import { currentUid } from '../engine/userScope.js'
 import { buildChart } from '../engine/bazi.js'
 import { listCollection, saveToCollection, removeFromCollection } from '../engine/chartCollection.js'
 import { consumeCredit } from '../data/users.js'
+import { canAfford } from '../engine/membership.js'
 import { loadQuota, addAgentTokens, tokensToCredits, isAgentOverQuota } from '../engine/freeQuota.js'
 import { renderMarkdown } from '../utils/markdown.jsx'
 import { ThinkBlock, ToolCallsBlock, CopyButton, renderAiText, timeNow, fmtSessionTime, QUICK } from './agent/ChatParts.jsx'
@@ -13,10 +14,13 @@ const api = createAgentApi(currentUid)
 const ROUTE_KEY = 'genki-agent-route'
 const OPENING = ['我是「司命」。八字、紫微、六爻、奇门、黄历、塔罗、取名、风水，心有所问，尽管开口。', '把出生年月日时和性别告诉我，我先为你排盘；也可以直接问今年运势、事业、姻缘。']
 
-function chartMeta(c) { return c ? { year: c.year, month: c.month, day: c.day, hour: c.hour ?? 12, gender: c.gender } : null }
+// hour 缺失表示「时辰未知」，不能悄悄补成 12 点：服务端会把它当成确定的午时写进
+// 命盘行，模型据此排出的时柱是编的，用户却看不出来。原样传 null，由服务端与人设
+// 决定怎么向用户说明。
+function chartMeta(c) { return c ? { year: c.year, month: c.month, day: c.day, hour: c.hour ?? null, gender: c.gender } : null }
 function chartLabel(c) { return `${c.gender === '女' ? '坤造' : '乾造'} · ${c.year}年${c.month}月${c.day}日${c.hour ? ` ${c.hour}时` : ''}` }
 
-export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequireLogin, onUpgrade }) {
+export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequireLogin, onUpgrade, onUserChange }) {
   const [messages, setMessages] = useState(() => OPENING.map((text, i) => ({ id: `boot-${i}`, role: 'ai', text, time: timeNow(), _counted: true })))
   const [input, setInput] = useState('')
   const [typing, setTyping] = useState(false)
@@ -45,13 +49,20 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
     return () => { clearTimeout(t); document.removeEventListener('click', close) }
   }, [pickerOpen])
 
-  // 计费：每条完成的 AI 回复扣 1 积分（登录）或累加 token 估算（游客），与旧组件口径一致
+  // 计费：每条「成功完成」的 AI 回复扣 1 积分（登录）或累加 token 估算（游客）。
+  // _failed 的回复不计费 —— 网络中断、服务端报错、用户中途停止都会留下半截文字，
+  // 此前一律照扣，用户为一条没读到的答案付了钱。
   useEffect(() => {
     const last = messages[messages.length - 1]
     if (!last || last.role !== 'ai' || last.streaming || last._counted || !last.text) return
+    if (last._failed) {
+      setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, _counted: true } : m))
+      return
+    }
     if (user) {
       const res = consumeCredit(user.id, 'agent.chat')
       if (!res.ok && res.reason === 'insufficient' && onUpgrade) onUpgrade()
+      else if (res.ok && res.user) onUserChange && onUserChange(res.user)
     } else {
       const n = addAgentTokens(Math.ceil(last.text.length / 3))
       setAgentTokens(n)
@@ -73,6 +84,14 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
   const send = async (text) => {
     const q = (text || input).trim()
     if (!q || typing) return
+    // 额度必须在发请求之前拦。此前是「先聊完再扣、扣不动只弹个可关闭的窗」，
+    // 游客关掉弹窗就能接着无限聊，登录用户余额为 0 也照样能把请求打到付费模型上。
+    if (user) {
+      if (!canAfford(user, 'agent.chat')) { onUpgrade && onUpgrade(user.plan === 'earth' ? 'heaven' : 'oracle'); return }
+    } else if (isAgentOverQuota(agentTokens)) {
+      setQuotaDismissed(false)
+      return
+    }
     setInput('')
     setTyping(true)
     setMessages(prev => [...prev, { id: `u-${Date.now()}`, role: 'user', text: q, time: timeNow() }, { id: `a-${Date.now()}`, role: 'ai', text: '', reasoning: '', tools: [], streaming: true, time: timeNow() }])
@@ -95,19 +114,36 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
               break
             // 追加而不是二选一：模型已经吐了半截又报错时，丢掉已渲染的文字
             // 会让用户看着内容凭空消失；把错误接在后面，两样都留住。
-            case 'error': patchLast(m => ({ ...m, text: (m.text ? m.text + '\n\n' : '') + `⚠️ ${e.message}`, streaming: false })); break
+            case 'error': patchLast(m => ({ ...m, text: (m.text ? m.text + '\n\n' : '') + `⚠️ ${e.message}`, streaming: false, _failed: true })); break
             case 'done': patchLast(m => ({ ...m, streaming: false })); break
             default: break
           }
         },
       })
     } catch (err) {
-      patchLast(m => ({ ...m, text: m.text || `⚠️ ${err.message || '网络异常'}`, streaming: false }))
+      // 会话在服务端已不存在（重启/淘汰/删除）→ 清掉本地 sessionId，
+      // 否则之后每一次发送都会打到同一个 404 上，用户只能刷新页面。
+      if (/会话不存在|404/.test(String(err && err.message))) setSessionId(null)
+      // 连接中断时若已经吐了半截字，此前只是把 streaming 关掉、错误被吞掉，
+      // 用户看到的是一段没有任何提示的截断回复。补上提示并标记为失败（不计费）。
+      const aborted = err && (err.name === 'AbortError' || ac.signal.aborted)
+      patchLast(m => ({
+        ...m,
+        text: aborted
+          ? (m.text ? m.text + '\n\n⏹ 已停止生成' : '⏹ 已停止生成')
+          : (m.text ? m.text + '\n\n' : '') + `⚠️ ${err.message || '网络异常，回复未完成'}`,
+        streaming: false,
+        _failed: true,
+      }))
     } finally {
       patchLast(m => ({ ...m, streaming: false }))
       setTyping(false)
       abortRef.current = null
     }
+  }
+
+  const stopGenerating = () => {
+    if (abortRef.current) abortRef.current.abort()
   }
 
   const newChat = () => {
@@ -119,27 +155,48 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
     setMessages(OPENING.map((text, i) => ({ id: `boot-${Date.now()}-${i}`, role: 'ai', text, time: timeNow(), _counted: true })))
   }
 
+  // 历史面板的加载/恢复/删除此前一律 catch 后静默吞掉：网络断了、会话在服务端
+  // 已不存在，用户点了什么都不发生，只能一直重试。统一给出可见反馈。
+  const [historyErr, setHistoryErr] = useState('')
+
   const openHistory = async () => {
-    try { const r = await api.listSessions(); setSessions(r.sessions || []) } catch { setSessions([]) }
+    setHistoryErr('')
     setShowHistory(true)
+    try {
+      const r = await api.listSessions()
+      setSessions(r.sessions || [])
+    } catch (e) {
+      setSessions([])
+      setHistoryErr('会话列表加载失败，请检查网络后重试')
+    }
   }
 
   const restore = async (s) => {
+    setHistoryErr('')
     try {
       const r = await api.loadMessages(s.id)
       setMessages((r.messages || []).map((m, i) => m.kind === 'report'
         ? { id: `h-${i}`, role: 'ai', kind: 'report', report: { title: (m.text.match(/^# (.+)$/m) || [])[1] || '测算报告', markdown: m.text }, time: m.time, _counted: true }
         : { id: `h-${i}`, role: m.role, text: m.text, time: m.time, _counted: true }))
       setSessionId(s.id)
-      if (s.chartKey) { const [y, mo, d, h, g] = s.chartKey.split('-'); try { setActiveChart(buildChart(+y, +mo, +d, +h, g)) } catch { /* 忽略 */ } }
-    } catch { /* 忽略 */ }
-    setShowHistory(false)
+      if (s.chartKey) { const [y, mo, d, h, g] = s.chartKey.split('-'); try { setActiveChart(buildChart(+y, +mo, +d, +h, g)) } catch { /* 命盘键格式异常：不影响正文恢复 */ } }
+      setShowHistory(false)
+    } catch (e) {
+      // 会话在服务端已不存在（被淘汰/删除）→ 从列表里摘掉，不要让用户反复点一个死条目
+      setSessions(prev => prev.filter(x => x.id !== s.id))
+      setHistoryErr('该会话已不存在或加载失败')
+    }
   }
 
   const del = async (id) => {
-    try { await api.deleteSession(id) } catch { /* 忽略 */ }
-    setSessions(prev => prev.filter(s => s.id !== id))
-    if (sessionId === id) newChat()
+    setHistoryErr('')
+    try {
+      await api.deleteSession(id)
+      setSessions(prev => prev.filter(s => s.id !== id))
+      if (sessionId === id) newChat()
+    } catch (e) {
+      setHistoryErr('删除失败，请稍后重试')
+    }
   }
 
   const refreshCollection = () => setCollection(listCollection())
@@ -153,8 +210,23 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
   const switchToCollected = (it) => {
     try { setActiveChart(buildChart(it.year, it.month, it.day, it.hour, it.gender)); setSessionId(null); setShowCollection(false) } catch { /* 忽略 */ }
   }
-  const pickRoute = (key) => { setRoute(key); try { localStorage.setItem(ROUTE_KEY, key) } catch { /* 忽略 */ } setPickerOpen(false); setSessionId(null) }
-  const handleKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }
+  // 换模型 = 换一个服务端会话。此前只把 sessionId 置空却保留了聊天记录：
+  // 界面上还挂着上文，服务端却是一张白纸，模型完全不知道前面聊过什么，
+  // 用户以为它「突然失忆」。直接开一段新对话，语义才是一致的。
+  const pickRoute = (key) => {
+    setRoute(key)
+    try { localStorage.setItem(ROUTE_KEY, key) } catch { /* 忽略 */ }
+    setPickerOpen(false)
+    if (key !== route) newChat()
+  }
+  // ⚠ 必须避开输入法组合态：中文拼音输入时按回车是「确认候选词」，
+  // 不判 isComposing / keyCode 229 的话，那一下会把还没选完的半截文本直接发出去。
+  const handleKey = (e) => {
+    if (e.key !== 'Enter' || e.shiftKey) return
+    if (e.nativeEvent?.isComposing || e.keyCode === 229) return
+    e.preventDefault()
+    send()
+  }
   const routeLabel = (models.routes.find(r => r.key === (route || models.default)) || {}).label || '司命'
 
   return (
@@ -185,6 +257,9 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
               <div className="session-drawer-titles"><span className="session-drawer-title">会话历史</span><span className="session-drawer-sub">共 {sessions.length} 次 · 点击恢复</span></div>
               <div className="session-drawer-ops"><button className="session-close-btn" onClick={() => setShowHistory(false)}>关闭</button></div>
             </div>
+            {historyErr && (
+              <div className="session-empty" style={{ color: 'var(--danger, #c0392b)' }}>{historyErr}</div>
+            )}
             <div className="session-list">
               {sessions.length === 0 ? <div className="session-empty">暂无历史会话，聊两句就会自动记录。</div> : sessions.map(s => (
                 <div key={s.id} className={`session-item ${s.id === sessionId ? 'active' : ''}`} onClick={() => restore(s)}>
@@ -281,9 +356,16 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
             </div>
           )}
         </div>
-        <button className="send-btn" onClick={() => send()} disabled={typing || !input.trim()}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13" /><path d="M22 2L15 22l-4-9-9-4z" /></svg>
-        </button>
+        {/* 生成中把发送键换成停止键：此前一旦模型开始长篇输出就只能干等，没有任何出口 */}
+        {typing ? (
+          <button className="send-btn" onClick={stopGenerating} title="停止生成" aria-label="停止生成">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+          </button>
+        ) : (
+          <button className="send-btn" onClick={() => send()} disabled={!input.trim()}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13" /><path d="M22 2L15 22l-4-9-9-4z" /></svg>
+          </button>
+        )}
       </div>
 
       {!user && isAgentOverQuota(agentTokens) && !quotaDismissed && (

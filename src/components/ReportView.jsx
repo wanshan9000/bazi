@@ -269,12 +269,9 @@ const META_ORDER = {
   huangli: [['date', '日期'], ['lunar', '农历'], ['yiji', '宜忌']],
 }
 
-const ReportView = forwardRef(function ReportView({ report, lead, hideLead = false, readonly = false }, ref) {
+const ReportViewBody = forwardRef(function ReportViewBody({ report, lead, hideLead = false, readonly = false }, ref) {
   const [copied, setCopied] = useState(false)
   const [showTop, setShowTop] = useState(false)
-  if (!report || !report.ok) {
-    return <div className="bazi-report br-error">{report?.error || '报告生成失败'}</div>
-  }
 
   const accent = BR_ACCENT[report.type] || BR_ACCENT.qimen
   const style = { '--br-accent': accent.hex, '--br-accent-rgb': accent.rgb }
@@ -293,7 +290,9 @@ const ReportView = forwardRef(function ReportView({ report, lead, hideLead = fal
   }
 
   const metaItems = ((META_ORDER[report.type] || []))
-    .map(([label, key]) => {
+    // ⚠ META_ORDER 的每一项是 [字段名, 显示标签]，此前解构成 [label, key] 正好写反：
+    // 拿显示标签去 report.meta 里取值，永远取不到，概览条一直是空的。
+    .map(([key, label]) => {
       const v = report.meta && report.meta[key]
       if (v === undefined || v === null || v === '') return null
       return { label, value: Array.isArray(v) ? v.join('、') : String(v) }
@@ -393,10 +392,18 @@ const ReportView = forwardRef(function ReportView({ report, lead, hideLead = fal
       if (typeof navigator !== 'undefined' && navigator.share) {
         try {
           const text = (report.markdown || '').split('\n').slice(0, 6).join('\n').replace(/[#*>`]/g, '').trim()
+          // ⚠ 这里原先分享的是 `base`，也就是站点首页 —— 收件人点开只看到落地页，
+          // 根本打不开这份报告。必须带上真正的报告链接：优先服务端短链，
+          // 后端不可用时退回自包含的 #share= 长链。
+          let shareUrl = null
+          try { shareUrl = await buildShortShareUrl() } catch { shareUrl = null }
+          if (!shareUrl) {
+            try { shareUrl = buildFullShareUrl() } catch { shareUrl = base }
+          }
           await navigator.share({
             title,
             text: `${title}\n\n${text}\n\n这是一份只读报告，访客可阅读但不能再次转发 ↗`,
-            url: base
+            url: shareUrl
           })
           setShared(true)
           setTimeout(() => setShared(false), 1600)
@@ -1824,6 +1831,18 @@ const main = (s.data.items || []).filter(it => it.sub || it.desc)
       )}
     </div>
   )
+})
+
+// 「报告失败」这条分支必须待在外层。它原先写在组件体内、且在 useEffect /
+// useImperativeHandle 等十来个 Hook 之前就 return —— 失败态只跑 2 个 Hook，成功态跑十几个，
+// 同一个组件在 ok↔fail 之间切换时 React 直接抛 “Rendered more hooks than during the
+// previous render”。拆成外层守卫 + 内层组件后，两种形态是不同组件，各自的 Hook 表互不干扰。
+const ReportView = forwardRef(function ReportView(props, ref) {
+  const { report } = props
+  if (!report || !report.ok) {
+    return <div className="bazi-report br-error">{report?.error || '报告生成失败'}</div>
+  }
+  return <ReportViewBody {...props} ref={ref} />
 })
 
 export default ReportView

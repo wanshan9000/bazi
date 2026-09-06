@@ -58,7 +58,7 @@ function SpreadPreview({ spread, drawn = 0 }) {
   )
 }
 
-export default function TarotPage({ onBack, onStart, history, user, onRequireLogin, onUpgrade }) {
+export default function TarotPage({ onBack, onStart, history, user, onRequireLogin, onUpgrade, onUserChange }) {
   const [cat, setCat] = useState('all')
   // 游客免费配额（塔罗 10 次含 10），注册会员不计数
   const [tarotUsed, setTarotUsed] = useState(0)
@@ -95,6 +95,20 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
           <p className="quota-hint rise rise-2">
             {planByKey(user.plan).name}会员 · 每次抽牌消耗 <b>5</b> 积分 · 本月剩余 <b>{getMonthlyCredits(user)}</b>
           </p>
+        )}
+
+        {/* 积分不足：此前只 setInsufficient(true) 却从不渲染，用户点「抽这组牌」毫无反应 */}
+        {user && insufficient && (
+          <div className="rise rise-2" style={{ marginTop: 16 }}>
+            <UpgradePrompt
+              featureName="塔罗完整解读"
+              cost={5}
+              remaining={getMonthlyCredits(user)}
+              planLabel={planByKey(user.plan).name}
+              onUpgrade={onUpgrade ? () => onUpgrade(user.plan === 'earth' ? 'heaven' : 'oracle') : null}
+              onClose={() => setInsufficient(false)}
+            />
+          </div>
         )}
 
         {/* 主题分类筛选 */}
@@ -173,6 +187,8 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
                           setInsufficient(true)
                           return
                         }
+                        setInsufficient(false)
+                        if (res.user) onUserChange && onUserChange(res.user)
                       } else {
                         setTarotUsed(incTarot())
                       }

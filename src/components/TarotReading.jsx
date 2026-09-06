@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { drawCards, interpret, saveHistory, SPREAD_MAP } from '../data/tarot.js'
 
 const STAGES = { INTRO: 'intro', SHUFFLE: 'shuffle', PICK: 'pick', READING: 'reading' }
@@ -91,7 +91,10 @@ function SpreadLayout({ spread, drawn }) {
   )
 }
 
-export default function TarotReading({ spreadId, onBack, onReading }) {
+// onCharge：由 App 注入的计费闸门（游客扣免费配额 / 会员扣积分），返回 { ok, reason }。
+// 「换一批」是一次全新解读，必须和首次抽牌走同一条闸门 —— 此前它直接重抽，
+// 等于把 10 次游客配额和 5 积分的扣费彻底绕开，无限白嫖。
+export default function TarotReading({ spreadId, onBack, onReading, onCharge }) {
   const spread = SPREAD_MAP[spreadId]
   const [stage, setStage] = useState(STAGES.INTRO)
   const [question, setQuestion] = useState('')
@@ -99,13 +102,35 @@ export default function TarotReading({ spreadId, onBack, onReading }) {
   const [revealed, setRevealed] = useState(0)
   const [interpretation, setInterpretation] = useState(null)
 
+  // TarotPage 在跳转过来之前已经为「这一次解读」扣过费，所以进入本页后的第一次抽牌
+  // 不再重复计费；此后的每一次重抽都是一次全新解读，都要重新过闸门。
+  const firstDrawRef = useRef(true)
+  const [chargeErr, setChargeErr] = useState('')
+
   useEffect(() => {
     setStage(STAGES.INTRO)
     setDrawn([])
     setRevealed(0)
     setInterpretation(null)
     setQuestion('')
+    setChargeErr('')
+    firstDrawRef.current = true
   }, [spreadId])
+
+  /** 抽牌前的计费闸门。返回 false 表示这次抽牌不该发生。 */
+  const passCharge = () => {
+    if (firstDrawRef.current) { firstDrawRef.current = false; return true }
+    if (!onCharge) return true
+    const res = onCharge()
+    if (!res || !res.ok) {
+      setChargeErr(res && res.reason === 'quota'
+        ? '游客免费次数已用完，登录后可继续抽牌'
+        : '本月积分不足，升级档位后可继续抽牌')
+      return false
+    }
+    setChargeErr('')
+    return true
+  }
 
   if (!spread) {
     return (
@@ -119,6 +144,7 @@ export default function TarotReading({ spreadId, onBack, onReading }) {
   }
 
   const startShuffle = () => {
+    if (!passCharge()) return
     setStage(STAGES.SHUFFLE)
     setTimeout(() => {
       const result = drawCards(spreadId, Date.now())
@@ -176,8 +202,9 @@ export default function TarotReading({ spreadId, onBack, onReading }) {
     setQuestion('')
   }
 
-  // 换一批：后台直接重新随机抽牌，保留问题，跳过输入/洗牌动画
+  // 换一批：保留问题重新随机抽牌，跳过输入/洗牌动画。先过计费闸门。
   const reshuffle = () => {
+    if (!passCharge()) return
     const result = drawCards(spreadId, Date.now())
     setDrawn(result.cards)
     setRevealed(0)
@@ -287,7 +314,8 @@ export default function TarotReading({ spreadId, onBack, onReading }) {
                   🔄 换一批
                 </button>
               </div>
-              <p className="form-note">按顺序点击卡牌翻牌，牌位意义见下方 · 不满意可随时换一批</p>
+              {chargeErr && <p className="form-note" style={{ color: 'var(--danger, #c0392b)' }}>{chargeErr}</p>}
+              <p className="form-note">按顺序点击卡牌翻牌，牌位意义见下方 · 换一批将重新计一次解读</p>
             </div>
             <div className="pick-positions">
               {spread.positions.map((p, i) => (
@@ -311,10 +339,11 @@ export default function TarotReading({ spreadId, onBack, onReading }) {
               <div className="tr-head">
                 <h3 className="tr-title">牌面</h3>
                 <div className="tr-actions">
-                  <button className="btn ghost small" onClick={reshuffle} title="后台重新随机抽一组新牌">🔄 换一批</button>
+                  <button className="btn ghost small" onClick={reshuffle} title="重新随机抽一组新牌（重新计一次解读）">🔄 换一批</button>
                   <button className="btn ghost small" onClick={reset}>重抽这组</button>
                 </div>
               </div>
+              {chargeErr && <p className="form-note" style={{ color: 'var(--danger, #c0392b)' }}>{chargeErr}</p>}
               {question && (
                 <div className="tr-question">
                   <span className="trq-label">你的问题</span>

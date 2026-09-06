@@ -45,7 +45,7 @@ function nowParts() {
   };
 }
 
-export default function QimenPage({ user, onRequireLogin, onUpgrade }) {
+export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChange }) {
   const initial = useMemo(() => {
     const n = nowParts();
     return {
@@ -62,6 +62,9 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade }) {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // 积分不足时展示升级卡。这个 state 此前漏声明，而渲染分支里直接读 `insufficient`，
+  // ES 模块是严格模式 → 已登录用户一打开奇门页就 ReferenceError 整页白屏。
+  const [insufficient, setInsufficient] = useState(false);
   // 游客免费配额（奇门 10 次含 10），注册会员不计数
   const [qimenUsed, setQimenUsed] = useState(0);
   useEffect(() => { setQimenUsed(loadQuota().qimen || 0) }, []);
@@ -96,6 +99,21 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade }) {
       setError('请填写完整的年、月、日');
       return;
     }
+    // 先过计费闸门，再排盘。此前是「先排好盘、setReport，再扣分」——
+    // 扣分失败时报告其实已经生成并塞进 state，只是没切到 report 阶段；
+    // 顺序反了既容易漏，也让「不足」这条路径依赖后续分支才不被看到。
+    if (user) {
+      const res = consumeCredit(user.id, 'qimen.reading')
+      if (!res.ok && res.reason === 'insufficient') {
+        setError('本月积分不足，升级到更高档位可继续起盘解读')
+        setInsufficient(true)
+        return
+      }
+      setInsufficient(false)
+      if (res.user) onUserChange && onUserChange(res.user)
+    } else {
+      setQimenUsed(incQimen())
+    }
     setLoading(true);
     try {
       const match = form.shichen.match(/^(.)时/);
@@ -116,18 +134,6 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade }) {
       const rpt = buildQimenReport(chart, date, form.question || '');
       if (rpt && rpt.sub !== undefined) rpt.sub = sub;
       setReport(rpt);
-      // 配额扣减：游客按 freeQuota；登录按积分
-      if (user) {
-        const res = consumeCredit(user.id, 'qimen.reading')
-        if (!res.ok && res.reason === 'insufficient') {
-          setError('本月积分不足，升级到更高档位可继续起盘解读')
-          setInsufficient(true)
-          setLoading(false)
-          return
-        }
-      } else {
-        setQimenUsed(incQimen())
-      }
       setStage('report');
       setTimeout(() => {
         document.getElementById('qimen-report-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -155,7 +161,7 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade }) {
         {user && insufficient ? (
           <div className="qimen-board" style={{ padding: '24px' }}>
             <UpgradePrompt
-              featureName="奇门遁甲 AI 解读"
+              featureName="奇门遁甲完整解读"
               cost={5}
               remaining={getMonthlyCredits(user)}
               planLabel={planByKey(user.plan).name}

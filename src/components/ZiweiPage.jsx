@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildZiweiReport } from '../engine/reports.js'
 import ReportView from './ReportView.jsx'
 import ReportLock from './ReportLock.jsx'
 import UpgradePrompt from './UpgradePrompt.jsx'
 import ShichenPicker from './ShichenPicker.jsx'
 import TrueSolarField from './TrueSolarField.jsx'
-import { getLunarMonths, getLunarDayCount, lunarToSolar } from '../utils/lunar.js'
+import { getLunarMonths, getLunarDayCount, tryLunarToSolar } from '../utils/lunar.js'
+import { shiftDate } from '../utils/solarTime.js'
 import { consumeCredit } from '../data/users.js'
+import { hasPaid, markPaid } from '../engine/entitlements.js'
 import { getMonthlyCredits, planByKey } from '../engine/membership.js'
 
 const SHICHEN = [
@@ -44,26 +46,29 @@ const WX_STAR = {
   水: { lord: '天同 · 破军', color: '玄', tone: '圆融善变，智谋深远' }
 }
 
-export default function ZiweiPage({ chart, onBack, onChart, user, onRequireLogin, onUpgrade }) {
+export default function ZiweiPage({ chart, onBack, onChart, user, onRequireLogin, onUpgrade, onUserChange }) {
   const [editing, setEditing] = useState(false)
   const hasChart = !!chart
   const [paid, setPaid] = useState(false)
   const [reason, setReason] = useState(null)
-  const chargedRef = useRef(false)
 
   useEffect(() => {
     if (!chart || !user) return
-    if (chargedRef.current && (user.creditsUsed || 0) > 0) return
-    chargedRef.current = false
+    // 一份报告 = 一次消费：同一用户、同一张盘、同一功能只在首次生成时扣分。
+    // 此前用 useRef 记「已扣过」，而 ref 随组件挂载重置，返回首页再进来就重复扣 8 分。
+    if (hasPaid(user.id, 'ziwei.full', chart)) { setPaid(true); setReason(null); return }
     const res = consumeCredit(user.id, 'ziwei.full')
     if (res.ok) {
-      chargedRef.current = true
+      markPaid(user.id, 'ziwei.full', chart)
       setPaid(true)
       setReason(null)
+      // 扣分后把最新的用户对象抛回 App，否则顶栏/个人中心的积分余额一直是旧值
+      if (res.user) onUserChange && onUserChange(res.user)
     } else if (res.reason === 'insufficient') {
+      setPaid(false)
       setReason('insufficient')
     }
-  }, [chart, user, user?.creditsUsed, user?.planCreditsResetAt])
+  }, [chart, user, onUserChange])
 
   return (
     <div className="page-wrap">
@@ -118,6 +123,7 @@ function ZiweiBirthForm({ onDone }) {
   // 太阳真时校正：开启后，排盘时辰用换算后的 trueSolarHour
   const [useTrueSolar, setUseTrueSolar] = useState(false)
   const [trueSolarHour, setTrueSolarHour] = useState(null)
+  const [trueSolarOffset, setTrueSolarOffset] = useState(0)
   const [placeLabel, setPlaceLabel] = useState('')
 
   const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }))
@@ -126,8 +132,9 @@ function ZiweiBirthForm({ onDone }) {
   const solarBase = (() => {
     const y = Number(form.year) || 1990, m = Number(form.month) || 1, d = Number(form.day) || 1
     if (calendar === 'lunar') {
-      const sol = lunarToSolar(y, m, d, lunarLeap)
-      return { year: sol.year, month: sol.month, day: sol.day }
+      const sol = tryLunarToSolar(y, m, d, lunarLeap)
+      // 真太阳时预览用；换算失败就回落到原值，submit 那里会拦住并给出提示
+      if (sol) return { year: sol.year, month: sol.month, day: sol.day }
     }
     return { year: y, month: m, day: d }
   })()
@@ -191,15 +198,24 @@ function ZiweiBirthForm({ onDone }) {
     setTimeout(() => {
       let outYear = y, outMonth = m, outDay = d
       if (calendar === 'lunar') {
-        const sol = lunarToSolar(y, m, d, lunarLeap)
+        const sol = tryLunarToSolar(y, m, d, lunarLeap)
+        // 换算不出来说明这个农历日期不存在。绝不能原样当公历排盘 ——
+        // 那会排出一张四柱俱全、用户看不出任何问题的错盘。
+        if (!sol) { setLoading(false); setError('该农历日期不存在，请重新选择'); return }
         outYear = sol.year; outMonth = sol.month; outDay = sol.day
+      }
+      // 真太阳时跨午夜 → 日期同步平移，否则日柱与时柱各按一天，排出来是错盘
+      const useTS = form.timeKnown && useTrueSolar && trueSolarHour != null
+      if (useTS && trueSolarOffset) {
+        const sd = shiftDate(outYear, outMonth, outDay, trueSolarOffset)
+        outYear = sd.year; outMonth = sd.month; outDay = sd.day
       }
       onDone({
         year: outYear,
         month: outMonth,
         day: outDay,
         // 太阳真时开启且换算成功 → 排盘用换算后的时辰
-        hour: form.timeKnown ? (useTrueSolar && trueSolarHour != null ? trueSolarHour : form.hour) : 12,
+        hour: useTS ? trueSolarHour : (form.timeKnown ? form.hour : 12),
         gender: form.gender,
         name: form.name.trim(),
         timeKnown: form.timeKnown,
@@ -322,7 +338,8 @@ function ZiweiBirthForm({ onDone }) {
               day={solarBase.day}
               hour={form.hour}
               useTrueSolar={useTrueSolar}
-              onChange={({ useTrueSolar: u, trueSolarHour: ts, placeLabel: pl }) => {
+              onChange={({ useTrueSolar: u, trueSolarHour: ts, trueSolarDayOffset: off, placeLabel: pl }) => {
+                setTrueSolarOffset(off || 0)
                 setUseTrueSolar(u)
                 setTrueSolarHour(ts)
                 setPlaceLabel(pl)
@@ -347,7 +364,10 @@ function ZiweiBirthForm({ onDone }) {
 // 紫微免费章节（盘面/星曜信息层）—— 游客可直接阅读；以下「详批/运程」章节需登录解锁
 const ZW_FREE_SECTIONS = ['info', 'gege', 'starOverview', 'quickPalaces', 'palaces', 'minggong', 'decadal', 'wuxingju']
 
-function ZiweiBoard({ chart, user, onRequireLogin }) {
+// 调用方传了 paid / reason / onUpgrade，这里此前没有解构：
+//  · `reason` 在下方渲染分支被直接读 → 已登录用户打开紫微页即 ReferenceError 白屏；
+//  · `paid` 被忽略 → 扣分失败（积分不足）时照样把完整报告全文展示出去。
+function ZiweiBoard({ chart, user, paid, reason, onRequireLogin, onUpgrade }) {
   const star = WX_STAR[chart.dayMasterWx]
   const reportRef = useRef(null)
   const handleMd = () => reportRef.current?.exportMd?.()
@@ -355,10 +375,16 @@ function ZiweiBoard({ chart, user, onRequireLogin }) {
   const handleShare = () => reportRef.current?.share?.()
 
   // 完整报告生成后：登录用户看全部；游客只读「盘面/宫位/星曜」免费章节，详批章节显示解锁引导
-  const fullReport = buildZiweiReport(chart)
+  // ⚠ 组件每次渲染（滚动、按钮点击、任何 state 变化）都会重跑一遍完整排盘与报告生成。
+  // 紫微完整报告要跑十二宫 + 四化 + 大限流年，是几十毫秒到上百毫秒的同步计算，
+  // 放在渲染路径上会让页面交互明显发顿。命盘不变则结果不变，用 useMemo 锁住。
+  const fullReport = useMemo(() => buildZiweiReport(chart), [chart])
   const freeSections = fullReport.sections.filter(s => ZW_FREE_SECTIONS.includes(s.key))
   const lockedCount = fullReport.sections.length - freeSections.length
-  const shownReport = user ? fullReport : { ...fullReport, sections: freeSections }
+  // 完整章节只在「已登录且本次确实扣到分」时展开。此前只判 user，积分不足的用户
+  // 一样能看到全文，扣费形同虚设。
+  const unlocked = !!user && paid
+  const shownReport = unlocked ? fullReport : { ...fullReport, sections: freeSections }
 
   return (
     <div className="rise">
