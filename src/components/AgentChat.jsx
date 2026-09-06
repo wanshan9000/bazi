@@ -18,7 +18,7 @@ import { buildReport } from '../engine/reports.js'
 import { buildChart } from '../engine/bazi.js'
 import { buildMangpaiContext, pickSchool } from '../engine/mangpaiContext.js'
 import { ZHI_CANGGAN, DI_ZHI } from '../data/ganzhi.js'
-import { lunarToSolar } from '../utils/lunar.js'
+import { tryLunarToSolar } from '../utils/lunar.js'
 import { REPORT_META, makeReport } from '../engine/reportSchema.js'
 import { loadSessions, getSession, upsertSession, deleteSession, clearSessions, deleteOldestSessions, pruneSessionsBefore, loadCurrentSession, saveCurrentSession, clearCurrentSession } from '../engine/sessionHistory.js'
 import { listCollection, saveToCollection, removeFromCollection, isInCollection } from '../engine/chartCollection.js'
@@ -190,7 +190,8 @@ function resolveBirthDate(q, y, m, d) {
       leapMonth = mm
     }
   }
-  const sol = lunarToSolar(y, m, d, m === leapMonth)
+  const sol = tryLunarToSolar(y, m, d, m === leapMonth)
+  if (!sol) return null // 无效农历：交由调用方提示重填，不能当公历排盘
   return { year: sol.year, month: sol.month, day: sol.day, lunar: true }
 }
 
@@ -623,7 +624,7 @@ function buildSystemPrompt(chart, cfg, skill, toolText, agentMode, altSkills, to
   return parts.join('\n\n')
 }
 
-export default function AgentChat({ chart: chartProp, seedQuery, user, onRequireLogin, onUpgrade }) {
+export default function AgentChat({ chart: chartProp, seedQuery, user, onRequireLogin, onUpgrade, onUserChange}) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [typing, setTyping] = useState(false)
@@ -652,10 +653,16 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
     if (last.streaming) return
     if (last._counted) return
     if (!last.text) return
+    // 出错/中断留下的半截回复不计费
+    if (last._failed) {
+      setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, _counted: true } : m))
+      return
+    }
     if (user) {
       // 登录用户：按对话轮次扣 1 积分（FEATURE_COSTS.agent.chat）；不足 → 弹订阅 Modal
       const res = consumeCredit(user.id, 'agent.chat')
       if (!res.ok && res.reason === 'insufficient' && onUpgrade) onUpgrade()
+      else if (res.ok && res.user) onUserChange && onUserChange(res.user)
     } else {
       // 游客：按 token 估算累加到 freeQuota；累计 ≥ 100 积分提示订阅
       const est = Math.ceil(last.text.length / 3)
@@ -703,12 +710,12 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
     const cur = activeChart || chartProp
     const lines = cur ? openingLine(cur) : openingNoChart()
     if (seedQuery) {
-      setMessages([
-        // 开场白是本地静态文本，不消耗 token → 预标记 _counted=true 防止计费
-        ...lines.map((text, i) => ({ id: `boot-${i}`, role: 'ai', text, time: timeNow(), _counted: true })),
-        { id: `seed-${Date.now()}`, role: 'user', text: seedQuery, time: timeNow() }
-      ])
+      // ⚠ 此前只是把 seedQuery 渲染成一条用户气泡就完事，从不发起回复 ——
+      // 从首页「问司命」带着问题跳进来的用户，看到自己的问题挂在那里、AI 毫无反应。
+      // 开场白是本地静态文本，不消耗 token → 预标记 _counted=true 防止计费。
+      setMessages(lines.map((text, i) => ({ id: `boot-${i}`, role: 'ai', text, time: timeNow(), _counted: true })))
       setInput('')
+      send(seedQuery)
     } else {
       setMessages(lines.map((text, i) => ({ id: `boot-${i}`, role: 'ai', text, time: timeNow(), _counted: true })))
     }
@@ -1475,7 +1482,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
               setMessages(prev => [...prev, {
                 id: Date.now(),
                 role: 'ai',
-                text: `抱歉，模型调用出错了：${err2.message}\n可打开右上角设置检查 API Key / Base URL，或暂时切换回本地规则引擎。`,
+                text: `抱歉，模型调用出错了：${err2.message}\n可在「管理控制台 → 元气AI设置」检查 API Key / Base URL，或暂时切换回本地规则引擎。`,
                 time: timeNow()
               }])
             }
@@ -1551,7 +1558,9 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
         } catch { /* 重建失败则保留当前命盘 */ }
       }
     }
-    setMessages(s.messages || [])
+    // ⚠ 必须预标记 _counted：恢复出来的都是早已计过费的历史消息，
+    // 计费 effect 只认这个标记，不打的话每次打开旧会话都会照着最后一条 AI 回复再扣一次。
+    setMessages((s.messages || []).map(m => ({ ...m, _counted: true })))
     sessionIdRef.current = s.id
     createdAtRef.current = s.createdAt || Date.now()
     setShowHistory(false)
@@ -1896,7 +1905,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
           <div className="quota-modal" onClick={e => e.stopPropagation()}>
             <div className="qm-icon">💎</div>
             <h3>积分已用完 · 订阅会员继续对话</h3>
-            <p>游客已累计消耗 <b>{tokensToCredits(agentTokens).toFixed(1)}</b> / 100 积分（≈ 1000 万 token）。注册/登录成为会员，即可继续无限制对话。</p>
+            <p>游客已累计消耗 <b>{tokensToCredits(agentTokens).toFixed(1)}</b> / 100 积分。注册/登录成为会员，即可继续无限制对话。</p>
             <p className="qm-tip">注册默认开通「凡境」会员 · 扫码识别一步注册 · 自动登录</p>
             <div className="qm-actions">
               <button className="qm-btn primary" onClick={() => onRequireLogin && onRequireLogin('agent')}>立即订阅会员</button>

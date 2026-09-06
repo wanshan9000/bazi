@@ -1,4 +1,14 @@
-// 大模型客户端：OpenAI 兼容协议，支持多家服务商
+// 大模型客户端：OpenAI 兼容协议，支持多家服务商。
+//
+// ⚠ 仅供 legacy 回退路径（VITE_AGENT_BACKEND=legacy）使用。
+// 这条路是**浏览器直连模型服务商**，API Key 明文存在 localStorage：
+//   · 任何能在该浏览器执行脚本的人（含第三方扩展）都能读走这个 key；
+//   · key 会随每次请求从用户设备发出，无法审计、无法限额、无法吊销单个用户。
+// 因此它只适合本机开发与自带 key 的管理员调试，绝不要给普通用户配置。
+// 默认路径（VITE_AGENT_BACKEND=dsh）走服务端 /api/agent/*，密钥只存在服务器上。
+// 彻底下掉这里的密钥是 R2 方案 M2 的内容，见
+// docs/Agent记忆与账号服务端隔离R2改造方案.md。
+//
 // 配置存于 localStorage（genki-agent-config）
 
 export const PROVIDERS = {
@@ -53,7 +63,15 @@ export const DEFAULT_CONFIG = {
   apiKey: '',
   baseUrl: 'https://api.minimaxi.com/v1',
   model: 'MiniMax-M2.7',
-  enabledSkills: ['bazi', 'liuyao', 'tarot', 'huangli', 'ziwei', 'love', 'wealth', 'health', 'fengshui', 'name'],
+  // ⚠ 必须与 src/data/skills.js 的 BUILTIN_SKILLS 全集对齐。此前漏了
+  // yixue-taishan / mangpai / wuyunliuqi / modern_huangli / qimen 五个 ——
+  // 服务端 dsh 是把 skills/ 下的 SKILL.md 全量加载的，legacy 却默认少五个技能，
+  // 同一个问题在两条路径上得到的能力范围不一样。
+  enabledSkills: [
+    'bazi', 'yixue-taishan', 'mangpai', 'wuyunliuqi', 'liuyao', 'tarot',
+    'huangli', 'modern_huangli', 'ziwei', 'qimen', 'love', 'wealth',
+    'health', 'fengshui', 'name',
+  ],
   useLLM: false
 }
 
@@ -140,24 +158,51 @@ async function withTimeout(signal, maxWaitMs) {
 
 // 流式对话：OpenAI 兼容 SSE，逐字回调 onDelta(deltaText)，返回完整文本
 // maxTokens：输出上限，完整报告类需要 4000+ 才能写完
-export async function chatLLMStream({ cfg, messages, signal, onDelta, maxTokens = 1200 }) {
+export async function chatLLMStream({ cfg, messages, signal, onDelta, maxTokens = 1200, idleTimeoutMs = 60000 }) {
   const url = `${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${cfg.apiKey}`
-    },
-    body: JSON.stringify({
-      model: cfg.model,
-      messages,
-      temperature: 0.85,
-      max_tokens: maxTokens,
-      stream: true
-    }),
-    signal
-  })
+  // ⚠ 这里原先直接把外部 signal 交给 fetch，没有任何超时：上游一旦挂起不返回，
+  // 这个 Promise 永远不 settle，调用方的 typing 状态解不掉，输入框被永久禁用，
+  // 用户只能刷新页面。改为「静默超时」——只要还在吐字就续期，卡住才中断。
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
+  let timer = null
+  const arm = () => {
+    if (!ctrl) return
+    clearTimeout(timer)
+    timer = setTimeout(() => ctrl.abort(), idleTimeoutMs)
+  }
+  const disarm = () => clearTimeout(timer)
+  const useAny = ctrl && typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function'
+  const combinedSignal = ctrl
+    ? (useAny ? AbortSignal.any([...(signal ? [signal] : []), ctrl.signal]) : (signal || ctrl.signal))
+    : signal
+  arm()
+
+  let res
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${cfg.apiKey}`
+      },
+      body: JSON.stringify({
+        model: cfg.model,
+        messages,
+        temperature: 0.85,
+        max_tokens: maxTokens,
+        stream: true
+      }),
+      signal: combinedSignal
+    })
+  } catch (e) {
+    disarm()
+    if (ctrl && ctrl.signal.aborted && !(signal && signal.aborted)) {
+      throw new Error(`模型 ${Math.round(idleTimeoutMs / 1000)} 秒无响应，已中断`)
+    }
+    throw e
+  }
   if (!res.ok || !res.body) {
+    disarm()
     let detail = ''
     try {
       const j = await res.json()
@@ -169,9 +214,11 @@ export async function chatLLMStream({ cfg, messages, signal, onDelta, maxTokens 
   const decoder = new TextDecoder('utf-8')
   let buf = ''
   let full = ''
+  try {
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
+    arm() // 收到数据 → 续期
     buf += decoder.decode(value, { stream: true })
     // 按 SSE 事件块切分
     const blocks = buf.split('\n\n')
@@ -189,6 +236,16 @@ export async function chatLLMStream({ cfg, messages, signal, onDelta, maxTokens 
         if (onDelta) onDelta(delta)
       }
     }
+  }
+  } catch (e) {
+    if (ctrl && ctrl.signal.aborted && !(signal && signal.aborted)) {
+      // 已经吐了一半再卡住：把已有内容交回去，好过整段丢弃
+      if (full.trim()) return full.trim()
+      throw new Error(`模型 ${Math.round(idleTimeoutMs / 1000)} 秒无响应，已中断`)
+    }
+    throw e
+  } finally {
+    disarm()
   }
   if (!full.trim()) throw new Error('模型未返回内容')
   return full.trim()
@@ -331,7 +388,11 @@ async function streamReadMessage(res, onDelta, onToolCall) {
       }
     }
   }
-  return { content, tool_calls: toolCalls.filter(Boolean) }
+  // ⚠ 必须带 role。这个对象会被原样 push 回 msgs 作为下一轮请求的历史，
+  // OpenAI 兼容接口要求每条消息都有 role —— 缺了它，凡是走「流式 + 工具调用」
+  // 的第二轮请求一律被服务端拒绝（非流式分支从 API 拿到的 message 自带 role，
+  // 所以这个 bug 只在开了流式时出现）。
+  return { role: 'assistant', content, tool_calls: toolCalls.filter(Boolean) }
 }
 
 // 测试连接

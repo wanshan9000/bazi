@@ -17,7 +17,10 @@ import { buildWuyunliuqi } from './wuyunliuqi.js'
 
 // 六爻：真实纳甲装卦（基于 iching-shifa）
 function toolLiuyao(chart) {
-  return buildLiuyaoPan(chart)
+  const pan = buildLiuyaoPan(chart)
+  // question 由 runToolByName 合并进来（schema 里声明过），带上它模型才知道这卦问的是什么
+  const q = chart && chart.question
+  return q ? `【所问】${q}\n${pan}` : pan
 }
 
 // 塔罗：单张牌
@@ -226,14 +229,29 @@ export function runToolByName(name, args, chart) {
     const rep = buildReport(type, chart, args || {})
     return rep.ok ? rep.markdown : `（报告生成失败：${rep.error}）`
   }
-  // 黄历 / 现代幽默黄历：携带 date/scenario 参数
+  // ⚠ 下面这些工具在 TOOL_SCHEMAS 里都声明了参数，但此前一律走
+  // `runSkillTool(name, chart)`，args 被整个丢掉：模型按 schema 传了「所问之事」
+  // 「指定日期」「要分析的姓名」，执行时全部当没看见 —— 声明与实现对不上，
+  // 模型以为自己问的是甲，工具算的是乙。
+  const merged = chart ? { ...chart } : {}
+  if (args && typeof args === 'object') {
+    // 只合并该工具确实声明过的字段，避免模型乱传的键污染命盘对象
+    const ALLOWED = {
+      huangli: ['date', 'scenario'],
+      modern_huangli: ['date', 'scenario'],
+      liuyao: ['question'],
+      qimen: ['date'],
+      name: ['name', 'surname'],
+      fengshui: ['layout'],
+    }
+    for (const key of (ALLOWED[name] || [])) {
+      if (args[key] !== undefined) merged[key] = args[key]
+    }
+  }
   if (name === 'huangli' || name === 'modern_huangli') {
-    const merged = chart ? { ...chart } : {}
-    if (args && args.date) merged.date = args.date
-    if (args && args.scenario) merged.scenario = args.scenario
     return name === 'huangli' ? toolHuangli(merged) : toolModernHuangli(merged)
   }
-  return runSkillTool(name, chart)
+  return runSkillTool(name, merged)
 }
 
 // OpenAI 兼容 function calling 工具清单（Agent 自主决策用）

@@ -3,6 +3,9 @@ import { PROVIDERS, providerDefaults, testLLM, saveConfig } from '../engine/llm.
 import { allSkills, loadCustomSkills, BUILTIN_SKILLS } from '../data/skills.js'
 import { getEvolveStatus, runAutoEvolution, clearEvolveStore, clearSkillLogs } from '../engine/agentEvolve.js'
 
+// 构建期常量：与 App.jsx 挑选聊天组件的判断保持一致
+const IS_LEGACY_BACKEND = import.meta.env.VITE_AGENT_BACKEND === 'legacy'
+
 export default function AgentSettings({ cfg, onSave, onClose, inline }) {
   const [form, setForm] = useState(cfg)
   const [tab, setTab] = useState('model')
@@ -62,6 +65,23 @@ export default function AgentSettings({ cfg, onSave, onClose, inline }) {
         <div className="agent-settings-head">
           <div className="agent-settings-title">Agent 设置</div>
           <button className="agent-settings-close" onClick={onClose} aria-label="关闭">✕</button>
+        </div>
+      )}
+
+      {/* 这一整块设置只对 legacy（浏览器内编排）生效。默认的 dsh 模式下，模型、
+          密钥、技能全在服务端，这里改什么都只写进管理员自己浏览器的 localStorage，
+          线上用户毫无感知 —— 不说清楚的话，改完以为生效了才是最糟的。 */}
+      {!IS_LEGACY_BACKEND && (
+        <div className="as-notice" style={{
+          margin: '12px 0', padding: '10px 12px', borderRadius: 8,
+          background: 'rgba(200,140,60,.12)', border: '1px solid rgba(200,140,60,.35)',
+          fontSize: 13, lineHeight: 1.6,
+        }}>
+          <b>当前为服务端（dsh）模式，本页设置不会生效。</b><br />
+          模型路由、API Key、技能目录都在服务器上：模型密钥配置于 <code>/etc/bazi/env</code>，
+          技能正文见 <code>server/dsh/skills/</code>。<br />
+          本页仅在构建时设了 <code>VITE_AGENT_BACKEND=legacy</code> 的回退模式下有效，
+          且那种模式会把 API Key 明文存在本浏览器里，仅供本机调试。
         </div>
       )}
 

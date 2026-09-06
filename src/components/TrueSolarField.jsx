@@ -39,6 +39,9 @@ export default function TrueSolarField({ year, month, day, hour, useTrueSolar, o
         province,
         city,
         trueSolarHour: calc.hourCode,
+        // 跨午夜时排盘日期要跟着平移，父组件据此调整年月日
+        trueSolarDate: calc.date,
+        trueSolarDayOffset: calc.dayOffset,
         placeLabel: `${province} · ${city}`,
       })
     }
@@ -52,10 +55,12 @@ export default function TrueSolarField({ year, month, day, hour, useTrueSolar, o
         province,
         city,
         trueSolarHour: calc ? calc.hourCode : null,
+        trueSolarDate: calc ? calc.date : null,
+        trueSolarDayOffset: calc ? calc.dayOffset : 0,
         placeLabel: `${province} · ${city}`,
       })
     } else {
-      onChange({ useTrueSolar: false, province, city, trueSolarHour: null, placeLabel: '' })
+      onChange({ useTrueSolar: false, province, city, trueSolarHour: null, trueSolarDate: null, trueSolarDayOffset: 0, placeLabel: '' })
     }
   }
 
