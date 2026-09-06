@@ -114,18 +114,21 @@ function sectionToMd(s) {
       break
     }
     case 'chips': {
-      for (const it of s.data.items) {
+      for (const it of (s.data.items || [])) {
         const v = Array.isArray(it.value) ? it.value.join('、') : it.value
         L.push(v ? `- **${it.label}**：${v}` : `- ${it.label}`)
       }
       break
     }
     case 'kv': {
-      for (const it of s.data.items) L.push(`- **${it.k}**：${it.v ?? '-'}`)
+      // 两种数据形状都要认：baziReport 用的是 blocks，其它构建器用 items。
+      // 只认 items 的话，子平派报告一到「格局定位」这一段就抛
+      // 「s.data.items is not iterable」，整份报告直接失败。
+      for (const it of (s.data.items || s.data.blocks || [])) L.push(`- **${it.k}**：${it.v ?? '-'}`)
       break
     }
     case 'cards': {
-      for (const it of s.data.items) {
+      for (const it of (s.data.items || [])) {
         L.push(`- **${it.title}**${it.sub ? `（${it.sub}）` : ''}`)
         if (it.desc) L.push(`  - ${it.desc}`)
       }
@@ -142,7 +145,7 @@ function sectionToMd(s) {
       break
     }
     case 'bars': {
-      for (const it of s.data.items) {
+      for (const it of (s.data.items || [])) {
         const pct = Math.round((it.value / (it.max || 10)) * 100)
         L.push(`- **${it.label}**：${it.value}（${pct}%）`)
       }
@@ -150,7 +153,7 @@ function sectionToMd(s) {
       break
     }
     case 'rating': {
-      for (const it of s.data.items) {
+      for (const it of (s.data.items || [])) {
         const stars = '★'.repeat(it.value || 0) + '☆'.repeat((it.max || 5) - (it.value || 0))
         L.push(`- **${it.label}**：${stars}（${it.value}/${it.max || 5}）`)
       }
@@ -158,14 +161,48 @@ function sectionToMd(s) {
       break
     }
     case 'palaceGrid': {
-      for (const it of s.data.items) {
+      for (const it of (s.data.items || [])) {
         L.push(`- **${it.name}**${it.tag ? `〔${it.tag}〕` : ''}${it.sub ? `（${it.sub}）` : ''}`)
         if (it.desc) L.push(`  - ${it.desc}`)
       }
       break
     }
+    case 'list': {
+      for (const it of (s.data.items || [])) L.push(typeof it === 'string' ? `- ${it}` : `- ${it.text ?? JSON.stringify(it)}`)
+      break
+    }
+    case 'dayunGroup': {
+      L.push('| 大运 | 阶段 | 区间 | 说明 |')
+      L.push('| --- | --- | --- | --- |')
+      for (const d of (s.data.dayuns || [])) {
+        L.push(`| ${d.name} | ${(d.tag || '').trim()} | ${d.sub || ''} | ${(d.desc || '').replace(/\|/g, '／')} |`)
+      }
+      break
+    }
+    case 'dayunDetail': {
+      for (const c of (s.data.cards || [])) {
+        const gz = c.gz ? ` ${c.gz}` : ''
+        const wx = c.wx ? `（${c.wx}）` : ''
+        const ss = Array.isArray(c.shiShen) ? c.shiShen.join('、') : (c.shiShen || '')
+        L.push(`- **${c.name}**${gz}${wx}${ss ? ` · ${ss}` : ''}${c.desc ? `：${c.desc}` : ''}`)
+      }
+      break
+    }
+    // 复合章节：内部再套一组子章节，逐个递归渲染。
+    // ⚠ 没有这一支的话会掉进下面的 default，把整块结构原样 JSON.stringify 出来 ——
+    // 子平派完整报告的第一章就是 kvComposite，导出的 markdown 里因此夹着一大段
+    // 裸 JSON，用户复制/下载拿到的是这个。
+    case 'kvComposite': {
+      for (const sub of s.data.subsections || []) {
+        L.push(sectionToMd({ ...sub, title: sub.title || '' }).replace(/^### \n/, '').trim())
+        L.push('')
+      }
+      break
+    }
     default:
-      L.push(JSON.stringify(s.data))
+      // 兜底也不要吐 JSON：宁可少一段，也不要把内部结构塞给用户
+      if (s.data && typeof s.data.text === 'string') L.push(s.data.text)
+      else console.warn(`[reportSchema] 未处理的 section kind: ${s.kind}`)
   }
   L.push('')
   return L.join('\n')

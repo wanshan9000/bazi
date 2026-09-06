@@ -17,6 +17,7 @@ import { buildLifeKline } from './lifeKline.js'
 import { buildSafeSection } from './safeGuard.js'
 import { calculateShensha } from './bazi.js'
 import { guideSectionOf } from './skillGuide.js'
+import { schemaToMarkdown } from './reportSchema.js'
 import { buildWuyunliuqi } from './wuyunliuqi.js'
 
 /* ------------------------------------------------------------------ *
@@ -1961,7 +1962,7 @@ export function buildBaziReport(chart) {
     const guide = guideSectionOf('bazi')
     if (guide) sections.unshift(guide)
 
-    return {
+    const result = {
       ok: true,
       type: 'bazi',
       icon: '子',
@@ -1974,8 +1975,12 @@ export function buildBaziReport(chart) {
       },
       sections,
       advice,
-      markdown: `# 子平派八字完整报告\n\n...详见下方分节`
     }
+    // ⚠ markdown 曾是一句占位串「# 子平派八字完整报告\n\n...详见下方分节」——
+    // 页面的「复制 / 下载 / 分享」导出的就是它，用户拿到手的是一行省略号。
+    // 用统一的 schemaToMarkdown 从 sections 真正渲染一份完整正文。
+    result.markdown = schemaToMarkdown(result)
+    return result
   } catch (err) {
     return { ok: false, error: '报告生成失败：' + (err.message || String(err)) }
   }
@@ -2779,12 +2784,14 @@ function xianTianHuanYin(chart) {
     else if (ratio < 1.5) { level = '偏旺'; stars = 2 }
     else { level = '旺'; stars = 3 }
     const organ = ORGANS[wx]
+    // 五行分值是累加出来的浮点数，直接内插会出现「火极旺（7.199999999999999分）」这种输出
+    const score = Math.round(v * 10) / 10
     let desc = ''
-    if (level === '极弱') desc = `${wx}弱（${v}分）易虚：${organ}功能偏弱${wx === dmWx ? '。偏弱但不至于病，年少保养即可' : '。'}${wx === dmWx ? '（日主偏弱、年少体弱、中年后靠保养）' : ''}`
-    else if (level === '偏弱') desc = `${wx}稍弱（${v}分）：${organ}需保养。`
-    else if (level === '中和') desc = `${wx}中和（${v}分）：${organ}运行正常。`
-    else if (level === '偏旺') desc = `${wx}稍旺（${v}分）：${organ}易亢进、上火。`
-    else desc = `${wx}极旺（${v}分）：${organ}燥热、炎症倾向。`
+    if (level === '极弱') desc = `${wx}弱（${score}分）易虚：${organ}功能偏弱${wx === dmWx ? '。偏弱但不至于病，年少保养即可' : '。'}${wx === dmWx ? '（日主偏弱、年少体弱、中年后靠保养）' : ''}`
+    else if (level === '偏弱') desc = `${wx}稍弱（${score}分）：${organ}需保养。`
+    else if (level === '中和') desc = `${wx}中和（${score}分）：${organ}运行正常。`
+    else if (level === '偏旺') desc = `${wx}稍旺（${score}分）：${organ}易亢进、上火。`
+    else desc = `${wx}极旺（${score}分）：${organ}燥热、炎症倾向。`
     rows.push({ wx, organ, risk: level, stars, desc })
   }
   return rows

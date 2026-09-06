@@ -3023,17 +3023,43 @@ function healthPart(wx) {
 
 // ============ 统一分发入口 ============
 // type: bazi / ziwei / liuyao / qimen / huangli / tarot / name / fengshui / mangpai
-// 报告缓存：同一命盘/参数的完整报告内容确定，重复生成时直接复用，显著加速连续/综合报告
+// 报告缓存：同一命盘/参数的完整报告内容确定，重复生成时直接复用，显著加速连续/综合报告。
+//
+// ⚠ 缓存键必须唯一标识"这一份报告"。chart.pillars 是长度 4 的数组，早先版本写成
+// `chart.pillars.year` 取到的全是 undefined，键退化成「报告类型|:::男|{}」——
+// 也就是只按类型和性别区分。前端每次刷新重建模块尚不易察觉，但服务端 dsh 的 report
+// 工具是常驻进程，缓存跨请求存活，A 用户的整份命理报告会被原样返回给下一个同性别的
+// B 用户。命盘身份必须从 chart 顶层的出生要素 + 四柱干支一起取。
 const reportCache = new Map()
 const REPORT_CACHE_MAX = 40
+
+// 起卦/抽牌自带随机性（castHexagram 用 Math.random + Date.now，drawCards 随机洗牌），
+// 同样的入参每次都应得到不同结果 → 这两类永不进缓存，否则"再起一卦"永远是同一卦。
+const UNCACHEABLE_TYPES = new Set(['liuyao', 'tarot'])
+
+// 结果依赖"今天是哪天"（date 参数缺省时内部取 new Date()）→ 键里带上日期，跨日自动失效。
+const DAY_SCOPED_TYPES = new Set(['ziwei', 'qimen', 'huangli', 'zejiri', 'consult'])
+
+function chartIdentity(chart) {
+  if (!chart) return 'nochart'
+  const pillars = Array.isArray(chart.pillars) ? chart.pillars : []
+  const ganzhi = pillars.map(p => `${(p && p.gan) || ''}${(p && p.zhi) || ''}`).join('')
+  return [chart.year, chart.month, chart.day, chart.hour, chart.gender, ganzhi].join(':')
+}
+
+function todayStamp() {
+  const d = new Date()
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+}
+
 function cacheKey(type, chart, args) {
-  const p = chart && chart.pillars ? chart.pillars : {}
-  const chartKey = [p.year, p.month, p.day, p.hour, chart && chart.gender].join(':')
   let argsKey = ''
   try { argsKey = JSON.stringify(args) } catch { argsKey = '' }
-  return `${type}|${chartKey}|${argsKey}`
+  const day = DAY_SCOPED_TYPES.has(type) ? `|${todayStamp()}` : ''
+  return `${type}|${chartIdentity(chart)}|${argsKey}${day}`
 }
 function cached(fn, type, chart, args) {
+  if (UNCACHEABLE_TYPES.has(type)) return fn()
   const key = cacheKey(type, chart, args)
   const hit = reportCache.get(key)
   if (hit) return hit
