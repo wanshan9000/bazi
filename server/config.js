@@ -116,6 +116,13 @@ export const config = {
     loginMaxAttempts: Number(env.AUTH_LOGIN_MAX_ATTEMPTS || 5),
   },
 
+  // ---- 游客免费额度（服务端记账，按来源 IP）----
+  guest: {
+    // 每 IP 每天的免费 token 上限。游客标识是客户端自报的，只有按 IP 记账才拦得住。
+    dailyTokens: Number(env.GUEST_DAILY_TOKENS || 50000),
+    quotaFile: env.GUEST_QUOTA_FILE || path.join(__dirname, 'data', 'guest_quota.json'),
+  },
+
   // ---- 数据备份 ----
   backup: {
     dir: env.BACKUP_DIR || path.join(__dirname, 'data', 'backups'),

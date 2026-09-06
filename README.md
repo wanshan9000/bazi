@@ -54,6 +54,9 @@ npm run agent:smoke                  # 真 key 冒烟（可选）
 - `/api/agent/*` 按 `Authorization: Bearer <jwt>` 归属，**不接受自报的账号 uid**。
   游客可用 `anon:<设备标识>`，但单桶限流额度更紧。
 - 会员档位与积分余额由服务端持有并扣减，客户端改本地存储只会让自己看到假数字。
+- 游客可以不登录直接用 AI（免费体验），额度按**来源 IP** 在服务端记账，
+  默认每天 5 万 token（约 7 轮，`GUEST_DAILY_TOKENS` 可调）。不按自报的游客标识记 ——
+  那个清一次站点数据就重置了。
 - `JWT_SECRET` 未配置时会自动生成一个随机密钥存到 `server/data/.jwt-secret`
   （单机可用）；多实例部署必须显式配同一个值，否则 A 机签的 token B 机不认。
 

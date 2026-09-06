@@ -34,6 +34,11 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
   const [pickerOpen, setPickerOpen] = useState(false)
   const [agentTokens, setAgentTokens] = useState(0)
   const [quotaDismissed, setQuotaDismissed] = useState(false)
+  // 服务端判定的游客额度耗尽（按 IP 记账，权威）。本地那份 agentTokens 只是估算，
+  // 清掉站点数据就会归零 —— 两者不一致时以这个为准。
+  const [guestBlocked, setGuestBlocked] = useState('')
+  // 登录之后游客那道闸门就不适用了，清掉阻断状态，别让弹窗一直挂着
+  useEffect(() => { if (user) setGuestBlocked('') }, [user])
   const scrollRef = useRef(null)
   const abortRef = useRef(null)
   const booted = useRef(false)
@@ -120,6 +125,15 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
     } catch (err) {
       // 服务端说积分不足（402）。本地的 canAfford 是拿镜像算的，可能偏旧或被改过，
       // 服务端才是权威 —— 这里把那一条空气泡撤掉并引导升级，而不是给用户看一句报错。
+      // 游客的免费额度用完了（服务端按 IP 记账，权威）。本地那份估算只是即时提示，
+      // 清掉站点数据能重置它，但服务端不认 —— 所以这里必须按服务端说的办。
+      if (err && err.reason === 'guest_quota') {
+        setMessages(prev => prev.slice(0, -2))
+        setInput(q)
+        setQuotaDismissed(false)
+        setGuestBlocked(err.message || '今日免费体验额度已用完，注册后可继续对话')
+        return
+      }
       if (err && (err.reason === 'insufficient' || err.status === 402)) {
         // 这一轮根本没发生：把刚插进去的「提问 + 空回复」两条一起撤掉，
         // 并把问题放回输入框，用户升级完可以直接再发一次，不用重打。
@@ -382,15 +396,17 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
         )}
       </div>
 
-      {!user && isAgentOverQuota(agentTokens) && !quotaDismissed && (
-        <div className="quota-modal-mask" onClick={() => setQuotaDismissed(true)}>
+      {!user && (guestBlocked || isAgentOverQuota(agentTokens)) && !quotaDismissed && (
+        // 服务端判定的额度耗尽不给「我知道了」——关掉也发不出去，留着那个按钮
+        // 只会让用户反复试。本地估算触发的仍可关闭（它可能偏保守）。
+        <div className="quota-modal-mask" onClick={() => !guestBlocked && setQuotaDismissed(true)}>
           <div className="quota-modal" onClick={e => e.stopPropagation()}>
             <div className="qm-icon">💎</div>
-            <h3>积分已用完 · 订阅会员继续对话</h3>
-            <p>游客已累计消耗 <b>{tokensToCredits(agentTokens).toFixed(1)}</b> / 100 积分。注册/登录成为会员，即可继续对话。</p>
+            <h3>免费额度已用完 · 注册后继续对话</h3>
+            <p>{guestBlocked || `游客已累计消耗 ${tokensToCredits(agentTokens).toFixed(1)} / 100 积分。注册/登录成为会员，即可继续对话。`}</p>
             <div className="qm-actions">
-              <button className="qm-btn primary" onClick={() => onRequireLogin && onRequireLogin('agent')}>立即订阅会员</button>
-              <button className="qm-btn ghost" onClick={() => setQuotaDismissed(true)}>我知道了</button>
+              <button className="qm-btn primary" onClick={() => onRequireLogin && onRequireLogin('agent')}>立即注册 / 登录</button>
+              {!guestBlocked && <button className="qm-btn ghost" onClick={() => setQuotaDismissed(true)}>我知道了</button>}
             </div>
           </div>
         </div>

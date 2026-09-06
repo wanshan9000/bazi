@@ -16,6 +16,7 @@ export function backupTargets() {
     config.storeFile,                    // 订阅、验证码、分享、管理技能
     config.auth.accountsFile,            // 账号（含口令散列）
     process.env.AGENT_STORE_FILE || path.join(path.dirname(config.storeFile), 'agent_sessions.json'),
+    config.guest.quotaFile,              // 游客额度账本（丢了等于给所有人重发额度）
   ]
 }
 

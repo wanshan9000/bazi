@@ -7,6 +7,7 @@ import { Router } from 'express'
 import { ROUTES, DEFAULT_ROUTE, sharedPool } from '../dsh/pool.js'
 import { sharedStore } from '../dsh/agentStore.js'
 import { sharedAccounts } from '../accounts.js'
+import { sharedGuestQuota } from '../guestQuota.js'
 import { TOOL_NAME_CN } from '../dsh/events.js'
 import { identify } from './auth.js'
 
@@ -59,7 +60,7 @@ function chartLine(chart) {
 
 function timeNow() { return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
 
-export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), accounts = sharedAccounts() } = {}) {
+export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), accounts = sharedAccounts(), guestQuota = sharedGuestQuota() } = {}) {
   const r = Router()
   const hits = new Map() // `${uid}|${ip}` → { count, resetAt }
 
@@ -146,11 +147,13 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
     }
     if (pool.isBusy(session.id)) return res.status(409).json({ ok: false, msg: '正在回复中，请稍候' })
 
-    // 积分在服务端扣。以前这是前端 consumeCredit 改 localStorage —— 把余额改回去
-    // 就能无限白嫖付费模型，服务端对此一无所知。
-    // 先扣后跑：跑完再扣的话，用户中途断开就等于免费用了一轮。
-    // 这一轮若一个字都没产出（模型立刻报错），下面 finally 里会原样退还。
+    // 额度在服务端把关。两条路：
+    //   · 已登录 → 按账号扣积分（以前是前端改 localStorage，改回去就能白嫖）。
+    //   · 游客   → 按**来源 IP** 记 token（以前只在浏览器里记，清一次站点数据就重置，
+    //             换个 anon 标识连限流桶都是新的，等于完全没有闸门）。
+    // 都是先扣后跑：跑完再扣的话，用户中途断开就等于免费用了一轮。
     let charged = false
+    let guestCharged = false
     if (req.authed) {
       const paid = accounts.consumeCredit(req.uid, 'agent.chat')
       if (!paid.ok) {
@@ -160,6 +163,17 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
         return res.status(400).json({ ok: false, msg: '扣减积分失败' })
       }
       charged = paid.cost > 0
+    } else {
+      const gate = guestQuota.begin(req.ip)
+      if (!gate.ok) {
+        return res.status(402).json({
+          ok: false,
+          reason: 'guest_quota',
+          msg: '今日免费体验额度已用完，注册后可继续对话',
+          resetAt: gate.resetAt,
+        })
+      }
+      guestCharged = true
     }
 
     // 命盘变化时把命盘行拼到用户消息前。
@@ -187,6 +201,8 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
     let streamed = ''
     // 这一轮是否产出了任何可交付的内容（正文或测算报告卡片）。决定失败时退不退积分。
     let producedOutput = false
+    // 本轮真实 token 用量，用于结算游客额度；拿不到就按 0 结（等于把预扣退回去）
+    let usedTokens = 0
     // 用 res 而非 req 的 'close'：req 在请求体读完（express.json 已消费）就会触发
     // 'close'，与客户端是否断开无关；res 的 'close' 只在底层 socket 关闭时触发，
     // writableFinished 为 true 说明是我们自己 res.end() 收尾的，不是真实断开。
@@ -214,6 +230,8 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
       if (tools.length) store.appendMessage(req.uid, session.id, { role: 'tool', text: tools.join('、'), time: timeNow() })
       const finalText = result.finalText || streamed
       if (finalText) producedOutput = true
+      // 游客额度按真实 token 结算（预扣的估计值在 finally 里被它替换掉）
+      if (result.usage && result.usage.totalTokens) usedTokens = result.usage.totalTokens
       if (finalText) store.appendMessage(req.uid, session.id, { role: 'ai', text: finalText, time: timeNow() })
       streamed = ''
       if (chartChanged) store.updateSession(req.uid, session.id, { chartKey: ck })
@@ -245,6 +263,11 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
       if (charged && !producedOutput) {
         try { accounts.refundCredit(req.uid, 'agent.chat') }
         catch (e) { console.error('[agent/chat] 退还积分失败', e) }
+      }
+      // 游客：把预扣的估计值换成真实用量。没产出时按 0 结算，预扣自动退回。
+      if (guestCharged) {
+        try { guestQuota.settle(req.ip, producedOutput ? usedTokens : 0) }
+        catch (e) { console.error('[agent/chat] 游客额度结算失败', e) }
       }
       if (!res.writableEnded) res.end()
     }
