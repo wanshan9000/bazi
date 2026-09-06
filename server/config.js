@@ -14,8 +14,17 @@ export const config = {
   // 监听地址。生产由 Caddy 反代，钉成 127.0.0.1 不让 API 直接暴露公网；本地默认全网卡便于手机联调。
   host: env.HOST || '0.0.0.0',
 
+  // Express 的 trust proxy 设置。默认 'loopback'：只把本机反代（Caddy）送来的
+  // X-Forwarded-For 当真，从而让 req.ip 拿到访客真实 IP，按 IP 的限流才有意义。
+  trustProxy: env.TRUST_PROXY || 'loopback',
+
   // 是否本地降级模式（未配置短信/微信凭证时自动为 true）
   devMode: env.NODE_ENV !== 'production',
+
+  // 是否允许「模拟短信/微信」这类降级能力对外可用。
+  // 生产默认关闭：否则未配置凭证时，公网任何人都能取到任意手机号的验证码、
+  // 或凭空写入一条微信订阅。确需在生产联调时显式设 ALLOW_MOCK_CHANNELS=1。
+  allowMockChannels: env.ALLOW_MOCK_CHANNELS === '1' || env.NODE_ENV !== 'production',
 
   // 前端来源（CORS）。本地联调常开多个 vite 端口(5173/5178/5179…)，
   // 生产仅放行 ALLOWED_ORIGINS 指定的域名。
@@ -30,7 +39,12 @@ export const config = {
     accessKeyId: env.SMS_ACCESS_KEY_ID || '',
     accessKeySecret: env.SMS_ACCESS_KEY_SECRET || '',
     signName: env.SMS_SIGN_NAME || '元气黄历',
+    // 验证码模板
     templateCode: env.SMS_TEMPLATE_CODE || '',
+    // ⚠ 每日推送必须用**另一个**已审核的模板：验证码模板的变量只有 {code}，
+    // 拿它去发黄历正文，服务商会直接以「模板变量不匹配」拒掉。
+    // 未单独配置时回落到验证码模板，仅为不破坏本地降级演示。
+    pushTemplateCode: env.SMS_PUSH_TEMPLATE_CODE || env.SMS_TEMPLATE_CODE || '',
     templateParam: env.SMS_TEMPLATE_PARAM || '{code}',
     region: env.SMS_REGION || 'cn-hangzhou',
     // 腾讯云专用
@@ -45,6 +59,13 @@ export const config = {
 
   // ---- 微信 ----
   wechat: {
+    // 模板消息字段映射（JSON）。公众号模板消息的字段名由模板自身定义，
+    // 值里可以用 {title} / {summary} / {tip} 占位符引用推送内容。
+    // 例：WX_TEMPLATE_FIELDS={"first":"今日黄历","keyword1":"{title}","remark":"{tip}"}
+    templateFields: (() => {
+      if (!env.WX_TEMPLATE_FIELDS) return null
+      try { return JSON.parse(env.WX_TEMPLATE_FIELDS) } catch { return null }
+    })(),
     appId: env.WX_APP_ID || '',
     appSecret: env.WX_APP_SECRET || '',
     // 扫码成功后的跳转回调地址

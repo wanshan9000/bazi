@@ -27,6 +27,10 @@ export const ROUTES = {
 }
 export const DEFAULT_ROUTE = process.env.AGENT_DEFAULT_ROUTE || 'deepseek-flash'
 const MAX_TOKENS = 8192
+// ⚠ 这是**静默超时**，不是整轮上限：只要子进程还在往外吐通知（文本增量、工具调用），
+// 计时就会重置。原先是一个覆盖整轮的硬上限 120s —— 生成一份长报告本来就可能超过
+// 两分钟，被判超时后前端报错，子进程却还在继续烧 token 把这一轮跑完。
+// 取值需小于 Caddy 的 response_header_timeout / read_timeout（300s）。
 const TURN_TIMEOUT_MS = 120000
 // 单条 JSON-RPC 请求（initialize / prompt）的上限：没有它，SDK 默认不超时，
 // 子进程卡在握手或 prompt 上会让这一轮永远挂着。
@@ -80,7 +84,12 @@ export class DshPool {
       })()
       entry = { client, ready }
       this.clients.set(routeKey, entry)
-      ready.catch(() => this.clients.delete(routeKey))
+      // ⚠ 握手失败时只从 map 删除是不够的：start() 很可能已经把子进程拉起来了，
+      // 不 close() 它就会一直挂着。重试几次之后机器上会堆一串孤儿 dsh 进程。
+      ready.catch(() => {
+        this.clients.delete(routeKey)
+        try { Promise.resolve(client.close()).catch(() => {}) } catch { /* 尚未启动 */ }
+      })
     }
     return entry.ready
   }
@@ -97,15 +106,20 @@ export class DshPool {
   // busy，否则下一条消息会被塞进一个仍在跑的会话里，两轮输出互相串扰。保留订阅在
   // 后台读到该会话 idle（或订阅被拒绝 / 池关闭）为止，再关闭订阅并释放 busy。
   // 子进程彻底卡死时靠 turnTimeoutMs 的兜底定时器强制收尾，避免会话永久 busy。
-  drainToIdle(sessionId, sub, { received, messageId }) {
+  drainToIdle(sessionId, sub, { received, messageId, inflight = null }) {
     // 没拿到 messageId（prompt 本身就超时了）时无从校验收据，只能接受该会话的下一个 idle。
     let seen = received || !messageId
     const cap = setTimeout(() => { try { sub.close() } catch { /* 已关闭 */ } }, this.turnTimeoutMs)
     if (cap.unref) cap.unref()
     ;(async () => {
       try {
+        // ⚠ inflight 是 run() 里那次 Promise.race 输给 deadline 的 sub.next()。
+        // 它稍后仍会兑现，若不在这里接住就被永久丢弃 —— 而丢掉的很可能正是本轮的
+        // idle 通知，于是这里会白等下一个永远不来的 idle，会话多 busy 一个超时周期。
+        let first = inflight
         while (true) {
-          const n = await sub.next()
+          const n = first ? await first : await sub.next()
+          first = null
           if (!seen) { if (isInboxReceipt(n, sessionId, messageId)) seen = true; continue }
           if (isIdle(n, sessionId)) break
         }
@@ -126,9 +140,19 @@ export class DshPool {
     let messageId = null
     let received = false
     let drained = false // 已交给 drainToIdle 善后：finally 不再动 sub / busy
-    const deadline = new Promise((_, reject) => {
-      timer = setTimeout(() => { const e = new Error('TIMEOUT: 回复超时'); e.code = 'TIMEOUT'; reject(e) }, this.turnTimeoutMs)
-    })
+    let inflight = null // 正在等待的 sub.next()：超时时要交给 drainToIdle，不能丢
+    // 静默超时：每收到一条通知就重置计时。只要子进程还在输出，这一轮就不算卡住。
+    let rejectDeadline = null
+    const armDeadline = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        const e = new Error('TIMEOUT: 回复超时')
+        e.code = 'TIMEOUT'
+        rejectDeadline && rejectDeadline(e)
+      }, this.turnTimeoutMs)
+    }
+    const deadline = new Promise((_, reject) => { rejectDeadline = reject })
+    armDeadline()
     // 必须立刻挂一个 handler：deadline 早在进入下面的 Promise.race 之前就可能被
     // reject（await this.client() / client.prompt() 期间定时器就会到点），那时它还
     // 没有任何 handler，Node 会以 unhandledRejection 直接终止整个服务进程。
@@ -149,10 +173,13 @@ export class DshPool {
       let usage = null
       let title = null
       while (true) {
-        if (signal && signal.aborted) { drained = true; this.drainToIdle(sessionId, sub, { received, messageId }); break }
+        if (signal && signal.aborted) { drained = true; this.drainToIdle(sessionId, sub, { received, messageId, inflight }); inflight = null; break }
         let n
         try {
-          n = await Promise.race([sub.next(), deadline])
+          if (!inflight) inflight = sub.next()
+          n = await Promise.race([inflight, deadline])
+          inflight = null
+          armDeadline() // 收到通知 → 续期，长报告不会被中途判超时
         } catch (err) {
           // close() 关闭了这条订阅：真实 SDK 里这会让挂起的 next() 以
           // TransportClosedError 拒绝；翻译成调用方能识别的 CLOSED，而不是当作
@@ -175,7 +202,7 @@ export class DshPool {
       // 只有传输真的断了（子进程死亡）才丢弃常驻客户端；超时不代表子进程坏了，
       // 丢掉它反而会打断其它会话，改由 drainToIdle 在后台等这一轮自然结束。
       if (!this.closed && err && (err.name === 'TransportClosedError' || err.code === 'CLOSED')) this.dropClient(routeKey)
-      else if (err && err.code === 'TIMEOUT' && sub) { drained = true; this.drainToIdle(sessionId, sub, { received, messageId }) }
+      else if (err && err.code === 'TIMEOUT' && sub) { drained = true; this.drainToIdle(sessionId, sub, { received, messageId, inflight }); inflight = null }
       throw err
     } finally {
       clearTimeout(timer)

@@ -1,6 +1,9 @@
 // 元气黄历 · 订阅后端入口
 import express from 'express'
 import cors from 'cors'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { config, smsConfigured, wechatConfigured } from './config.js'
 import { startScheduler } from './scheduler.js'
 import subscribeRouter from './routes/subscribe.js'
@@ -10,15 +13,36 @@ import agentRouter from './routes/agent.js'
 import { sharedPool } from './dsh/pool.js'
 
 const app = express()
-app.use(express.json())
+// 生产由 Caddy 反代到 127.0.0.1，不声明信任代理的话 req.ip 恒为 127.0.0.1，
+// 所有按 IP 的限流会退化成"全站共用一个桶"。'loopback' 只信任本机代理，
+// 公网客户端伪造 X-Forwarded-For 也不会被采信。
+app.set('trust proxy', config.trustProxy)
+// 默认上限 100KB 小于 share 路由自定的 300KB —— 大报告分享在到达路由前就被
+// body-parser 拒掉，返回的还是 500 而不是那条「内容过大」的提示。上限统一到 400KB，
+// 留出 JSON 转义的余量，具体的业务上限仍由各路由自己判。
+app.use(express.json({ limit: '400kb' }))
 app.use(cors({ origin: config.allowedOrigins, credentials: true }))
 
-// 健康检查
+// 健康检查。
+// ⚠ 此前只无脑返回 ok:true，不看 agent 通道 —— 部署脚本拿它验活、监控拿它判断
+// 存活，结果 DEEPSEEK_API_KEY 没配、引擎产物没打包这类「AI 全站不可用」的故障
+// 一律照样报健康。现在把 agent 依赖的两个前置条件也纳入，并在不满足时降级为 503，
+// 让部署与监控能真的发现问题。
 app.get('/api/health', (_req, res) => {
-  res.json({
-    ok: true,
+  const modelKey = Boolean(process.env.DEEPSEEK_API_KEY || process.env.MINIMAX_API_KEY)
+  const enginesBundle = fs.existsSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'dsh', 'plugins', 'lingshu-tools', 'dist', 'engines.mjs'),
+  )
+  const agentReady = modelKey && enginesBundle
+  res.status(agentReady ? 200 : 503).json({
+    ok: agentReady,
     sms: smsConfigured() ? 'configured' : 'local(mock)',
     wechat: wechatConfigured() ? 'configured' : 'local(mock)',
+    agent: agentReady ? 'ready' : 'unavailable',
+    agentDetail: agentReady ? undefined : {
+      modelKey: modelKey ? 'ok' : 'missing',            // 缺 DEEPSEEK_API_KEY / MINIMAX_API_KEY
+      enginesBundle: enginesBundle ? 'ok' : 'missing',  // 缺 npm run build:engines 的产物
+    },
     time: new Date().toISOString(),
   })
 })
@@ -28,9 +52,20 @@ app.use('/api', shareRouter)
 app.use('/api', skillsRouter)
 app.use('/api', agentRouter())
 
+// 兜底错误处理。
+// ⚠ 此前把 err.message 原样回给客户端，且一律 500 —— body-parser 的
+// entity.too.large / 非法 JSON 都是客户端错误，却报成服务端故障，
+// 错误文本还可能带出内部路径。现在按类型给状态码，细节只进日志。
 app.use((err, _req, res, _next) => {
   console.error('ERR', err)
-  res.status(500).json({ ok: false, msg: err.message || '服务器错误' })
+  if (res.headersSent) return
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).json({ ok: false, msg: '内容过大' })
+  }
+  if (err && (err.type === 'entity.parse.failed' || err instanceof SyntaxError)) {
+    return res.status(400).json({ ok: false, msg: '请求格式不正确' })
+  }
+  res.status(500).json({ ok: false, msg: '服务器错误' })
 })
 
 app.listen(config.port, config.host, () => {

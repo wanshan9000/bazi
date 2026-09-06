@@ -215,3 +215,67 @@ test('调用前已中止：不发送 prompt，直接返回空结果', async () =
   assert.equal(client.calls.prompts.length, 0)
   await pool.close()
 })
+
+// ── 超时相关回归 ────────────────────────────────────────────────────────────
+
+test('超时时在途的 next() 不能被丢弃：idle 到了就要释放 busy', async () => {
+  // 本轮迟迟不结束 → 触发 TIMEOUT；随后 idle 才到。
+  // 旧实现里 Promise.race 输给 deadline 的那个 sub.next() 结果被直接丢掉，
+  // 若丢掉的正是 idle，drainToIdle 会白等下一个永不到来的 idle，
+  // 会话要多 busy 整整一个 turnTimeout。
+  const client = fakeClient(() => [])
+  const pool = new DshPool({ createClient: () => client, turnTimeoutMs: 30 })
+  const sid = 's-timeout'
+
+  await assert.rejects(
+    pool.run({ routeKey: DEFAULT_ROUTE, sessionId: sid, text: '你好', onEvent: () => {} }),
+    err => err.code === 'TIMEOUT',
+  )
+  assert.equal(pool.isBusy(sid), true, '超时后应仍标记 busy，等待后台排空')
+
+  // idle 在超时之后才到达：必须被在途的那次 next() 接住
+  client.push(idle(sid))
+  for (let i = 0; i < 40 && pool.isBusy(sid); i++) await tick(5)
+  assert.equal(pool.isBusy(sid), false, 'idle 到达后应尽快释放 busy，而不是等满一个超时周期')
+  await pool.close()
+})
+
+test('静默超时会因持续输出而续期：长回复不会被中途判超时', async () => {
+  const client = fakeClient(() => [])
+  const pool = new DshPool({ createClient: () => client, turnTimeoutMs: 60 })
+  const sid = 's-long'
+  const seen = []
+
+  const running = pool.run({
+    routeKey: DEFAULT_ROUTE, sessionId: sid, text: '写一份长报告',
+    onEvent: e => { if (e.type === 'text') seen.push(e.delta) },
+  })
+
+  // 每 30ms 吐一小段，总时长（~180ms）远超 60ms 的静默超时；
+  // 只要计时随每条通知重置，这一轮就不该超时。
+  for (let i = 0; i < 6; i++) {
+    await tick(30)
+    client.push(ev(sid, 'assistant/chunk', { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: `第${i}段` } }))
+  }
+  client.push(idle(sid))
+
+  const r = await running
+  assert.ok(seen.length >= 3, `应收到多段增量，实际 ${seen.length} 段`)
+  assert.equal(pool.isBusy(sid), false)
+  await pool.close()
+})
+
+test('握手失败时关闭子进程，不留孤儿', async () => {
+  let closed = 0
+  const bad = {
+    async start() {},
+    async initialize() { throw new Error('boom') },
+    subscribeSessionTree() { return { next: () => new Promise(() => {}), close() {} } },
+    async close() { closed++ },
+  }
+  const pool = new DshPool({ createClient: () => bad, turnTimeoutMs: 50 })
+  await assert.rejects(pool.run({ routeKey: DEFAULT_ROUTE, sessionId: 's-bad', text: 'hi', onEvent: () => {} }))
+  for (let i = 0; i < 20 && closed === 0; i++) await tick(5)
+  assert.equal(closed, 1, '初始化失败的客户端必须被 close()，否则子进程一直挂着')
+  await pool.close()
+})

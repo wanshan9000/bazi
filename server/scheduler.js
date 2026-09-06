@@ -7,23 +7,23 @@ import { sendDailyPush } from './sms.js'
 import { sendWxTemplate } from './wechat.js'
 
 let started = false
+const timers = new Map()
 const log = (...a) => console.log('[推送]', ...a)
 
-function parseHHMM(str) {
-  const [h, m] = String(str).split(':').map(Number)
-  return h * 60 + (m || 0)
-}
-
-function slotTimeInMin() {
-  const now = new Date()
-  return now.getHours() * 60 + now.getMinutes()
-}
-
-function minuteUntil(hhmm) {
-  const target = parseHHMM(hhmm)
-  let diff = target - slotTimeInMin()
-  if (diff < 0) diff += 24 * 60
-  return diff * 60 * 1000
+/**
+ * 下一次该时段触发的绝对时刻。
+ *
+ * ⚠ 必须严格落在 `from` 之后。早先版本按"距离目标还有几分钟"算延时，命中当分钟时
+ * 差值为 0 → setTimeout(0) 立刻回调 → 回调末尾又重新排程、差值仍是 0，于是在目标
+ * 那一分钟里空转重入，把该时段的订阅者连环推送成百上千次（真实短信通道下就是账单事故）。
+ * 用绝对时刻算，且 `<=` 时推到明天，就不可能再排出 0 延时。
+ */
+export function nextRunAt(hhmm, from = new Date()) {
+  const [h, m] = String(hhmm).split(':').map(Number)
+  const at = new Date(from)
+  at.setHours(h || 0, m || 0, 0, 0)
+  if (at.getTime() <= from.getTime()) at.setDate(at.getDate() + 1)
+  return at
 }
 
 // 每个用户一次推送任务
@@ -45,13 +45,17 @@ async function pushSubscriber(sub) {
 function scheduleSlot(slotKey) {
   const hhmm = config.scheduler.slots[slotKey]
   if (!hhmm) return
-  const delay = minuteUntil(hhmm)
-  setTimeout(() => {
+  const at = nextRunAt(hhmm)
+  const t = setTimeout(() => {
     log(`开始推送时段 [${slotKey}] ${hhmm}`)
     const subs = listSubscribers().filter(s => s.enabled !== false && s.time === slotKey)
     for (const s of subs) pushSubscriber(s)
     scheduleSlot(slotKey) // 每天循环
-  }, delay)
+  }, at.getTime() - Date.now())
+  // 定时器不应把进程钉住：没有别的活儿时让 node 正常退出。
+  if (typeof t.unref === 'function') t.unref()
+  timers.set(slotKey, t)
+  log(`时段 [${slotKey}] 下次推送：${at.toLocaleString('zh-CN')}`)
 }
 
 export function startScheduler() {
@@ -61,4 +65,10 @@ export function startScheduler() {
   scheduleSlot('morning')
   scheduleSlot('noon')
   scheduleSlot('evening')
+}
+
+export function stopScheduler() {
+  for (const t of timers.values()) clearTimeout(t)
+  timers.clear()
+  started = false
 }
