@@ -45,7 +45,7 @@ export function incQimen() {
   return q.qimen
 }
 
-// 元气 AI：按 token 估算值累加；返回最新 tokens
+// 元氣 AI：按 token 估算值累加；返回最新 tokens
 //   token 估算策略：英文约 4 字符/token、中文约 1.5 字符/token 混合 → 取字符数 ÷ 3 作为粗估
 export function addAgentTokens(textLen) {
   if (!textLen || textLen <= 0) return 0

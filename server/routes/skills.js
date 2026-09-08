@@ -5,7 +5,7 @@ import { Router } from 'express'
 import crypto from 'crypto'
 import { config } from '../config.js'
 import { listSkills, findSkill, upsertSkill, deleteSkill } from '../store.js'
-import { adminConfigured, issueToken, requireAdmin, isValidAdminToken, loginBlocked, noteLoginFail, noteLoginOk } from '../adminAuth.js'
+import { adminConfigured, issueToken, requireAdmin, isValidAdminToken, isSuperAdminRequest, loginBlocked, noteLoginFail, noteLoginOk } from '../adminAuth.js'
 import { syncAdminSkill, removeAdminSkill } from '../dsh/adminSkills.js'
 
 // 技能落盘：停用的技能必须把 SKILL.md 从 _admin 目录移走，否则 dsh 的
@@ -23,7 +23,7 @@ const router = Router()
 
 // 内置技能 key 白名单：禁止被管理端导入覆盖（内置技能由代码维护，含精心审核的 sys）
 const BUILTIN_KEYS = new Set([
-  'bazi', 'yixue-taishan', 'mangpai', 'wuyunliuqi', 'liuyao', 'tarot', 'huangli', 'modern_huangli',
+  'bazi', 'bazi-router', 'yixue-taishan', 'mangpai', 'wuyunliuqi', 'liuyao', 'tarot', 'huangli', 'modern_huangli',
   'ziwei', 'qimen', 'love', 'wealth', 'health', 'fengshui', 'name',
 ])
 
@@ -32,6 +32,8 @@ const KEY_RE = /^[a-zA-Z0-9_-]{1,40}$/
 
 // ---- 1. 管理员登录（密码换令牌）----
 router.post('/admin/auth', (req, res) => {
+  // 已登录的超级管理员可直接取得后台会话令牌，无需额外输入静态管理口令。
+  if (isSuperAdminRequest(req)) return res.json({ ok: true, token: issueToken(), superAdmin: true })
   if (!adminConfigured()) {
     return res.status(403).json({ ok: false, msg: '管理后台未启用（请设置 ADMIN_PASSWORD 环境变量）' })
   }

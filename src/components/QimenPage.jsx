@@ -161,7 +161,7 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
   // 阶段一：排盘页
   if (stage === 'form') {
     return (
-      <section className="qimen-page">
+      <section className="qimen-page qimen-entry-form">
         {user && insufficient ? (
           <div className="qimen-board" style={{ padding: '24px' }}>
             <UpgradePrompt
@@ -183,7 +183,7 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
               eyebrow="奇门遁甲 · 游客免费 10 次"
               title="免费 10 次起盘已用完"
               desc="游客每起 1 次盘计 1 次免费配额，累计 10 次后需注册/登录成为会员，即可继续无限制起盘解读。"
-              note={`已累计起盘 ${qimenUsed} 次 · 注册默认开通「凡境」会员 · 扫码识别一步注册，自动登录`}
+              note={`已累计起盘 ${qimenUsed} 次 · 注册/登录后即可继续使用`}
             />
           </div>
         ) : (

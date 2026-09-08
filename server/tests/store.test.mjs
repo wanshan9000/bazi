@@ -77,3 +77,26 @@ test('数据文件损坏时另存备份，而不是静默清库后覆盖', () =>
   assert.equal(backups.length, 1, '损坏的原文件必须被另存，否则数据无法人工找回')
   assert.equal(fs.readFileSync(path.join(d, backups[0]), 'utf8'), '{ 这不是合法 JSON')
 })
+
+test('文库文章：草稿与已发布内容分别持久化和筛选', () => {
+  const published = store.upsertArticle({
+    id: 'article-store-published', title: '已发布文章', cat: 'intro', emoji: '📜',
+    digest: '公开文章', read: 3, body: '正文', content: [{ h: '正文', p: ['正文'] }],
+    status: 'published', updatedAt: Date.now(), publishedAt: Date.now(), views: 0,
+  })
+  store.upsertArticle({
+    id: 'article-store-draft', title: '草稿文章', cat: 'intro', emoji: '📜',
+    digest: '未公开文章', read: 3, body: '正文', content: [{ h: '正文', p: ['正文'] }],
+    status: 'draft', updatedAt: Date.now(), publishedAt: null, views: 0,
+  })
+  assert.equal(store.findArticle(published.id).title, '已发布文章')
+  assert.deepEqual(store.listArticles({ publishedOnly: true }).map(a => a.id), ['article-store-published'])
+  store.upsertArticle({
+    id: 'article-store-deleted', title: '已删除文章', cat: 'intro', emoji: '📜',
+    digest: '删除标记', read: 3, body: '正文', content: [{ h: '正文', p: ['正文'] }],
+    status: 'deleted', updatedAt: Date.now(), publishedAt: null, views: 0,
+  })
+  assert.equal(store.listArticles().some(a => a.id === 'article-store-deleted'), false, '删除标记不能出现在后台列表')
+  assert.ok(store.findArticle('article-store-deleted'), '保留删除标记，避免内置内容被迁移回流')
+  assert.equal(store.deleteArticle('article-store-draft'), true)
+})

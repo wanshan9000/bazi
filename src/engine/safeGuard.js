@@ -108,6 +108,6 @@ export function buildSafeSection(opts) {
       uncertainty: uncertaintyTail(kind),
       pattern: pattern || ''
     },
-    note: '元气AI 承诺 SAFE 红线：不算命定宿命、不越医疗边界、不推销祛灾服务、不隐瞒不确定性。'
+    note: '元氣AI 承诺 SAFE 红线：不算命定宿命、不越医疗边界、不推销祛灾服务、不隐瞒不确定性。'
   }
 }

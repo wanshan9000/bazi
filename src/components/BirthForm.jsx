@@ -101,7 +101,7 @@ export default function BirthForm({ onBack, onGenerate }) {
   return (
     <div className="form-wrap">
       <div className="container" style={{ maxWidth: 500 }}>
-        <button className="back-btn rise" onClick={onBack}>← 返回首页</button>
+        <button className="back-btn rise" onClick={onBack}>‹ 返回</button>
         <h1 className="form-title rise rise-1">生辰排盘</h1>
         <p className="form-sub rise rise-2">输入出生信息，灵枢为你排定命盘</p>
 

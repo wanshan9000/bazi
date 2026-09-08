@@ -1,4 +1,4 @@
-// 会话历史存储：localStorage 持久化，记录每一次「元气AI」会话，供用户找回历史会话
+// 会话历史存储：localStorage 持久化，记录每一次「元氣AI」会话，供用户找回历史会话
 // 按登录用户隔离（userScope）：不同账号的历史互不串台；游客使用 base key
 import { localKey, sessionKey } from './userScope.js'
 

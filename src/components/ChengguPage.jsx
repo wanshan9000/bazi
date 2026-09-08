@@ -28,10 +28,10 @@ export default function ChengguPage({ onBack }) {
   }
 
   return (
-    <div className="page-wrap">
+    <div className="page-wrap chenggu-page">
       <div className="container">
         <div className="page-head rise">
-          <button className="back-btn" onClick={onBack}>← 返回首页</button>
+          <button className="back-btn" onClick={onBack}>‹ 返回</button>
           {result && !editing && (
             <button className="change-chart-btn" onClick={handleReset}>更换生辰</button>
           )}
@@ -137,8 +137,11 @@ function ChengguForm({ onDone }) {
   }
 
   return (
-    <div className="card rise rise-3">
-      <div className="field">
+    <div className="card rise rise-3 chenggu-entry-form">
+      <div className="form-head">✦ 获取称骨命书 ✦</div>
+      <p className="form-sub">输入生辰 · 称出你的骨重与命格</p>
+
+      <div className="field chenggu-date-field">
         <label className="date-label-row">
           <span>出生日期<span className="req">*</span></span>
           <span className="cal-switch">
@@ -185,13 +188,15 @@ function ChengguForm({ onDone }) {
 
       <div className="field">
         <label>性别</label>
-        <div className="toggle-row">
-          <div className={`toggle-chip ${gender === '男' ? 'active' : ''}`} onClick={() => setGender('男')}>乾造 · 男</div>
-          <div className={`toggle-chip ${gender === '女' ? 'active' : ''}`} onClick={() => setGender('女')}>坤造 · 女</div>
+        <div className="select-wrap">
+          <select value={gender} onChange={e => setGender(e.target.value)}>
+            <option value="男">乾造 · 男</option>
+            <option value="女">坤造 · 女</option>
+          </select>
         </div>
       </div>
 
-      <div className="field">
+      <div className="field chenggu-name-field">
         <label>称呼（可选）</label>
         <input type="text" placeholder="怎么称呼你？" value={name} maxLength={12} onChange={e => setName(e.target.value)} />
       </div>

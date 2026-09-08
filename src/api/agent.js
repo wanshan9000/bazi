@@ -1,4 +1,4 @@
-// 元气 AI 前端客户端：POST /api/agent/chat（SSE）+ 会话接口
+// 元氣 AI 前端客户端：POST /api/agent/chat（SSE）+ 会话接口
 //
 // 身份：登录用户带 Authorization: Bearer <jwt>，游客带自报的 anon:* 标识。
 // 服务端不再接受自报的账号 uid（那等于谁都能读别人的会话）。

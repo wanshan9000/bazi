@@ -52,6 +52,23 @@ test('writeSkills 生成内置技能目录', async () => {
   assert.ok(fs.existsSync(path.join(dir, 'mangpai', 'SKILL.md')))
 })
 
+test('盲派 skill 先排盘大运，完整分析必须由缘主明确请求', () => {
+  const doc = readSkillDoc('mangpai')
+  assert.match(doc, /两阶段交付协议/)
+  assert.match(doc, /第一轮：只交付排盘和大运/)
+  assert.match(doc, /后续普通问答：只答当前问题/)
+  assert.match(doc, /完整报告：仅明确请求时触发/)
+  assert.match(doc, /正印.*偏印.*正财.*偏财.*正官.*七杀/)
+})
+
+test('八字流派路由 skill 负责默认流派、术语确认与双派分章', () => {
+  const doc = readSkillDoc('bazi-router')
+  assert.match(doc, /默认加载 `mangpai`/)
+  assert.match(doc, /你是想按子平派做报告吗/)
+  assert.match(doc, /## 子平派分析/)
+  assert.match(doc, /## 盲派分析/)
+})
+
 test('管理后台技能同步到 _admin', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'admin-'))
   syncAdminSkill({ key: 'my_skill', name: '我的技能', desc: 'd', sys: 's' }, dir)

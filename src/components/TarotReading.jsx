@@ -138,7 +138,7 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
     return (
       <div className="page-wrap">
         <div className="container">
-          <button className="back-btn" onClick={onBack}>← 返回</button>
+          <button className="back-btn" onClick={onBack}>‹ 返回</button>
           <p style={{ padding: 30 }}>未找到此牌阵</p>
         </div>
       </div>
@@ -153,7 +153,7 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
       setDrawn(result.cards)
       setStage(STAGES.PICK)
       setRevealed(0)
-    }, 1400)
+    }, 2900)
   }
 
   const revealNext = () => {
@@ -218,8 +218,7 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
     <div className="page-wrap tarot-reading">
       <div className="container">
         <div className="page-head rise">
-          <button className="back-btn" onClick={onBack}>← 牌阵选择</button>
-          <span className="page-meta">{spread.name} · {spread.count} 张</span>
+          <button className="back-btn" onClick={onBack}>‹ 返回</button>
         </div>
         <h1 className="page-title rise rise-1">{spread.name}</h1>
         <p className="page-sub rise rise-2">{spread.short}</p>
@@ -258,7 +257,17 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
           <div className="card tarot-shuffle rise">
             <div className="shuffle-deck">
               {Array.from({ length: 7 }).map((_, i) => (
-                <div key={i} className="sd-card" style={{ animationDelay: `${i * 0.06}s` }}>
+                <div
+                  key={i}
+                  className="sd-card"
+                  style={{
+                    '--shuffle-x': `${(i % 2 ? 1 : -1) * (34 + (i % 3) * 13)}px`,
+                    '--shuffle-r': `${(i % 2 ? 1 : -1) * (7 + (i % 3) * 3)}deg`,
+                    '--shuffle-x-return': `${(i % 2 ? -1 : 1) * (24 + (i % 3) * 9)}px`,
+                    '--shuffle-r-return': `${(i % 2 ? -1 : 1) * (5 + (i % 3) * 2)}deg`,
+                    animationDelay: `${i * 0.09}s`
+                  }}
+                >
                   <TarotCardBack />
                 </div>
               ))}
@@ -405,7 +414,7 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
 
             {/* 总论 + 牌面叙事 */}
             <div className="card rise rise-2" style={{ marginTop: 16 }}>
-              <h3 className="tr-section">司命解卦 · 总论</h3>
+              <h3 className="tr-section">三门解卦 · 总论</h3>
               <p className="tr-summary">{interpretation.summary}</p>
               <div className="tr-divider" />
               <h4 className="tr-subhead">牌面叙事</h4>
@@ -493,7 +502,7 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
                 ))}
               </ol>
               <div className="tr-divider" />
-              <h4 className="tr-subhead">司命建议</h4>
+              <h4 className="tr-subhead">三门建议</h4>
               <p className="tr-text">{interpretation.suggestion}</p>
               <p className="tr-disclaimer">
                 塔罗映照的是当下的能量倾向，最终的选择与行动始终在于你。信任直觉，方能穿越迷雾。

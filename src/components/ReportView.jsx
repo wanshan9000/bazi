@@ -931,14 +931,14 @@ const ReportViewBody = forwardRef(function ReportViewBody({ report, lead, hideLe
           </section>
         )
       case 'guide': {
-        // skill 技法总纲：单行极简展示——由哪套元气AI技能指导 + 一句话解读思路
+        // skill 技法总纲：单行极简展示——由哪套元氣AI技能指导 + 一句话解读思路
         const g = s.data || {}
         return (
           <section className="br-section" key={s.key}>
             {h}
             <div className="br-guide-body" style={{ padding: '8px 14px', borderRadius: '8px', fontSize: 13, lineHeight: 1.8, background: 'rgba(120,92,60,.06)', border: '1px solid rgba(120,92,60,.18)' }}>
               {g.icon ? <span style={{ marginRight: 6 }}>{g.icon}</span> : null}
-              <b>元气AI「{g.name || '排盘引擎'}」</b>
+              <b>元氣AI「{g.name || '排盘引擎'}」</b>
               {g.methodText ? <span style={{ color: 'var(--text-2, #8a857a)' }}>　解读思路：{g.methodText}</span> : null}
             </div>
             {s.note ? <BrNote>{s.note}</BrNote> : null}
@@ -1031,73 +1031,142 @@ const ReportViewBody = forwardRef(function ReportViewBody({ report, lead, hideLe
                 <div className="br-id-pillars">
                   {s.data.pillars.map((p, i) => (
                     <div className={'br-id-pillar' + (p.label === '日柱' ? ' br-id-pillar-day' : '')} key={i}>
-                      <span className="br-id-pillar-label">{p.label}{p.label === '日柱' ? <i className="br-id-pillar-tag">日主</i> : null}</span>
+                      <span className="br-id-pillar-label">
+                        {p.label}
+                        {p.label === '日柱' ? <i className="br-id-pillar-tag">日主</i> : null}
+                        {report.type === 'ziwei' && p.label === '年柱' && s.data.zodiac ? <i className="br-id-pillar-tag">生肖 {s.data.zodiac}</i> : null}
+                      </span>
                       <b className="br-id-pillar-gan">{p.gan}</b>
                       <b className="br-id-pillar-zhi">{p.zhi}</b>
                     </div>
                   ))}
                 </div>
               ) : null}
-              {/* 喜用 / 忌用 / 命主 / 身主 一行四卡 */}
+              {/* 紫微的喜忌与命主身主各自收在单张信息卡内。 */}
               <div className="br-id-tags">
-                {(s.data.favorable && s.data.favorable.length) ? (
+                {report.type === 'ziwei' && ((s.data.favorable && s.data.favorable.length) || (s.data.avoid && s.data.avoid.length)) ? (
+                  <div className="br-id-balance-card">
+                    <span className="br-id-balance-title">喜忌</span>
+                    {(s.data.favorable && s.data.favorable.length) ? (
+                      <div className="br-id-balance-row br-id-balance-good">
+                        <span className="br-id-balance-label">喜用</span>
+                        <b className="br-id-tag-val">{(s.data.favorable || []).map((w, i) => <span className="br-id-tag-chip br-id-tag-chip-good" key={'f' + i}>{w}</span>)}</b>
+                      </div>
+                    ) : null}
+                    {(s.data.avoid && s.data.avoid.length) ? (
+                      <div className="br-id-balance-row br-id-balance-bad">
+                        <span className="br-id-balance-label">忌用</span>
+                        <b className="br-id-tag-val">{(s.data.avoid || []).map((w, i) => <span className="br-id-tag-chip br-id-tag-chip-bad" key={'a' + i}>{w}</span>)}</b>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {report.type !== 'ziwei' && (s.data.favorable && s.data.favorable.length) ? (
                   <div className="br-id-tag br-id-tag-good">
                     <span className="br-id-tag-cap">喜用</span>
                     <b className="br-id-tag-val">{(s.data.favorable || []).map((w, i) => <span className="br-id-tag-chip br-id-tag-chip-good" key={'f' + i}>{w}</span>)}</b>
                   </div>
                 ) : null}
-                {(s.data.avoid && s.data.avoid.length) ? (
+                {report.type !== 'ziwei' && (s.data.avoid && s.data.avoid.length) ? (
                   <div className="br-id-tag br-id-tag-bad">
                     <span className="br-id-tag-cap">忌用</span>
                     <b className="br-id-tag-val">{(s.data.avoid || []).map((w, i) => <span className="br-id-tag-chip br-id-tag-chip-bad" key={'a' + i}>{w}</span>)}</b>
                   </div>
                 ) : null}
-                {s.data.soul && s.data.soul.name ? (
+                {report.type === 'ziwei' && ((s.data.soul && s.data.soul.name) || (s.data.body && s.data.body.name)) ? (
+                  <div className="br-id-rulers-card">
+                    <span className="br-id-rulers-title">命主 · 身主</span>
+                    {s.data.soul && s.data.soul.name ? (
+                      <div className="br-id-rulers-row"><span>命主</span><b>{s.data.soul.name}</b></div>
+                    ) : null}
+                    {s.data.body && s.data.body.name ? (
+                      <div className="br-id-rulers-row"><span>身主</span><b>{s.data.body.name}</b></div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {report.type !== 'ziwei' && s.data.soul && s.data.soul.name ? (
                   <div className="br-id-tag br-id-tag-soul">
                     <span className="br-id-tag-cap">命主</span>
                     <b className="br-id-tag-val">{s.data.soul.name}</b>
                   </div>
                 ) : null}
-                {s.data.body && s.data.body.name ? (
+                {report.type !== 'ziwei' && s.data.body && s.data.body.name ? (
                   <div className="br-id-tag br-id-tag-body">
                     <span className="br-id-tag-cap">身主</span>
                     <b className="br-id-tag-val">{s.data.body.name}</b>
                   </div>
                 ) : null}
               </div>
-              {/* 时间 + 属性小卡 */}
-              <div className="br-id-meta">
-                {s.data.solar ? (
-                  <div className="br-id-meta-cell">
-                    <span className="br-id-meta-cap">公历</span>
-                    <b className="br-id-meta-val">{s.data.solar}</b>
+              {/* 时间与命盘属性 */}
+              <div className={`br-id-meta ${report.type === 'ziwei' ? 'br-id-meta--ziwei' : ''}`}>
+                {report.type === 'ziwei' && (s.data.solar || s.data.lunar) ? (
+                  <div className="br-id-calendar">
+                    <span className="br-id-calendar-title">出生信息</span>
+                    {s.data.solar ? (
+                      <div className="br-id-calendar-row">
+                        <span>公历</span>
+                        <b className="br-id-meta-val">{s.data.solar}</b>
+                      </div>
+                    ) : null}
+                    {s.data.lunar ? (
+                      <div className="br-id-calendar-row">
+                        <span>农历</span>
+                        <b className="br-id-meta-val">{s.data.lunar}</b>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <>
+                    {s.data.solar ? (
+                      <div className="br-id-meta-cell">
+                        <span className="br-id-meta-cap">公历</span>
+                        <b className="br-id-meta-val">{s.data.solar}</b>
+                      </div>
+                    ) : null}
+                    {s.data.lunar ? (
+                      <div className="br-id-meta-cell">
+                        <span className="br-id-meta-cap">农历</span>
+                        <b className="br-id-meta-val">{s.data.lunar}</b>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+                {report.type === 'ziwei' && (s.data.qiyun || s.data.ju) ? (
+                  <div className="br-id-start-card">
+                    <span className="br-id-start-title">五行局 · 起运</span>
+                    {s.data.ju ? (
+                      <div className="br-id-start-item">
+                        <span>五行局</span>
+                        <b className="br-id-meta-val">{s.data.ju}</b>
+                      </div>
+                    ) : null}
+                    {s.data.qiyun ? (
+                      <div className="br-id-start-item">
+                        <span>起运</span>
+                        <b className="br-id-meta-val">{s.data.qiyun.age ? `${s.data.qiyun.age} 岁起运` : s.data.qiyun.text}{s.data.qiyun.date ? <em>{s.data.qiyun.date}</em> : null}</b>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
-                {s.data.lunar ? (
-                  <div className="br-id-meta-cell">
-                    <span className="br-id-meta-cap">农历</span>
-                    <b className="br-id-meta-val">{s.data.lunar}</b>
-                  </div>
-                ) : null}
-                {s.data.qiyun ? (
+                {report.type !== 'ziwei' && s.data.qiyun ? (
                   <div className="br-id-meta-cell">
                     <span className="br-id-meta-cap">起运</span>
                     <b className="br-id-meta-val">{s.data.qiyun.text || `${s.data.qiyun.age} 岁`}{s.data.qiyun.date ? <em>{s.data.qiyun.date}</em> : null}</b>
                   </div>
                 ) : null}
-                {s.data.zodiac ? (
+                {report.type !== 'ziwei' && s.data.zodiac ? (
                   <div className="br-id-meta-cell">
                     <span className="br-id-meta-cap">生肖</span>
                     <b className="br-id-meta-val">{s.data.zodiac}</b>
                   </div>
                 ) : null}
-                {s.data.sign ? (
+                {report.type !== 'ziwei' && s.data.sign ? (
                   <div className="br-id-meta-cell">
                     <span className="br-id-meta-cap">星座</span>
                     <b className="br-id-meta-val">{s.data.sign}</b>
                   </div>
                 ) : null}
-                {s.data.ju ? (
+                {report.type !== 'ziwei' && s.data.ju ? (
                   <div className="br-id-meta-cell">
                     <span className="br-id-meta-cap">五行局</span>
                     <b className="br-id-meta-val">{s.data.ju}</b>
@@ -1704,7 +1773,7 @@ const main = (s.data.items || []).filter(it => it.sub || it.desc)
   }
 
   return (
-    <div className={`bazi-report${report?.type === 'bazi' ? ' br-ziping' : ''}`} style={style}>
+    <div className={`bazi-report${report?.type === 'bazi' ? ' br-ziping' : ''}${report?.type === 'ziwei' ? ' br-ziwei' : ''}`} style={style}>
       {!hideLead && !readonly && (lead ? cloneElement(lead, { actions: (
         <div className="br-actions">
           <button className="br-btn" onClick={copy}>{copied ? '已复制 ✓' : '⧉ 复制'}</button>
@@ -1795,7 +1864,7 @@ const main = (s.data.items || []).filter(it => it.sub || it.desc)
         </section>
       )}
 
-      <div className="br-foot">本报告由元气AI 高精度排盘引擎生成，仅供娱乐与参考。</div>
+      <div className="br-foot">本报告由元氣AI 高精度排盘引擎生成，仅供娱乐与参考。</div>
 
       {showTop && (
         <button className="br-topbtn" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="返回顶部">↑</button>

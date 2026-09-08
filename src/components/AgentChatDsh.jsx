@@ -1,4 +1,4 @@
-// 元气 AI · dsh 基座版：只做渲染与流式接管，编排/工具/记忆全在服务端 dsh
+// 元氣 AI · dsh 基座版：只做渲染与流式接管，编排/工具/记忆全在服务端 dsh
 import { useEffect, useRef, useState } from 'react'
 import { createAgentApi } from '../api/agent.js'
 import { buildChart } from '../engine/bazi.js'
@@ -11,13 +11,26 @@ import { ThinkBlock, ToolCallsBlock, CopyButton, renderAiText, timeNow, fmtSessi
 
 const api = createAgentApi()
 const ROUTE_KEY = 'genki-agent-route'
-const OPENING = ['我是「司命」。八字、紫微、六爻、奇门、黄历、塔罗、取名、风水，心有所问，尽管开口。', '把出生年月日时和性别告诉我，我先为你排盘；也可以直接问今年运势、事业、姻缘。']
+const OPENING = ['我是「三门先生」，一位玄学大师。八字、紫微、六爻、奇门、黄历、塔罗、取名、风水，心有所问，尽管开口。', '把出生年月日时和性别告诉我，我先为你排盘；也可以直接问今年运势、事业、姻缘。']
+const SHI_CHEN = ['子', '丑', '丑', '寅', '寅', '卯', '卯', '辰', '辰', '巳', '巳', '午', '午', '未', '未', '申', '申', '酉', '酉', '戌', '戌', '亥', '亥', '子']
 
 // hour 缺失表示「时辰未知」，不能悄悄补成 12 点：服务端会把它当成确定的午时写进
 // 命盘行，模型据此排出的时柱是编的，用户却看不出来。原样传 null，由服务端与人设
 // 决定怎么向用户说明。
 function chartMeta(c) { return c ? { year: c.year, month: c.month, day: c.day, hour: c.hour ?? null, gender: c.gender } : null }
-function chartLabel(c) { return `${c.gender === '女' ? '坤造' : '乾造'} · ${c.year}年${c.month}月${c.day}日${c.hour ? ` ${c.hour}时` : ''}` }
+function chartLabel(c) {
+  const shiChen = Number.isInteger(c.hour) ? ` · ${SHI_CHEN[c.hour]}时` : ''
+  return `${c.gender === '女' ? '坤造' : '乾造'} · ${c.year}年${c.month}月${c.day}日${shiChen}`
+}
+function sessionTitle(s) {
+  if (!s.chartKey) return s.title || '未命名会话'
+  const [year, month, day, hour, gender] = s.chartKey.split('-')
+  const h = hour === 'x' ? null : Number(hour)
+  if (!Number.isInteger(+year) || !Number.isInteger(+month) || !Number.isInteger(+day) || (h !== null && !Number.isInteger(h))) {
+    return s.title || '未命名会话'
+  }
+  return chartLabel({ year: +year, month: +month, day: +day, hour: h, gender })
+}
 
 export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequireLogin, onUpgrade, onUserChange }) {
   const [messages, setMessages] = useState(() => OPENING.map((text, i) => ({ id: `boot-${i}`, role: 'ai', text, time: timeNow(), _counted: true })))
@@ -25,6 +38,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
   const [typing, setTyping] = useState(false)
   const [activeChart, setActiveChart] = useState(() => chartProp || null)
   const [sessionId, setSessionId] = useState(null)
+  const [activeSession, setActiveSession] = useState(null)
   const [sessions, setSessions] = useState([])
   const [showHistory, setShowHistory] = useState(false)
   const [collection, setCollection] = useState(() => listCollection())
@@ -104,7 +118,10 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
         sessionId, text: q, chart: chartMeta(activeChart), route: route || models.default || undefined, signal: ac.signal,
         onEvent: e => {
           switch (e.type) {
-            case 'session': if (!sessionId) setSessionId(e.sessionId); break
+            case 'session':
+              if (!sessionId) setSessionId(e.sessionId)
+              setActiveSession(prev => prev?.id === e.sessionId ? prev : { id: e.sessionId, title: q.slice(0, 14) })
+              break
             case 'text': patchLast(m => ({ ...m, text: m.text + e.delta })); break
             case 'reasoning': patchLast(m => ({ ...m, reasoning: (m.reasoning || '') + e.delta })); break
             case 'tool_call': patchLast(m => ({ ...m, tools: [...m.tools, e.name] })); break
@@ -177,6 +194,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
   const newChat = () => {
     if (abortRef.current) abortRef.current.abort()
     setSessionId(null)
+    setActiveSession(null)
     setActiveChart(null)
     setShowHistory(false)
     setInput('')
@@ -207,6 +225,8 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
         ? { id: `h-${i}`, role: 'ai', kind: 'report', report: { title: (m.text.match(/^# (.+)$/m) || [])[1] || '测算报告', markdown: m.text }, time: m.time, _counted: true }
         : { id: `h-${i}`, role: m.role, text: m.text, time: m.time, _counted: true }))
       setSessionId(s.id)
+      setActiveSession({ id: s.id, title: sessionTitle(s) })
+      setActiveChart(null)
       if (s.chartKey) { const [y, mo, d, h, g] = s.chartKey.split('-'); try { setActiveChart(buildChart(+y, +mo, +d, +h, g)) } catch { /* 命盘键格式异常：不影响正文恢复 */ } }
       setShowHistory(false)
     } catch (e) {
@@ -220,8 +240,10 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
     setHistoryErr('')
     try {
       await api.deleteSession(id)
-      setSessions(prev => prev.filter(s => s.id !== id))
-      if (sessionId === id) newChat()
+      const remaining = sessions.filter(s => s.id !== id)
+      setSessions(remaining)
+      // 删掉最后一条历史时，不能继续显示已不属于任何会话的旧消息。
+      if (remaining.length === 0 || sessionId === id) newChat()
     } catch (e) {
       setHistoryErr('删除失败，请稍后重试')
     }
@@ -236,7 +258,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
     refreshCollection()
   }
   const switchToCollected = (it) => {
-    try { setActiveChart(buildChart(it.year, it.month, it.day, it.hour, it.gender)); setSessionId(null); setShowCollection(false) } catch { /* 忽略 */ }
+    try { setActiveChart(buildChart(it.year, it.month, it.day, it.hour, it.gender)); setSessionId(null); setActiveSession(null); setShowCollection(false) } catch { /* 忽略 */ }
   }
   // 换模型 = 换一个服务端会话。此前只把 sessionId 置空却保留了聊天记录：
   // 界面上还挂着上文，服务端却是一张白纸，模型完全不知道前面聊过什么，
@@ -255,15 +277,15 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
     e.preventDefault()
     send()
   }
-  const routeLabel = (models.routes.find(r => r.key === (route || models.default)) || {}).label || '司命'
-
   return (
     <div className="agent-page-inner">
       <div className="agent-head">
-        <div className="agent-avatar">司</div>
+        <div className="agent-avatar">三</div>
         <div className="agent-head-main">
           <div className="agent-head-top">
-            {activeChart ? <div className="current-chart-chip"><span className="current-chart-txt">{chartLabel(activeChart)}</span></div> : <div className="name">司命 Agent</div>}
+            {activeChart ? <div className="current-chart-chip"><span className="current-chart-txt">{chartLabel(activeChart)}</span></div>
+              : activeSession ? <div className="current-session-chip" title={activeSession.title}><span className="current-session-label">会话</span><span className="current-session-title">{activeSession.title}</span></div>
+                : <div className="name"><span className="agent-name-full">三门先生</span><span className="agent-name-short">三门</span></div>}
           </div>
         </div>
         <div className="agent-head-actions">
@@ -272,10 +294,6 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
           </button>
           <button className="agent-btn" onClick={openHistory} title="会话历史" aria-label="会话历史">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 3" /></svg>
-          </button>
-          <button className="agent-btn" onClick={() => { refreshCollection(); setShowCollection(true) }} title="我的命盘" aria-label="我的命盘">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.1 6.3 7 1-5.1 4.9 1.2 6.9L12 17.8 5.8 21l1.2-6.9L2 9.3l7-1L12 2z" /></svg>
-            {collection.length > 0 && <span className="agent-btn-badge">{collection.length}</span>}
           </button>
         </div>
 
@@ -292,7 +310,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
               {sessions.length === 0 ? <div className="session-empty">暂无历史会话，聊两句就会自动记录。</div> : sessions.map(s => (
                 <div key={s.id} className={`session-item ${s.id === sessionId ? 'active' : ''}`} onClick={() => restore(s)}>
                   <div className="session-item-body">
-                    <div className="session-item-title">{s.title}</div>
+                    <div className="session-item-title">{sessionTitle(s)}</div>
                     <div className="session-item-meta"><span>{s.messageCount} 条消息</span><span>{fmtSessionTime(s.updatedAt)}</span></div>
                   </div>
                   <button className="session-del" onClick={e => { e.stopPropagation(); del(s.id) }} title="删除" aria-label="删除会话">
@@ -330,7 +348,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
       <div className="chat-scroll" ref={scrollRef}>
         {messages.map(m => (
           <div key={m.id} className={`msg ${m.role}`}>
-            <div className="avatar">{m.role === 'ai' ? '司' : m.role === 'tool' ? '🔧' : '我'}</div>
+            <div className="avatar">{m.role === 'ai' ? '三' : m.role === 'tool' ? '🔧' : '我'}</div>
             <div style={{ maxWidth: '100%' }}>
               {m.kind === 'report' ? (
                 <>
@@ -366,7 +384,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
       </div>
 
       <div className="chat-input-bar">
-        <textarea className="chat-input" rows={1} placeholder={`问司命任何问题…（${routeLabel}）`} value={input}
+        <textarea className="chat-input" rows={1} placeholder="问三门先生任何问题…" value={input}
           onChange={e => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 110) + 'px' }}
           onKeyDown={handleKey} style={{ maxHeight: 110 }} />
         <div className="input-status-wrap">

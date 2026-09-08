@@ -548,9 +548,8 @@ function buildSystemPrompt(chart, cfg, skill, toolText, agentMode, altSkills, to
   }
   if (chart) {
     try {
-      // 流派选择：用户显式指定优先；否则自动评估子平/盲派两套体系的解读明确度，选更精准的注入普通测算。
-      // （完整报告仍走"反问选流派"，此处仅影响普通对话的命盘数据口径）
-      const _schoolPick = forcedSchool || pickSchool(chart).school
+      // 流派选择：用户显式指定优先；未指定时统一按盲派口径，避免两派术语混杂。
+      const _schoolPick = forcedSchool || 'mangpai'
       const _mangpai = _schoolPick === 'mangpai' ? buildMangpaiContext(chart) : null
       if (_mangpai) {
         // ── 盲派普通解读（做功/根基/效率/财富格局） ──
@@ -642,7 +641,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
   const [showHistory, setShowHistory] = useState(false)
   // 长期用户画像记忆（跨会话记住称谓/职业/情感/关注）
   const [userProfile, setUserProfile] = useState(() => loadUserProfile())
-  // 元气 AI · 游客积分制（注册会员不计数；累计 ≥ 100 积分 ≈ 1000 万 token 即提示订阅）
+  // 元氣 AI · 游客积分制（注册会员不计数；累计 ≥ 100 积分 ≈ 1000 万 token 即提示订阅）
   const [agentTokens, setAgentTokens] = useState(0)
   const [quotaDismissed, setQuotaDismissed] = useState(false)
   useEffect(() => { setAgentTokens(loadQuota().agentTokens || 0) }, [])
@@ -716,7 +715,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
     const lines = cur ? openingLine(cur) : openingNoChart()
     if (seedQuery) {
       // ⚠ 此前只是把 seedQuery 渲染成一条用户气泡就完事，从不发起回复 ——
-      // 从首页「问司命」带着问题跳进来的用户，看到自己的问题挂在那里、AI 毫无反应。
+      // 从首页「问三门」带着问题跳进来的用户，看到自己的问题挂在那里、AI 毫无反应。
       // 开场白是本地静态文本，不消耗 token → 预标记 _counted=true 防止计费。
       setMessages(lines.map((text, i) => ({ id: `boot-${i}`, role: 'ai', text, time: timeNow(), _counted: true })))
       setInput('')
@@ -742,7 +741,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
       const pillarText = chart?.pillars ? chart.pillars.map(p => `${p.gan}${p.zhi}`).join(' ') : ''
       upsertSession({
         id,
-        title: (firstUser?.text || '元气AI 会话').slice(0, 14),
+        title: (firstUser?.text || '元氣AI 会话').slice(0, 14),
         createdAt: createdAtRef.current,
         lastAt: Date.now(),
         chartMeta: meta,
@@ -873,7 +872,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
   // school: ''（综合，融合子平/盲派/紫微）| 'ziping'（子平派视角）| 'mangpai'（盲派视角）
   // 有 LLM → 以大模型为主，把命盘上下文与各门类本地引擎要点作为 skill 数据注入，生成 <think> 推理依据 + markdown 正文
   // 无 LLM → 本地降级：合并八字 + 紫微 + 大运流年要点，并提示可到「八字-报告」查看子平派/盲派报告
-  const doFullReport = async (useChart = chart, who = '', school = '') => {
+  const doFullReport = async (useChart = chart, who = '', school = 'mangpai') => {
     const c = useChart || chart
     if (!c || !c.pillars) {
       await pushAi(['要生成综合完整报告，需要先排盘。请返回首页选择「AI 八字排盘」，填写出生年月日时与性别后再进入；或直接告诉我你的出生年月日时和性别。'])
@@ -950,10 +949,11 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
         ? '【本报告流派——子平派（传统理论派）】以五行喜忌、十神配置、大运流年为主线，讲究条理清晰、通俗易懂；五行旺衰、用神忌神、十神组合是断命骨架，大运流年应期以天干地支生克为准绳。'
         : school === 'mangpai'
           ? '【本报告流派——盲派（民间师傅派）】以做功、体用宾主、根基墓库为主线，直断式、口语化，擅长快速看事断吉凶；找势（哪方势力最强）、找功（靠什么做功）、宾主（日主与财官的关系）是断命骨架，应期看刑冲合害与墓库刑冲合。'
-          : '【本报告流派——综合】贯通子平（五行喜忌、十神配置）、盲派（做功、体用宾主）、紫微斗数与当代实用建议，取各派所长给出综合判断。'
+          : '【本报告流派——综合】综合不等于混合断法：子平（五行喜忌、十神配置）与盲派（做功、体用宾主）必须分别成章。正文依序使用「## 子平派分析」「## 盲派分析」，各章只采用本派术语、依据与结论；如需汇总，只能在最后以「## 交叉参考（不混用断法）」说明两派的共识或差异。'
       const sys = [
-        `你是「司命」，一位贯通子平、盲派（段建业《盲派命理》）、紫微斗数与当代实用建议的资深命理师。用户要一份「${schoolTitle}」。`,
+        `你是「三门先生」，一位贯通子平、盲派（段建业《盲派命理》）、紫微斗数与当代实用建议的玄学大师。用户要一份「${schoolTitle}」。`,
         schoolLine,
+        '【流派隔离（最高优先）】子平派与盲派是两套独立方法，严禁在同一段混用术语、取法或结论。子平派只用日主旺衰、格局、十神、喜忌、调候、大运流年等框架；盲派只用找势、做功、体用宾主、根基墓库、刑冲合害穿等框架。指定单一流派时，全文只写该流派；仅用户明确要求双派/对比/综合时，才可按「子平派分析 → 盲派分析 → 交叉参考」的顺序分章输出。',
         '【输出格式——严格遵循】整篇回复分两部分：',
         '第一部分（推理依据，放在 <think> 标签内，前端默认折叠，供想深究的用户展开查看）：<think>这里写你的分析推导过程、所引用的各派要点与典籍出处，可包含"命主为武曲星""身主为天同"等专业推演，以及大运流年的推算逻辑</think>',
         '第二部分（正式报告正文，markdown 格式，只输出结论性断语）：',
@@ -1042,7 +1042,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
         const meta = REPORT_META[type] || {}
         const subject = who ? `「${who}」的` : '你的'
         const sys = [
-          `你是「司命」。用户刚生成了${subject}完整的${meta.name || type}报告，请用一段 80-150 字的暖心导语，概括其核心亮点与关键提示，语气温和，先结论后依据。`,
+          `你是「三门先生」。用户刚生成了${subject}完整的${meta.name || type}报告，请用一段 80-150 字的暖心导语，概括其核心亮点与关键提示，语气温和，先结论后依据。`,
           `【报告要点】${(rep.markdown || '').slice(0, 600)}`,
           '注意：仅供娱乐参考。'
         ].join('\n\n')
@@ -1074,7 +1074,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
         setTyping(true)
         try {
           const sys = [
-            `你是「司命」。用户刚生成了两人的合婚报告，请用一段 80-150 字的暖心导语，概括其契合亮点与需要留意的点，语气温和，先结论后依据。`,
+            `你是「三门先生」。用户刚生成了两人的合婚报告，请用一段 80-150 字的暖心导语，概括其契合亮点与需要留意的点，语气温和，先结论后依据。`,
             `【报告要点】${(rep.markdown || '').slice(0, 600)}`,
             '注意：仅供娱乐参考，请勿用于草率决定人生大事。'
           ].join('\n\n')
@@ -1153,7 +1153,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
         try {
           const pname = { marry: '嫁娶', move: '入宅', business: '开业' }[purpose] || '择日'
           const sys = [
-            `你是「司命」。用户刚生成了${pname}的择吉报告，请用一段 60-120 字的简洁导语，指出最推荐的日子和一句开运提醒。`,
+            `你是「三门先生」。用户刚生成了${pname}的择吉报告，请用一段 60-120 字的简洁导语，指出最推荐的日子和一句开运提醒。`,
             `【报告要点】${(rep.markdown || '').slice(0, 500)}`,
             '注意：仅供娱乐参考。'
           ].join('\n\n')
@@ -1176,7 +1176,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
         setTyping(true)
         try {
           const sys = [
-            '你是「司命」。用户刚生成了多流派命理会诊报告（子平、盲派、紫微斗数三派交叉验证）。',
+            '你是「三门先生」。用户刚生成了多流派命理会诊报告（子平、盲派、紫微斗数三派交叉验证）。',
             '请用一段 80-160 字的导语，提炼三派结论中最重要的共识，并指出哪一派对当前用户最有参考价值。',
             `【会诊要点】${(rep.markdown || '').slice(0, 600)}`,
             '注意：仅供娱乐参考。'
@@ -1487,7 +1487,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
               setMessages(prev => [...prev, {
                 id: Date.now(),
                 role: 'ai',
-                text: `抱歉，模型调用出错了：${err2.message}\n可在「管理控制台 → 元气AI设置」检查 API Key / Base URL，或暂时切换回本地规则引擎。`,
+                text: `抱歉，模型调用出错了：${err2.message}\n可在「管理控制台 → 元氣AI设置」检查 API Key / Base URL，或暂时切换回本地规则引擎。`,
                 time: timeNow()
               }])
             }
@@ -1573,12 +1573,10 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
   }
 
   const del = (id) => {
-    setSessions(deleteSession(id))
-    if (sessionIdRef.current === id) {
-      sessionIdRef.current = null
-      createdAtRef.current = null
-      clearCurrentSession()
-    }
+    const remaining = deleteSession(id)
+    setSessions(remaining)
+    // 历史已清空或删除当前会话后，一律恢复无命盘的新会话状态。
+    if (remaining.length === 0 || sessionIdRef.current === id) newChat()
   }
 
   const clearAll = () => {
@@ -1662,11 +1660,11 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
   return (
     <div className="agent-page-inner">
       <div className="agent-head">
-        <div className="agent-avatar">司</div>
+        <div className="agent-avatar">三</div>
         <div className="agent-head-main">
           <div className="agent-head-top">
             {!(chart && messages.some(m => m.role === 'user')) ? (
-              <div className="name">司命 Agent</div>
+              <div className="name"><span className="agent-name-full">三门先生</span><span className="agent-name-short">三门</span></div>
             ) : (
               <div className="current-chart-chip">
                 <span className="current-chart-txt">{`${chart.gender === '女' ? '坤造' : '乾造'} · ${chart.year}年${chart.month}月${chart.day}日${chart.hour ? ` ${chart.hour}时` : ''}`}</span>
@@ -1681,10 +1679,6 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
           <button className="agent-btn" onClick={() => { setSessions(loadSessions()); setShowHistory(true) }} title="会话历史" aria-label="会话历史">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 3" /></svg>
             {sessions.length > 0 && <span className="agent-btn-badge">{sessions.length}</span>}
-          </button>
-          <button className="agent-btn" onClick={() => { refreshCollection(); setShowCollection(true) }} title="我的命盘" aria-label="我的命盘">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.1 6.3 7 1-5.1 4.9 1.2 6.9L12 17.8 5.8 21l1.2-6.9L2 9.3l7-1L12 2z" /></svg>
-            {collection.length > 0 && <span className="agent-btn-badge">{collection.length}</span>}
           </button>
         </div>
 
@@ -1777,7 +1771,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
       <div className="chat-scroll" ref={scrollRef}>
         {messages.map(m => (
           <div key={m.id} className={`msg ${m.role}`}>
-            <div className="avatar">{m.role === 'ai' ? '司' : m.role === 'tool' ? '🔧' : '我'}</div>
+            <div className="avatar">{m.role === 'ai' ? '三' : m.role === 'tool' ? '🔧' : '我'}</div>
             <div style={{ maxWidth: '100%' }}>
               {m.kind === 'report' ? (
                 <>
@@ -1833,7 +1827,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
           if (!showTyping) return null
           return (
             <div className="msg ai">
-              <div className="avatar">司</div>
+              <div className="avatar">三</div>
               <div className="bubble typing"><i /><i /><i /></div>
             </div>
           )
@@ -1855,7 +1849,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
         <textarea
           className="chat-input"
           rows={1}
-          placeholder={llmOn ? `问司命任何问题…（${modelName}）` : '问司命任何问题…'}
+          placeholder="问三门先生任何问题…"
           value={input}
           onChange={e => {
             setInput(e.target.value)
@@ -1904,14 +1898,14 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
         </button>
       </div>
 
-      {/* 元气 AI · 积分用尽订阅引导弹窗（已登录不显示） */}
+      {/* 元氣 AI · 积分用尽订阅引导弹窗（已登录不显示） */}
       {!user && isAgentOverQuota(agentTokens) && !quotaDismissed && (
         <div className="quota-modal-mask" onClick={() => setQuotaDismissed(true)}>
           <div className="quota-modal" onClick={e => e.stopPropagation()}>
             <div className="qm-icon">💎</div>
             <h3>积分已用完 · 订阅会员继续对话</h3>
             <p>游客已累计消耗 <b>{tokensToCredits(agentTokens).toFixed(1)}</b> / 100 积分。注册/登录成为会员，即可继续无限制对话。</p>
-            <p className="qm-tip">注册默认开通「凡境」会员 · 扫码识别一步注册 · 自动登录</p>
+            <p className="qm-tip">注册/登录后即可继续使用 · 扫码识别一步注册 · 自动登录</p>
             <div className="qm-actions">
               <button className="qm-btn primary" onClick={() => onRequireLogin && onRequireLogin('agent')}>立即订阅会员</button>
               <button className="qm-btn ghost" onClick={() => setQuotaDismissed(true)}>我知道了</button>

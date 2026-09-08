@@ -10,7 +10,7 @@ export default function ReportLock({
   eyebrow = '',
   title = '完整报告已就绪 · 登录后解锁全文',
   desc = '基础盘面已为你免费排定，逐项详解与深度精批见登录后全文。',
-  note = '注册即默认开通「凡境」会员 · 扫码识别一步注册，成功即自动登录',
+  note = '注册/登录后即可继续使用 · 扫码识别一步注册，成功即自动登录',
   lockedCount = 0,
 }) {
   if (user) return null

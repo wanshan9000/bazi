@@ -1,17 +1,30 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ARTICLES, CATEGORIES } from '../data/articles.js'
+import { api } from '../api/client.js'
 
 export default function ArticlesPage({ onBack, onOpen }) {
   const [cat, setCat] = useState('all')
+  const [published, setPublished] = useState(null)
 
-  const list = cat === 'all' ? ARTICLES : ARTICLES.filter(a => a.cat === cat)
-  const catEmoji = CATEGORIES.find(c => c.key === cat)
+  useEffect(() => {
+    let active = true
+    api.articles()
+      .then(result => { if (active) setPublished(Array.isArray(result?.data) ? result.data : []) })
+      .catch(() => { /* 后端暂不可达时继续展示内置文章 */ })
+    return () => { active = false }
+  }, [])
+
+  // 后端可用时以其清单为准，才能让管理员的隐藏和删除真正影响前台。
+  // 只有后端完全不可达时，才退回内置文章保证文库不留白。
+  const allArticles = useMemo(() => published === null ? ARTICLES : published, [published])
+
+  const list = cat === 'all' ? allArticles : allArticles.filter(a => a.cat === cat)
 
   return (
     <div className="page-wrap articles-page">
       <div className="container">
         <div className="page-head rise">
-          <button className="back-btn" onClick={onBack}>← 返回首页</button>
+          <button className="back-btn" onClick={onBack}>‹ 返回</button>
         </div>
         <h1 className="page-title rise rise-1">文库</h1>
         <p className="page-sub rise rise-2">玄学文章中心 · 知命之道</p>
@@ -44,7 +57,7 @@ export default function ArticlesPage({ onBack, onOpen }) {
               <p className="ac-digest">{a.digest}</p>
               <div className="ac-meta">
                 <span className="am">⏱ {a.read} 分钟</span>
-                <span className="am">👁 {a.views}</span>
+                <span className="am">👁 {a.views || 0}</span>
                 <span className="ac-more">阅读全文 →</span>
               </div>
             </article>

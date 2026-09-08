@@ -13,7 +13,7 @@ function stub(status, body) {
   })
 }
 
-// /api/health 在「元气 AI 不可用」时返回 503，那是给部署和监控的信号。
+// /api/health 在「元氣 AI 不可用」时返回 503，那是给部署和监控的信号。
 // 把它当成「整个后端挂了」的话，没配 AI 密钥时订阅页与注册页会一律显示服务不可用，
 // 尽管短信和微信通道好好的。
 test('health：AI 不可用（503）时仍算服务器可达', async () => {
@@ -47,4 +47,15 @@ test('health：响应不是 JSON 时不抛异常', async () => {
   })
   const h = await api.health()
   assert.equal(h.reachable, false)
+})
+
+test('管理员写接口会同时发送 JSON 与管理员令牌', async () => {
+  let captured = null
+  globalThis.fetch = async (_url, options) => {
+    captured = options
+    return { ok: true, status: 201, json: async () => ({ ok: true, data: { id: 'article-test' } }) }
+  }
+  await api.saveArticle({ title: '测试', cat: 'intro', digest: '测试摘要', read: 1, body: '正文' }, 'admin-token')
+  assert.equal(captured.headers['Content-Type'], 'application/json')
+  assert.equal(captured.headers['X-Admin-Token'], 'admin-token')
 })

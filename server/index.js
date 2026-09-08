@@ -1,4 +1,4 @@
-// 元气黄历 · 订阅后端入口
+// 元氣黄历 · 订阅后端入口
 import express from 'express'
 import cors from 'cors'
 import fs from 'node:fs'
@@ -9,11 +9,16 @@ import { startScheduler } from './scheduler.js'
 import subscribeRouter from './routes/subscribe.js'
 import shareRouter from './routes/share.js'
 import skillsRouter from './routes/skills.js'
+import articlesRouter from './routes/articles.js'
+import membershipsRouter from './routes/memberships.js'
+import securityRouter from './routes/security.js'
 import agentRouter from './routes/agent.js'
 import { createAuthRouter } from './routes/auth.js'
 import { sharedPool } from './dsh/pool.js'
 import { sharedStore } from './dsh/agentStore.js'
 import { startBackups } from './backup.js'
+import { ipRateLimit } from './rateLimit.js'
+import { sharedSecurityGuard } from './security.js'
 
 const app = express()
 // 生产由 Caddy 反代到 127.0.0.1，不声明信任代理的话 req.ip 恒为 127.0.0.1，
@@ -25,6 +30,14 @@ app.set('trust proxy', config.trustProxy)
 // 留出 JSON 转义的余量，具体的业务上限仍由各路由自己判。
 app.use(express.json({ limit: '400kb' }))
 app.use(cors({ origin: config.allowedOrigins, credentials: true }))
+// API 不提供可嵌入的页面或嗅探内容，明确声明这些浏览器安全边界。
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('Cache-Control', 'no-store')
+  next()
+})
 
 // 健康检查。
 // ⚠ 此前只无脑返回 ok:true，不看 agent 通道 —— 部署脚本拿它验活、监控拿它判断
@@ -50,6 +63,11 @@ app.get('/api/health', (_req, res) => {
   })
 })
 
+// 健康检查放在此前，避免监控本身占用业务限额。登录、短信和 AI 接口仍有更严规则。
+// 风险封禁也放在业务前：被判定为异常的来源不应再消耗任何验证码或模型额度。
+app.use('/api', sharedSecurityGuard().middleware)
+app.use('/api', ipRateLimit({ windowMs: 60 * 1000, max: config.security.apiIpPerMinute }))
+
 // 账号与鉴权。注销时连坐清掉该用户的 AI 会话与消息（隐私合规）。
 app.use('/api', createAuthRouter({
   onRemoveUser: uid => sharedStore().deleteAllSessions(uid),
@@ -57,6 +75,9 @@ app.use('/api', createAuthRouter({
 app.use('/api', subscribeRouter)
 app.use('/api', shareRouter)
 app.use('/api', skillsRouter)
+app.use('/api', articlesRouter)
+app.use('/api', membershipsRouter)
+app.use('/api', securityRouter)
 app.use('/api', agentRouter())
 
 // 兜底错误处理。
@@ -77,7 +98,7 @@ app.use((err, _req, res, _next) => {
 
 app.listen(config.port, config.host, () => {
   console.log('\n==================================================')
-  console.log('  元气黄历订阅服务已启动')
+  console.log('  元氣黄历订阅服务已启动')
   console.log(`  http://${config.host}:${config.port}`)
   console.log('--------------------------------------------------')
   console.log(`  短信通道: ${smsConfigured() ? config.sms.provider.toUpperCase() : '本地降级(mock)'}`)

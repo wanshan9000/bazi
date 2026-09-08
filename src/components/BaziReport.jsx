@@ -193,7 +193,7 @@ export default function BaziReport({ report }) {
         <div className="br-advice-item"><b>开运</b><p>{report.advice.opening}</p></div>
       </section>
 
-      <div className="br-foot">本报告由元气AI 高精度排盘引擎生成，仅供娱乐与参考。</div>
+      <div className="br-foot">本报告由元氣AI 高精度排盘引擎生成，仅供娱乐与参考。</div>
     </div>
   )
 }

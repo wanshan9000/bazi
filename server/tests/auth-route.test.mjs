@@ -36,7 +36,7 @@ test('注册返回 token 与用户；token 可换回 me', async () => {
     const { body } = await register(base)
     assert.equal(body.ok, true)
     assert.ok(body.token, '注册必须返回 token')
-    assert.equal(body.user.plan, 'earth')
+    assert.equal(body.user.plan, 'free')
 
     const me = await (await fetch(`${base}/api/auth/me`, { headers: bearer(body.token) })).json()
     assert.equal(me.ok, true)
@@ -95,7 +95,7 @@ test('PUT /auth/me 不能改档位与积分', async () => {
     })).json()
     assert.equal(res.ok, true)
     assert.equal(res.user.nickname, '新名字')
-    assert.equal(res.user.plan, 'earth', '档位不得通过资料接口提升')
+    assert.equal(res.user.plan, 'free', '档位不得通过资料接口提升')
     assert.ok(res.user.planExpiresAt < 9e15, '到期时间不得由客户端指定')
   } finally { srv.close() }
 })
@@ -112,7 +112,7 @@ test('积分扣减在服务端进行；扣光后 402', async () => {
     })).json()
     assert.equal(one.ok, true)
     assert.equal(one.cost, 8)
-    assert.equal(one.remaining, 192)
+    assert.equal(one.remaining, 92)
 
     let last
     for (let i = 0; i < 30; i++) {
@@ -168,5 +168,39 @@ test('改密码：旧口令不对拒绝；改完只能用新口令登录', async
     assert.equal(good.status, 200)
     assert.equal((await fetch(`${base}/api/auth/login`, J({ account: 'changer', password: 'secret123' }))).status, 401)
     assert.equal((await fetch(`${base}/api/auth/login`, J({ account: 'changer', password: 'newsecret1' }))).status, 200)
+  } finally { srv.close() }
+})
+
+test('注册成功也计入来源限额，阻止批量创建账号', async () => {
+  const { app } = mkApp()
+  const { srv, base } = await listen(app)
+  try {
+    for (let i = 0; i < 5; i++) {
+      assert.equal((await register(base, `batch${i}`)).status, 200)
+    }
+    assert.equal((await register(base, 'batch-overflow')).status, 429)
+  } finally { srv.close() }
+})
+
+test('停用账号后不能登录，也不能继续使用已有登录态', async () => {
+  const { app, accounts } = mkApp()
+  const { srv, base } = await listen(app)
+  try {
+    const { body } = await register(base, 'suspended-user')
+    assert.equal(accounts.setStatus(body.user.id, 'suspended', '测试风控').ok, true)
+    assert.equal((await fetch(`${base}/api/auth/me`, { headers: bearer(body.token) })).status, 403)
+    assert.equal((await fetch(`${base}/api/auth/login`, J({ account: 'suspended-user', password: 'secret123' }))).status, 403)
+  } finally { srv.close() }
+})
+
+test('未接支付回调时，自助切换会员档位必须拒绝', async () => {
+  const { app } = mkApp()
+  const { srv, base } = await listen(app)
+  try {
+    const { body } = await register(base, 'no-payment-upgrade')
+    const response = await fetch(`${base}/api/auth/plan`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...bearer(body.token) }, body: JSON.stringify({ plan: 'heaven' }),
+    })
+    assert.equal(response.status, 409)
   } finally { srv.close() }
 })

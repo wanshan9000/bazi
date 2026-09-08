@@ -22,10 +22,10 @@ function renderMangpai(ctx) {
 export function makeBaziTool(E) {
   return defineTool({
     name: 'bazi',
-    description: '按出生年月日时与性别排八字四柱，返回四柱、十神、藏干、纳音、空亡、神煞、身强弱、喜用神、大运（含起运日期/起运年龄）。回答八字命局、五行喜忌、流年大运、几岁起运时调用。school=mangpai 时附盲派做功要点（体用宾主/根基/做功）。',
+    description: '按出生年月日时与性别排八字四柱。调用前先加载 bazi-router skill，再按其选择的流派加载对应断法 skill；默认 school=mangpai，只有用户明确要求子平派时才使用 school=ziping。',
     parameters: {
       ...BIRTH_PARAMS,
-      school: { type: 'string', enum: ['ziping', 'mangpai'], description: '流派：子平(默认)或盲派' },
+      school: { type: 'string', enum: ['ziping', 'mangpai'], description: '流派：盲派（默认）或用户明确指定的子平派' },
     },
     output: textOutput(),
     async execute(args) {
@@ -37,7 +37,7 @@ export function makeBaziTool(E) {
           chart.daYunList.find(d => d.startAge <= currentAge && currentAge < d.endAge + 1)
         segs.push(`【八字大运】起运 ${chart.qiYunText || `${chart.qiYunAge} 岁`}（${chart.qiYunDate || ''}）。当前大运：${cur ? `${cur.g}${cur.z}（${cur.startAge}-${cur.endAge} 岁，${cur.start}-${cur.end}）` : '见上表'}。`)
       }
-      if (args.school === 'mangpai') {
+      if ((args.school || 'mangpai') === 'mangpai') {
         segs.push('【盲派做功要点】', ...renderMangpai(E.buildMangpaiContext(chart)))
       }
       segs.push(SYSTEM_NOTE)

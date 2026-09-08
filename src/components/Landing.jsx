@@ -11,8 +11,8 @@ const CATS = [
   { key: 'huanjing', icon: '⛩', label: '环境家居', en: 'Space' }
 ]
 
-// 八卡片·元气测算矩阵
-// 每张卡片有三种跳转：page（路由到独立页面）/ agent（带 seed 打开元气AI）/ ask（带预设问题）
+// 八卡片·元氣测算矩阵
+// 每张卡片有三种跳转：page（路由到独立页面）/ agent（带 seed 打开元氣AI）/ ask（带预设问题）
 const CALCULATORS = [
   {
     key: 'bazi',
@@ -129,6 +129,7 @@ const FEATURED = ARTICLES.slice(0, 3)
 
 export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, user }) {
   const [cat, setCat] = useState('all')
+  const [agentQuery, setAgentQuery] = useState('')
   const list = CALCULATORS.filter(c => cat === 'all' || c.cat === cat)
 
   const handleClick = (card) => {
@@ -139,34 +140,60 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
     }
   }
 
+  const openAgent = (event) => {
+    event.preventDefault()
+    onAskAgent && onAskAgent(agentQuery.trim())
+  }
+
   return (
     <div className="landing">
-      {/* Hero（萌系：标题居中） */}
+      {/* Hero：以元氣智能体为首要入口 */}
       <section className="hero">
         <div className="hero-copy">
-          <p className="hero-kicker rise rise-1">AI 元气助手 · 24 小时在线</p>
+          <p className="hero-kicker rise rise-1">AI 元氣助手 · 24 小时在线</p>
           <h1 className="rise rise-1">
-            <span className="hero-line">今天开心</span>
-            <span className="hero-line hero-line-2">元气<span className="zhushi">满满</span></span>
+            <span className="hero-line">先和元氣AI</span>
+            <span className="hero-line hero-line-2">聊聊人生<span className="zhushi">吧</span></span>
           </h1>
-          <p className="lead rise rise-2">
-            八字、塔罗、紫微、奇门、黄历——<b>八种测算尽在指尖</b>。<br />
-            你的专属玄学助手，随时为你解码命运的答案。
-          </p>
-          <div className="hero-cta rise rise-3">
-            <button className="btn" onClick={() => onGate('bazi')}>立即排盘</button>
-            <button className="btn ghost" onClick={() => onGate('tarot')}>抽张塔罗</button>
-            <button className="btn highlight" onClick={() => onGate('huangli')}>订阅个人黄历</button>
+          <form className="hero-agent rise rise-3" onSubmit={openAgent}>
+            <div className={`hero-agent-input ${agentQuery.trim() ? 'has-query' : ''}`}>
+              <input
+                value={agentQuery}
+                onChange={event => setAgentQuery(event.target.value)}
+                aria-label="向元氣 AI 提问"
+                placeholder="想问事业、姻缘，还是今年的运势？"
+              />
+              <button type="submit" aria-label="开启元氣 AI 对话" title="开启元氣 AI 对话">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M22 2L11 13" />
+                  <path d="M22 2L15 22l-4-9-9-4z" />
+                </svg>
+              </button>
+            </div>
+          </form>
+          <div className="hero-agent-suggestions rise rise-3" aria-label="元氣智能体示例问题">
+            <span>试试这样问</span>
+            {['今年工作会有变化吗？', '我适合主动表白吗？', '最近该注意什么？'].map(question => (
+              <button key={question} type="button" onClick={() => onAskAgent && onAskAgent(question)}>{question}</button>
+            ))}
+          </div>
+          <div className="hero-quick-start rise rise-3">
+            <span>也可以自己探索</span>
+            <div className="hero-cta">
+              <button className="btn ghost" onClick={() => onGate('bazi')}>排八字</button>
+              <button className="btn ghost" onClick={() => onGate('tarot')}>抽塔罗</button>
+              <button className="btn ghost" onClick={() => onGate('huangli')}>看黄历</button>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* 元气测算 · 八卡矩阵 */}
+      {/* 元氣测算 · 八卡矩阵 */}
       <section className="container">
         <div className="yc-head rise">
           <div>
             <h2 className="section-title">
-              元气<span className="zhushi">测算</span>
+              元氣<span className="zhushi">测算</span>
             </h2>
             <p className="yc-sub">八字、紫微、塔罗、奇门、每日黄历……传统命理 × AI 算法，一站式解决你的疑问。</p>
           </div>

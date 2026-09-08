@@ -1,9 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { SHENGXIAO } from '../data/ganzhi.js'
 import AgentSettings from './AgentSettings.jsx'
+import MemberManagement from './MemberManagement.jsx'
+import SecurityManagement from './SecurityManagement.jsx'
 import { loadConfig, saveConfig } from '../engine/llm.js'
 import { api } from '../api/client.js'
 import { loadAdminSkills, saveAdminSkills } from '../data/skills.js'
+import { CATEGORIES } from '../data/articles.js'
 
 const ADMIN_AUTH_KEY = 'sanmen-admin-auth'
 const HISTORY_KEY = 'sanmen-history'
@@ -46,7 +49,7 @@ export default function AdminPage({ onBack }) {
   const [err, setErr] = useState('')
   const [charts, setCharts] = useState([])
   const [tarots, setTarots] = useState([])
-  const [tab, setTab] = useState('charts') // charts | tarot | agent | skills
+  const [tab, setTab] = useState('charts') // charts | tarot | agent | members | security | skills | articles
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState(null)
   const [agentCfg, setAgentCfg] = useState(null)
@@ -61,14 +64,37 @@ export default function AdminPage({ onBack }) {
   const [skDetail, setSkDetail] = useState(null)
   const fileRef = useRef(null)
 
+  // ---- 文库管理 ----
+  const [articles, setArticles] = useState([])
+  const [articleDetail, setArticleDetail] = useState(null)
+  const [articleMsg, setArticleMsg] = useState('')
+  const [articleMsgType, setArticleMsgType] = useState('ok')
+
   useEffect(() => {
     if (authed) {
       setCharts(loadCharts())
       setTarots(loadTarot())
       setAgentCfg(loadConfig())
       refreshSkills()
+      refreshArticles()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authed])
+
+  // 超级尊者已完成网站登录时，可直接换取后台短会话；普通用户仍需输入管理口令。
+  useEffect(() => {
+    if (authed) return undefined
+    let alive = true
+    api.adminAuth().then(r => {
+      if (!alive || !r?.ok || !r.token) return
+      try {
+        sessionStorage.setItem(ADMIN_AUTH_KEY, '1')
+        sessionStorage.setItem('sanmen-admin-token', r.token)
+      } catch {}
+      setAdminToken(r.token)
+      setAuthed(true)
+    }).catch(() => {})
+    return () => { alive = false }
   }, [authed])
 
   const handleLogin = async (e) => {
@@ -130,6 +156,90 @@ export default function AdminPage({ onBack }) {
     if (adminToken) return adminToken
     flash('请先登录管理后台', 'err')
     return null
+  }
+
+  // ================= 文库管理逻辑 =================
+  const flashArticle = (msg, type = 'ok') => {
+    setArticleMsg(msg)
+    setArticleMsgType(type)
+    if (window._articleMsgTimer) clearTimeout(window._articleMsgTimer)
+    window._articleMsgTimer = setTimeout(() => setArticleMsg(''), 4000)
+  }
+
+  const refreshArticles = async () => {
+    try {
+      const token = sessionStorage.getItem('sanmen-admin-token') || adminToken
+      if (!token) return
+      const r = await api.adminArticles(token)
+      setArticles(Array.isArray(r?.data) ? r.data : [])
+    } catch (e) {
+      flashArticle(e.message || '文库文章加载失败', 'err')
+    }
+  }
+
+  const startNewArticle = () => {
+    setArticleDetail({
+      title: '', cat: 'intro', emoji: '📜', digest: '', read: 5, status: 'draft',
+      body: '## 开篇\n\n在这里写下文章的第一段内容。', _new: true,
+    })
+  }
+
+  const editArticle = async (article) => {
+    try {
+      const token = await ensureAdminToken()
+      if (!token) return
+      const r = await api.adminArticle(article.id, token)
+      if (!r?.data) throw new Error(r?.msg || '文章加载失败')
+      setArticleDetail({ ...r.data, _new: false })
+    } catch (e) {
+      flashArticle(e.message || '文章加载失败', 'err')
+    }
+  }
+
+  const saveArticle = async () => {
+    if (!articleDetail) return
+    try {
+      const token = await ensureAdminToken()
+      if (!token) return
+      const { _new, createdAt, updatedAt, publishedAt, views, content, ...payload } = articleDetail
+      const r = await api.saveArticle(payload, token)
+      if (!r?.ok) throw new Error(r?.msg || '保存失败')
+      setArticleDetail({ ...r.data, _new: false })
+      flashArticle(r.msg || '文章已保存')
+      await refreshArticles()
+    } catch (e) {
+      flashArticle(e.message || '保存失败', 'err')
+    }
+  }
+
+  const toggleArticleStatus = async (article) => {
+    try {
+      const token = await ensureAdminToken()
+      if (!token) return
+      const status = article.status === 'published' ? 'draft' : 'published'
+      const r = await api.updateArticleStatus(article.id, status, token)
+      if (!r?.ok) throw new Error(r?.msg || '状态更新失败')
+      if (articleDetail?.id === article.id) setArticleDetail({ ...articleDetail, ...r.data })
+      flashArticle(r.msg || '状态已更新')
+      await refreshArticles()
+    } catch (e) {
+      flashArticle(e.message || '状态更新失败', 'err')
+    }
+  }
+
+  const removeArticle = async (article) => {
+    if (!confirm(`确认删除文章「${article.title}」？此操作不可恢复。`)) return
+    try {
+      const token = await ensureAdminToken()
+      if (!token) return
+      const r = await api.deleteArticle(article.id, token)
+      if (!r?.ok) throw new Error(r?.msg || '删除失败')
+      if (articleDetail?.id === article.id) setArticleDetail(null)
+      flashArticle('文章已删除')
+      await refreshArticles()
+    } catch (e) {
+      flashArticle(e.message || '删除失败', 'err')
+    }
   }
 
   // 解析导入文本（JSON 数组或单个对象）
@@ -392,7 +502,7 @@ export default function AdminPage({ onBack }) {
             {err && <div className="alc-err">{err}</div>}
             <button type="submit" className="alc-btn">登 入</button>
           </form>
-          <button className="alc-back" onClick={onBack}>← 返回首页</button>
+          <button className="alc-back" onClick={onBack}>‹ 返回</button>
           <p className="alc-tip">仅管理员可访问 · 会话内有效</p>
         </div>
       </div>
@@ -408,7 +518,7 @@ export default function AdminPage({ onBack }) {
           <h1 className="ah-title">管理控制台</h1>
         </div>
         <div className="ah-actions">
-          {tab !== 'agent' && tab !== 'skills' && (
+          {tab !== 'agent' && tab !== 'members' && tab !== 'skills' && tab !== 'articles' && (
             <>
               <button className="ah-btn ghost" onClick={exportData}>导出 {tab === 'charts' ? '命盘' : '塔罗'} JSON</button>
               <button className="ah-btn ghost warn" onClick={clearAll}>清空 {tab === 'charts' ? '命盘' : '塔罗'}</button>
@@ -463,7 +573,19 @@ export default function AdminPage({ onBack }) {
           className={`atab ${tab === 'agent' ? 'on' : ''}`}
           onClick={() => { setTab('agent'); setSelected(null); }}
         >
-          元气AI设置
+          元氣AI设置
+        </button>
+        <button
+          className={`atab ${tab === 'members' ? 'on' : ''}`}
+          onClick={() => { setTab('members'); setSelected(null); }}
+        >
+          会员管理
+        </button>
+        <button
+          className={`atab ${tab === 'security' ? 'on' : ''}`}
+          onClick={() => { setTab('security'); setSelected(null); }}
+        >
+          安全风控
         </button>
         <button
           className={`atab ${tab === 'skills' ? 'on' : ''}`}
@@ -471,10 +593,16 @@ export default function AdminPage({ onBack }) {
         >
           技能管理 ({skills.length})
         </button>
+        <button
+          className={`atab ${tab === 'articles' ? 'on' : ''}`}
+          onClick={() => { setTab('articles'); setSelected(null); setArticleDetail(null); }}
+        >
+          文库管理 ({articles.length})
+        </button>
       </div>
 
       {/* 搜索 */}
-      {tab !== 'agent' && tab !== 'skills' && (
+      {tab !== 'agent' && tab !== 'members' && tab !== 'security' && tab !== 'skills' && tab !== 'articles' && (
         <div className="admin-tools">
           <input
             type="text"
@@ -575,7 +703,7 @@ export default function AdminPage({ onBack }) {
         </div>
       )}
 
-      {/* 元气AI设置 */}
+      {/* 元氣AI设置 */}
       {tab === 'agent' && (
         <div className="admin-agent">
           {agentCfg ? (
@@ -591,6 +719,110 @@ export default function AdminPage({ onBack }) {
             <div className="admin-empty">正在加载设置…</div>
           )}
         </div>
+      )}
+
+      {/* 会员、退款与投诉 */}
+      {tab === 'members' && <MemberManagement token={adminToken} />}
+      {tab === 'security' && <SecurityManagement token={adminToken} />}
+
+      {/* 文库管理 */}
+      {tab === 'articles' && (
+        <section className="admin-library">
+          {articleMsg && <div className={`ask-msg ${articleMsgType === 'err' ? 'err' : ''}`}>{articleMsg}</div>}
+
+          <div className="ask-list-head">
+            <div>
+              <span className="ask-list-title">文库文章</span>
+              <p className="awl-note">草稿仅在控制台可见，发布后会自动显示在前台文库。</p>
+            </div>
+            <button className="ask-btn primary" onClick={startNewArticle}>新建文章</button>
+          </div>
+
+          {articles.length === 0 ? (
+            <div className="admin-empty">暂无后台文章，创建并发布后会出现在文库首页</div>
+          ) : (
+            <div className="ask-list">
+              {articles.map(article => (
+                <div key={article.id} className={`ask-item awl-item ${article.status !== 'published' ? 'off' : ''}`}>
+                  <div className="ask-item-ico">{article.emoji || '📜'}</div>
+                  <div className="ask-item-main">
+                    <div className="ask-item-name">
+                      {article.title}
+                      <span className={`ask-item-status ${article.status === 'published' ? 'on' : 'off'}`}>
+                        {article.status === 'published' ? '已发布' : '草稿'}
+                      </span>
+                    </div>
+                    <div className="ask-item-desc">{article.digest || '（无摘要）'}</div>
+                    <div className="awl-meta">
+                      <span>{CATEGORIES.find(c => c.key === article.cat)?.label || '未分类'}</span>
+                      <span>约 {article.read || 0} 分钟</span>
+                      <span>更新于 {fmtDate(article.updatedAt || article.createdAt)}</span>
+                    </div>
+                  </div>
+                  <div className="ask-item-actions">
+                    <button
+                      className={`ask-switch ${article.status === 'published' ? 'on' : ''}`}
+                      onClick={() => toggleArticleStatus(article)}
+                      title={article.status === 'published' ? '从文库隐藏' : '发布到文库'}
+                      aria-label={article.status === 'published' ? '从文库隐藏' : '发布到文库'}
+                    >
+                      <span className="ask-switch-knob" />
+                    </button>
+                    <button className="ask-btn ghost" onClick={() => editArticle(article)}>编辑</button>
+                    <button className="ask-btn ghost warn" onClick={() => removeArticle(article)}>删除</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {articleDetail && (
+            <div className="ask-detail awl-editor">
+              <div className="ask-detail-head">
+                <span className="ask-detail-title">{articleDetail._new ? '新建文库文章' : '编辑文章'}</span>
+                <button className="ask-btn ghost" onClick={() => setArticleDetail(null)}>关闭</button>
+              </div>
+              <div className="ask-detail-grid">
+                <label className="ask-field wide">
+                  <span>标题</span>
+                  <input value={articleDetail.title} maxLength={100} onChange={e => setArticleDetail({ ...articleDetail, title: e.target.value })} placeholder="文章标题" />
+                </label>
+                <label className="ask-field">
+                  <span>分类</span>
+                  <select value={articleDetail.cat} onChange={e => setArticleDetail({ ...articleDetail, cat: e.target.value })}>
+                    {CATEGORIES.filter(c => c.key !== 'all').map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+                  </select>
+                </label>
+                <label className="ask-field">
+                  <span>封面图标</span>
+                  <input value={articleDetail.emoji} maxLength={12} onChange={e => setArticleDetail({ ...articleDetail, emoji: e.target.value })} placeholder="📜" />
+                </label>
+                <label className="ask-field">
+                  <span>阅读时长（分钟）</span>
+                  <input type="number" min="1" max="180" value={articleDetail.read} onChange={e => setArticleDetail({ ...articleDetail, read: e.target.value })} />
+                </label>
+                <label className="ask-field wide">
+                  <span>摘要</span>
+                  <textarea rows={3} maxLength={500} value={articleDetail.digest} onChange={e => setArticleDetail({ ...articleDetail, digest: e.target.value })} placeholder="文库卡片和搜索结果中展示的简介" />
+                </label>
+                <label className="ask-field wide">
+                  <span>正文</span>
+                  <textarea className="awl-body" rows={14} maxLength={20000} value={articleDetail.body} onChange={e => setArticleDetail({ ...articleDetail, body: e.target.value })} placeholder={'使用 ## 小标题分段；空行分隔段落。\n\n## 第一节\n\n正文第一段。\n\n正文第二段。'} />
+                </label>
+              </div>
+              <div className="ask-detail-foot">
+                <label className="ask-enable">
+                  <input type="checkbox" checked={articleDetail.status === 'published'} onChange={e => setArticleDetail({ ...articleDetail, status: e.target.checked ? 'published' : 'draft' })} />
+                  保存后发布到文库
+                </label>
+                <div>
+                  <button className="ask-btn ghost" onClick={() => setArticleDetail(null)}>取消</button>
+                  <button className="ask-btn primary" onClick={saveArticle}>{articleDetail.status === 'published' ? '保存并发布' : '保存草稿'}</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
       {/* 技能管理 */}
@@ -624,7 +856,7 @@ export default function AdminPage({ onBack }) {
               onChange={e => setImportText(e.target.value)}
             />
             <div className="ask-import-foot">
-              <span className="ask-import-note">导入后全站用户可在「元气AI设置 → 技能」中启用使用；管理员需先通过后端 ADMIN_PASSWORD 鉴权。</span>
+              <span className="ask-import-note">导入后全站用户可在「元氣AI设置 → 技能」中启用使用；管理员需先通过后端 ADMIN_PASSWORD 鉴权。</span>
               <button className="ask-btn primary" disabled={importBusy} onClick={handleImport}>
                 {importBusy ? '导入中…' : '导入技能'}
               </button>

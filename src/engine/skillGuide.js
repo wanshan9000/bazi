@@ -1,5 +1,5 @@
-// 报告 → 元气AI 技能映射与技法总纲
-// 让每类测算报告"读取"元气 AI 技能库（skills.js）的专业知识，生成技法总纲导读
+// 报告 → 元氣AI 技能映射与技法总纲
+// 让每类测算报告"读取"元氣 AI 技能库（skills.js）的专业知识，生成技法总纲导读
 // 子平报告读「易学-泰山」技能、盲派报告读「盲派」技能；
 // 优先读管理后台配置的同 key 技能（skillByKey），未配置时回退内置技能。
 import { skillByKey, loadCustomSkills } from '../data/skills.js'

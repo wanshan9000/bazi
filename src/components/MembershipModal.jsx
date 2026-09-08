@@ -2,7 +2,7 @@
  *
  * 由 App.jsx 在全局维护 subscribeModal 状态。
  * 触发方式：
- *   - Landing 定价卡「从凡境开始 / 跃升玄境 / 问鼎天机」按钮
+ *   - Landing 定价卡「从凡者开始 / 跃升玄者 / 登临天者」按钮
  *   - Profile 升级按钮
  *   - ReportLock 等扣减积分不足时的「升级」入口
  *
@@ -97,7 +97,7 @@ export default function MembershipModal({
         </ul>
 
         {!user && (
-          <p className="mm-tip">订阅属于会员权益 · 请先注册/登录（注册即默认开通凡境 200 积分体验）</p>
+          <p className="mm-tip">订阅属于会员权益 · 请先注册/登录；支付开通后将由服务端确认会员状态</p>
         )}
         {user && isCurrent && (
           <p className="mm-tip">续费「{plan.name}」：有效期在当前到期时间之上顺延 30 天，积分用量即刻清零。</p>

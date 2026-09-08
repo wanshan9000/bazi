@@ -13,7 +13,7 @@ function ensureFile() {
   }
 }
 
-const EMPTY_DB = () => ({ subscribers: [], verifies: [], shares: [], adminSkills: [] })
+const EMPTY_DB = () => ({ subscribers: [], verifies: [], shares: [], adminSkills: [], articles: [], refunds: [], complaints: [] })
 
 function load() {
   if (cache) return cache
@@ -237,4 +237,99 @@ export function deleteSkill(key) {
   arr.push(...next)
   save()
   return next.length < before
+}
+
+// ---- 文库文章（后台发布，全站公开阅读）----
+function articles() {
+  const db = load()
+  if (!Array.isArray(db.articles)) db.articles = []
+  return db.articles
+}
+
+export function listArticles({ publishedOnly = false, includeDeleted = false } = {}) {
+  return articles()
+    .filter(article => (includeDeleted || article.status !== 'deleted') && (!publishedOnly || article.status === 'published'))
+    .slice()
+    .sort((a, b) => (b.publishedAt || b.updatedAt || 0) - (a.publishedAt || a.updatedAt || 0))
+}
+
+export function findArticle(id) {
+  return articles().find(article => article.id === id) || null
+}
+
+export function upsertArticle(article) {
+  const arr = articles()
+  const idx = arr.findIndex(item => item.id === article.id)
+  if (idx >= 0) {
+    arr[idx] = { ...arr[idx], ...article, createdAt: arr[idx].createdAt }
+  } else {
+    arr.push({ ...article, createdAt: now() })
+  }
+  save()
+  return idx >= 0 ? arr[idx] : arr[arr.length - 1]
+}
+
+export function deleteArticle(id) {
+  const arr = articles()
+  const before = arr.length
+  const next = arr.filter(article => article.id !== id)
+  arr.length = 0
+  arr.push(...next)
+  save()
+  return next.length < before
+}
+
+// ---- 会员服务工单（退款 / 投诉）----
+function refunds() {
+  const db = load()
+  if (!Array.isArray(db.refunds)) db.refunds = []
+  return db.refunds
+}
+
+function complaints() {
+  const db = load()
+  if (!Array.isArray(db.complaints)) db.complaints = []
+  return db.complaints
+}
+
+function serviceId(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+export function listRefunds() {
+  return refunds().slice().sort((a, b) => b.createdAt - a.createdAt)
+}
+
+export function createRefund(record) {
+  const item = { id: serviceId('refund'), status: 'pending', createdAt: now(), updatedAt: now(), ...record }
+  refunds().push(item)
+  save()
+  return item
+}
+
+export function updateRefund(id, patch) {
+  const item = refunds().find(record => record.id === id)
+  if (!item) return null
+  Object.assign(item, patch, { updatedAt: now() })
+  save()
+  return item
+}
+
+export function listComplaints() {
+  return complaints().slice().sort((a, b) => b.createdAt - a.createdAt)
+}
+
+export function createComplaint(record) {
+  const item = { id: serviceId('complaint'), status: 'open', createdAt: now(), updatedAt: now(), ...record }
+  complaints().push(item)
+  save()
+  return item
+}
+
+export function updateComplaint(id, patch) {
+  const item = complaints().find(record => record.id === id)
+  if (!item) return null
+  Object.assign(item, patch, { updatedAt: now() })
+  save()
+  return item
 }

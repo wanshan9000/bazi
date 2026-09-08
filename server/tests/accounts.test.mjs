@@ -7,7 +7,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createAccountStore } from '../accounts.js'
-import { planByKey, FREE_PLAN, getMonthlyCredits } from '../../src/engine/membership.js'
+import { planByKey, FREE_PLAN, SUPER_PLAN, getMonthlyCredits } from '../../src/engine/membership.js'
 
 function mkStore() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'acct-'))
@@ -20,7 +20,8 @@ test('新注册用户带齐积分状态，且不泄漏口令散列', async () =>
   const u = store.publicUser(raw)
   assert.equal(typeof u.creditsUsed, 'number')
   assert.equal(typeof u.planCreditsResetAt, 'number')
-  assert.ok(u.planExpiresAt > Date.now(), '新用户应有一个未来的到期时间')
+  assert.equal(u.plan, FREE_PLAN.key, '新用户应从免费档开始')
+  assert.equal(u.planExpiresAt, 0, '免费档不应有伪造的到期时间')
   assert.equal(u.passHash, undefined, '不得把口令散列带到前端对象上')
   assert.equal(u.password, undefined)
 })
@@ -58,7 +59,7 @@ test('退还积分：不产出就不该收费，且不会退成负数', async ()
 
 test('续费在原到期时间之上顺延；换档从当下重算', async () => {
   const { store } = mkStore()
-  const u = await store.create({ account: 'dave', password: 'secret123', nickname: '小明' })
+  const u = await store.create({ account: 'dave', password: 'secret123', nickname: '小明', plan: 'earth' })
   const before = u.planExpiresAt
 
   const renew = store.changePlan(u.id, u.plan)
@@ -80,7 +81,23 @@ test('不能通过切档接口切到 free 档', async () => {
   const u = await store.create({ account: 'erin', password: 'secret123', nickname: '小明' })
   const res = store.changePlan(u.id, FREE_PLAN.key)
   assert.equal(res.ok, false)
-  assert.equal(store.get(u.id).plan, 'earth')
+  assert.equal(store.get(u.id).plan, 'free')
+})
+
+test('超级尊者由服务端角色授予，额度无限且不能通过会员接口修改', async () => {
+  const { store } = mkStore()
+  const u = await store.create({ account: 'sanmen', password: 'secret123', nickname: '三门' })
+  const granted = store.grantSuperAdminByAccount('SANMEN')
+  assert.equal(granted.ok, true)
+  assert.equal(granted.user.plan, SUPER_PLAN.key)
+  assert.equal(granted.user.isSuperAdmin, true)
+  assert.equal(getMonthlyCredits(granted.user), Infinity)
+
+  const charged = store.consumeCredit(u.id, 'agent.chat')
+  assert.equal(charged.ok, true)
+  assert.equal(charged.cost, 0)
+  assert.equal(store.get(u.id).creditsUsed, 0)
+  assert.equal(store.changePlan(u.id, 'earth').ok, false)
 })
 
 test('会员到期自动降级到 free，额度随之变成 free 档', async () => {

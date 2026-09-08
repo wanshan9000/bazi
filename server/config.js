@@ -40,7 +40,7 @@ export const config = {
     provider: env.SMS_PROVIDER || 'local', // aliyun | tencent | local
     accessKeyId: env.SMS_ACCESS_KEY_ID || '',
     accessKeySecret: env.SMS_ACCESS_KEY_SECRET || '',
-    signName: env.SMS_SIGN_NAME || '元气黄历',
+    signName: env.SMS_SIGN_NAME || '元氣黄历',
     // 验证码模板
     templateCode: env.SMS_TEMPLATE_CODE || '',
     // ⚠ 每日推送必须用**另一个**已审核的模板：验证码模板的变量只有 {code}，
@@ -114,6 +114,33 @@ export const config = {
     // 登录/注册限流：同一「账号+IP」在窗口内的失败次数上限
     loginWindowMin: Number(env.AUTH_LOGIN_WINDOW_MIN || 15),
     loginMaxAttempts: Number(env.AUTH_LOGIN_MAX_ATTEMPTS || 5),
+    registerWindowMin: Number(env.AUTH_REGISTER_WINDOW_MIN || 60),
+    registerMaxAttempts: Number(env.AUTH_REGISTER_MAX_ATTEMPTS || 5),
+  },
+
+  security: {
+    apiIpPerMinute: Number(env.API_IP_PER_MINUTE || 180),
+    smsIpPerHour: Number(env.SMS_IP_PER_HOUR || 12),
+    // 生产注册必须通过 Turnstile（或兼容供应商）人机校验。开发环境默认关闭，避免
+    // 本地没有公网回调时无法联调；生产如未填密钥会拒绝注册，而不是静默放行。
+    captchaRequired: env.CAPTCHA_REQUIRED === '1' || env.NODE_ENV === 'production',
+    captchaSecret: env.TURNSTILE_SECRET_KEY || '',
+    captchaVerifyUrl: env.TURNSTILE_VERIFY_URL || 'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+    // 订阅验证码的发送与校验分别限流，防止撞库者跳过发送接口直接撞六码。
+    smsVerifyIpPerHour: Number(env.SMS_VERIFY_IP_PER_HOUR || 30),
+    subscriptionIpPerHour: Number(env.SUBSCRIPTION_IP_PER_HOUR || 12),
+    // 单个用户或来源最多同时跑一轮模型，避免用多个新会话并发消耗模型资源。
+    agentInFlightPerUser: Number(env.AGENT_INFLIGHT_PER_USER || 1),
+    agentInFlightPerIp: Number(env.AGENT_INFLIGHT_PER_IP || 2),
+    // 风险事件保留来源 HMAC 指纹，不保存明文 IP；累计异常后自动短时封禁。
+    riskStoreFile: env.RISK_STORE_FILE || path.join(__dirname, 'data', 'security.json'),
+    riskWindowMin: Number(env.RISK_WINDOW_MIN || 30),
+    riskBlockThreshold: Number(env.RISK_BLOCK_THRESHOLD || 12),
+    riskBlockMinutes: Number(env.RISK_BLOCK_MINUTES || 60),
+    riskManualBlockMinutes: Number(env.RISK_MANUAL_BLOCK_MINUTES || 1440),
+    riskEventKeep: Number(env.RISK_EVENT_KEEP || 500),
+    // 未接支付回调前，禁止用户自行调用 /auth/plan 升级；本地演示时可显式打开。
+    allowUnpaidPlanChanges: env.ALLOW_UNPAID_PLAN_CHANGES === '1',
   },
 
   // ---- 游客免费额度（服务端记账，按来源 IP）----

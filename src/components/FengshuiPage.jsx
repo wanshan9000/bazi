@@ -49,7 +49,7 @@ export default function FengshuiPage({ chart, onBack, onChart }) {
     <div className="page-wrap">
       <div className="container">
         <div className="page-head rise">
-          <button className="back-btn" onClick={onBack}>← 返回首页</button>
+          <button className="back-btn" onClick={onBack}>‹ 返回</button>
         </div>
         <h1 className="page-title rise rise-1">风水分析 ⛩︎</h1>
         <p className="page-sub rise rise-2">户型方位 · 五行调和 · 八宅明局</p>

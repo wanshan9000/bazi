@@ -30,6 +30,6 @@ export function buildPushContent(sub) {
     relation,
     summary,
     tip: d.theme,
-    text: `【元气黄历】${d.date} ${d.week}。今日五行与你${relation}，宜${yi}，忌${ji}。${d.action?.head || ''}${fav}`,
+    text: `【元氣黄历】${d.date} ${d.week}。今日五行与你${relation}，宜${yi}，忌${ji}。${d.action?.head || ''}${fav}`,
   }
 }

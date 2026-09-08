@@ -46,10 +46,10 @@ export async function refreshSession() {
 }
 
 /* ---- 注册 / 登录 ---- */
-export async function register({ nickname, account, password }) {
+export async function register({ nickname, account, password, captchaToken = '' }) {
   const res = await api('/api/auth/register', {
     method: 'POST',
-    body: { nickname: (nickname || '').trim(), account: (account || '').trim(), password: password || '' },
+    body: { nickname: (nickname || '').trim(), account: (account || '').trim(), password: password || '', captchaToken },
   })
   if (!res.ok) return { ok: false, msg: res.msg || '注册失败' }
   setAuth(res.token, res.user)
@@ -76,6 +76,34 @@ export async function login(account, password) {
   if (migrated.msg) return { ok: false, msg: migrated.msg }
 
   return { ok: false, msg: res.msg || '登录失败' }
+}
+
+export async function sendAuthSmsCode(phone, purpose) {
+  const res = await api('/api/auth/sms/send-code', {
+    method: 'POST',
+    body: { phone: String(phone || '').trim(), purpose },
+  })
+  return res.ok ? { ok: true, msg: res.msg, devCode: res.devCode } : { ok: false, msg: res.msg || '验证码发送失败' }
+}
+
+export async function loginBySms(phone, code) {
+  const res = await api('/api/auth/sms/login', {
+    method: 'POST',
+    body: { phone: String(phone || '').trim(), code: String(code || '').trim() },
+  })
+  if (!res.ok) return { ok: false, msg: res.msg || '登录失败' }
+  setAuth(res.token, res.user)
+  return { ok: true, user: res.user }
+}
+
+export async function registerBySms(phone, code, nickname = '手机用户') {
+  const res = await api('/api/auth/sms/register', {
+    method: 'POST',
+    body: { phone: String(phone || '').trim(), code: String(code || '').trim(), nickname: String(nickname || '').trim() },
+  })
+  if (!res.ok) return { ok: false, msg: res.msg || '注册失败' }
+  setAuth(res.token, res.user)
+  return { ok: true, user: res.user }
 }
 
 /* ---- 微信登录 ----

@@ -1,4 +1,4 @@
-# 元气黄历 · 订阅服务部署说明
+# 元氣黄历 · 订阅服务部署说明
 
 本后端为前端页面提供**真实订阅能力**：手机短信验证码订阅 + 微信扫码订阅 + 定时推送当日黄历。
 纯 Node + Express，无数据库依赖（默认 JSON 文件存储，可直接上线；规模大可换 Redis/MySQL）。
@@ -73,11 +73,16 @@ deploy/deploy.sh                  # 部署当前 HEAD 已提交内容；--ref <r
 | POST | `/api/test-push` | 预览某订阅者的当日推送内容 |
 | GET | `/api/admin/list` | 订阅列表（已挂 `requireAdmin`，需 `X-Admin-Token`） |
 | POST | `/api/admin/auth` | 管理员登录换令牌（失败有限流） |
+| GET | `/api/admin/security` | 风控事件与当前来源限制（需 `X-Admin-Token`） |
+| POST/DELETE | `/api/admin/security/blocks/:fingerprint` | 临时封禁 / 解除来源限制（需 `X-Admin-Token`） |
 | GET | `/api/admin/skills` | 技能列表（未带管理员令牌时不返回 `sys` 人设正文） |
 | POST/PUT/DELETE | `/api/admin/skills/:key` | 技能增删改（需管理员令牌） |
+| GET | `/api/articles` / `/api/articles/:id` | 已发布文库文章列表 / 正文（公开） |
+| GET/POST | `/api/admin/articles` | 文库文章列表 / 创建文章（需 `X-Admin-Token`） |
+| GET/PUT/PATCH/DELETE | `/api/admin/articles/:id` | 文章详情、编辑、发布/撤回、删除（需 `X-Admin-Token`） |
 | POST | `/api/share` | 保存报告分享短链（按 IP 限流） |
 | GET | `/api/share/:id` | 读取分享（超过 TTL 即不可读） |
-| POST | `/api/agent/chat` | 元气 AI 对话（SSE 流式） |
+| POST | `/api/agent/chat` | 元氣 AI 对话（SSE 流式） |
 | GET | `/api/agent/sessions` | 会话列表（按 `X-Genki-Uid` 隔离） |
 | GET | `/api/agent/sessions/:id/messages` | 会话消息镜像 |
 | DELETE | `/api/agent/sessions/:id` | 删除会话 |
@@ -112,14 +117,19 @@ VITE_API_BASE=https://你的域名/api  # ❌ 会拼出 /api/api
   `/api/sms/send-code` 不再回显验证码，`/api/wechat/mock-done` 直接 503。
   确需在生产联调时才设 `ALLOW_MOCK_CHANNELS=1`。
 - 验证码、订阅数据走 HTTPS 传输。
+- 生产账号注册默认要求 Cloudflare Turnstile：必须同时配置服务端
+  `TURNSTILE_SECRET_KEY` 与前端构建变量 `VITE_TURNSTILE_SITE_KEY`。密钥缺失时
+  注册会被关闭，不会悄悄降级成无验证注册。
+- 注册、登录、短信验证码、订阅、报告分享和 AI 接口都有各自限流；AI 额外限制
+  同一用户只可同时运行一轮。持续触发限流/鉴权失败会写入 `security.json` 并自动
+  临时封禁来源。后台“安全风控”页可查看指纹事件并人工解除或加封。
 - 短信模板需在服务商后台完成审核；**每日推送与验证码必须是两个不同的模板**
   （见 `SMS_TEMPLATE_CODE` / `SMS_PUSH_TEMPLATE_CODE`）。
 - 微信扫码需开放平台认证（企业主体）。
-- ⚠ `/api/agent/*` 目前仅凭客户端自报的 `X-Genki-Uid` 归属会话，uid 可伪造。
-  已有按 uid 与按 IP 的双层限流兜底，但这不是鉴权 —— 服务端账号 + JWT 见
-  `docs/Agent记忆与账号服务端隔离R2改造方案.md`，未落地前不要在此存放敏感内容。
+- `/api/agent/*` 对登录用户校验服务端 JWT；游客仅以匿名标识区分会话，额度与
+  限流始终按来源 IP 记账。生产仍应在 Caddy/CDN 层配置 WAF 与 DDoS 防护。
 
-## 元气 AI（dsh 基座）
+## 元氣 AI（dsh 基座）
 
 后端通过 `@deepseek-ai/dsh` 子进程提供 agent 能力，前端走 `/api/agent/chat`（SSE）。
 

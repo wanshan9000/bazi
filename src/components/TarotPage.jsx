@@ -74,15 +74,14 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
     <div className="page-wrap tarot-page">
       <div className="container">
         <div className="page-head rise">
-          <button className="back-btn" onClick={onBack}>← 返回首页</button>
-          {history.length > 0 && (
-            <span className="page-meta page-meta--divined" title={`已累计完成 ${history.length} 次塔罗占卜`}>
-              <span className="page-meta-icon" aria-hidden="true">✦</span>
-              <span className="page-meta-text">已抽过 <em className="page-meta-num">{history.length}</em> 卦</span>
-            </span>
-          )}
+          <button className="back-btn" onClick={onBack}>‹ 返回</button>
         </div>
-        <h1 className="page-title rise rise-1">塔罗门 🃏</h1>
+        <h1 className="page-title tarot-page-title rise rise-1">
+          <span>塔罗门</span>
+          {history.length > 0 && (
+            <span className="tarot-draw-count" title={`已累计完成 ${history.length} 次塔罗占卜`}><em>{history.length}</em> 卦</span>
+          )}
+        </h1>
         <p className="page-sub rise rise-2">七十八张阿卡那 · 九种经典牌阵 · 一抽即明</p>
 
         {/* 游客免费配额提示（已登录不显示） */}
@@ -137,7 +136,7 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
               eyebrow="塔罗占卜 · 游客免费 10 次"
               title="免费 10 次抽牌已用完"
               desc="游客每抽 1 次牌计 1 次免费配额，累计 10 次后需注册/登录成为会员，即可继续无限制抽牌解读。"
-              note={`已累计抽牌 ${tarotUsed} 次 · 注册默认开通「凡境」会员 · 扫码识别一步注册，自动登录`}
+              note={`已累计抽牌 ${tarotUsed} 次 · 注册/登录后即可继续使用`}
             />
           </div>
         ) : (
@@ -160,10 +159,12 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
                       {SPREAD_CATS.find(c => c.k === s.cat)?.icon}
                       {SPREAD_CATS.find(c => c.k === s.cat)?.l}
                     </span>
-                    <span className="sc-count">{s.count} 张 · {s.diff}</span>
                   </div>
                   <SpreadPreview spread={s} />
-                  <h3 className="sc-name">{s.name}</h3>
+                  <div className="sc-name-row">
+                    <h3 className="sc-name">{s.name}</h3>
+                    <span className="sc-card-count"><em>{s.count}</em>张</span>
+                  </div>
                   <p className="sc-en">{s.nameEn}</p>
                   <p className="sc-short">{s.short}</p>
                   <p className="sc-desc">{s.desc}</p>

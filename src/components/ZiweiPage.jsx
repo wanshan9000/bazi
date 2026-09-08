@@ -76,15 +76,23 @@ export default function ZiweiPage({ chart, onBack, onChart, user, onRequireLogin
   }, [chart, user, onUserChange])
 
   return (
-    <div className="page-wrap">
+    <div className="page-wrap ziwei-page">
       <div className="container">
         <div className="page-head rise">
-          <button className="back-btn" onClick={onBack}>← 返回首页</button>
-          {chart && !editing && (
-            <button className="change-chart-btn" onClick={() => { setEditing(true); window.scrollTo(0, 0) }}>更换生辰</button>
-          )}
+          <button className="back-btn" onClick={onBack}>‹ 返回</button>
         </div>
-        <h1 className="page-title rise rise-1">紫微门 ⭐</h1>
+        <h1 className="page-title bazi-page-title rise rise-1">
+          <span>紫微门</span>
+          {chart && !editing && (
+            <button className="title-chart-change" onClick={() => { setEditing(true); window.scrollTo(0, 0) }} title="更换生辰" aria-label="更换生辰">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7" />
+                <path d="M3 3v5h5" />
+              </svg>
+              <span>更换生辰</span>
+            </button>
+          )}
+        </h1>
         <p className="page-sub rise rise-2">览十二宫 · 观星曜 · 一览人生星光地图</p>
 
         {!hasChart || editing ? (
@@ -231,7 +239,7 @@ function ZiweiBirthForm({ onDone }) {
   }
 
   return (
-    <div className="zw-board rise rise-3">
+    <div className="zw-board rise rise-3 ziwei-entry-form">
       <header className="zwb-header">
         <h3 className="zwb-title">
           <span className="zwb-icon" aria-hidden>✦</span>
@@ -267,7 +275,7 @@ function ZiweiBirthForm({ onDone }) {
         <div className="zwb-row">
           <div className="zwb-col">
             <label className="zwb-label zwb-label-row">
-              <span>出生年 / 月 / 日 <span className="zwb-hint">（依本人生辰，非当前时间）</span></span>
+              <span>出生年 / 月 / 日</span>
               <span className="cal-switch">
                 <span className={`cal-chip ${calendar === 'solar' ? 'active' : ''}`} onClick={() => { setCalendar('solar'); setLunarLeap(false) }}>阳历</span>
                 <span className={`cal-chip ${calendar === 'lunar' ? 'active' : ''}`} onClick={() => setCalendar('lunar')}>农历</span>
@@ -397,8 +405,8 @@ function ZiweiBoard({ chart, user, paid, reason, onRequireLogin, onUpgrade }) {
         <div className="zw-head-actions">
           {user ? (
             <>
-              <button className="zw-head-btn" onClick={handleCopy} title="复制报告文本">⧉ 复制</button>
-              <button className="zw-head-btn" onClick={handleShare} title="分享到社交">↗ 分享</button>
+              <button className="zw-head-btn" onClick={handleCopy} title="复制报告文本" aria-label="复制报告文本">⧉</button>
+              <button className="zw-head-btn" onClick={handleShare} title="分享到社交" aria-label="分享到社交">↗</button>
             </>
           ) : (
             <button className="zw-head-btn" onClick={() => onRequireLogin && onRequireLogin('ziwei')} title="登录后复制完整报告">⧉ 解锁复制</button>

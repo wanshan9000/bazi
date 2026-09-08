@@ -139,7 +139,7 @@ export function interpret(ben, bian, movingLine) {
   ]
 }
 
-// 完整纳甲排盘文本（供元气AI技能使用）
+// 完整纳甲排盘文本（供元氣AI技能使用）
 export function buildLiuyaoPan(chart) {
   const now = new Date()
   const n1 = chart?.n1 || (seedRand() % 99 + 1)

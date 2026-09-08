@@ -1958,7 +1958,7 @@ export function buildBaziReport(chart) {
       `命理贵在"以验定盘"：若可回顾近十年升迁、婚恋、学业、疾厄等关键年份，` +
       `将有助于校准本局格局与用神之判定，建议结合过往节点复核喜忌。`
 
-    // 注入 skill 技法总纲（读取元气AI「易学-泰山」技能动态导读，与盲派/紫微等报告对齐）
+    // 注入 skill 技法总纲（读取元氣AI「易学-泰山」技能动态导读，与盲派/紫微等报告对齐）
     const guide = guideSectionOf('bazi')
     if (guide) sections.unshift(guide)
 

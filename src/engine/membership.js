@@ -3,8 +3,8 @@
  * 设计原则：
  *   · 不消耗 token 的纯本地排盘/展示 → 游客免费（详见 FREE_FEATURES）
  *   · 游客：本地功能全免费 + 元氣 AI 100 积分体验额度（token 换算，见 freeQuota.js）
- *   · 凡境 ¥18.8 / 月 = 200 积分；玄境 ¥99 / 月 = 500；天机境 ¥188 / 月 = 1000
- *   · 积分按订阅价倒推（留 20% 毛利）；游客 100 < 凡境 200 < 玄境 500 < 天机 1000 依次递增
+ *   · 凡者 ¥18.8 / 月 = 200 积分；玄者 ¥99 / 月 = 500；天者 ¥188 / 月 = 1000
+ *   · 积分按订阅价倒推（留 20% 毛利）；游客 100 < 凡者 200 < 玄者 500 < 天者 1000 依次递增
  *   · 定价依据详见《会员体系设计方案.md》
  *   · 消耗 token 的 AI 解读/完整命书/AI 对话 → 按 FEATURE_COSTS 扣积分
  *   · 每月（30 天）额度自动重置，积分以月度配额内扣减
@@ -35,13 +35,13 @@ export const PLANS = [
     key: 'earth',
     icon: '☁️',
     en: 'Earth Realm',
-    name: '凡境',
+    name: '凡者',
     tag: '入门',
     price: 18.8,
     credits: 200,
     desc: '入门体验，个人黄历订阅 + 日常小测，轻松踏入玄学世界。',
     unit: '/月',
-    cta: '从凡境开始',
+    cta: '从凡者开始',
     perks: [
       '本地排盘全部免费（八字 / 紫微 / 塔罗 / 奇门 / 称骨 / 风水 / 星座 / 姓名）',
       '个人黄历订阅推送（结合八字 · 晨起 / 午间 / 晚归）',
@@ -61,13 +61,13 @@ export const PLANS = [
     key: 'heaven',
     icon: '✦',
     en: 'Heaven Realm',
-    name: '玄境',
+    name: '玄者',
     tag: '进阶',
     price: 99,
     credits: 500,
     desc: '深度解读，全量解锁，大多数人选择的心仪之境。',
     unit: '/月',
-    cta: '跃升玄境',
+    cta: '跃升玄者',
     perks: [
       '全部测算不限次数（积分额度内）',
       '每月 500 积分 · 完整深度报告与 AI 问答畅聊',
@@ -89,15 +89,15 @@ export const PLANS = [
     key: 'oracle',
     icon: '☼',
     en: 'Oracle Realm',
-    name: '天机境',
+    name: '天者',
     tag: '至臻',
     price: 188,
     credits: 1000,
     desc: '至尊专属，大师 1v1 精批，天机尽握于掌。',
     unit: '/月',
-    cta: '问鼎天机',
+    cta: '登临天者',
     perks: [
-      '玄境全部权益',
+      '玄者全部权益',
       '每月 1000 积分 · 大师 1v1 精批（每月 1 次额度内）',
       '年度流年深度精批',
       '专属客服优先响应',
@@ -105,7 +105,7 @@ export const PLANS = [
     ],
     featured: false,
     benefits: [
-      '玄境全部权益',
+      '玄者全部权益',
       '大师 1v1 精批',
       '年度流年深度精批',
       '专属客服优先响应',
@@ -124,8 +124,8 @@ export const PLANS = [
 export const FREE_PLAN = {
   key: 'free',
   icon: '○',
-  en: 'Mortal',
-  name: '凡人',
+  en: 'Guest',
+  name: '游客',
   tag: '未订阅',
   price: 0,
   credits: 100,
@@ -138,9 +138,31 @@ export const FREE_PLAN = {
   benefits: ['本地排盘 全部免费', 'AI 体验额度 100 积分/月'],
 }
 
+// 超级尊者不是商品档位，不能由订阅接口购买。它只配合服务端 super_admin
+// 角色使用，供受信任的开发与运营账号进行全量联调。
+export const SUPER_PLAN = {
+  key: 'supreme',
+  icon: '◆',
+  en: 'Supreme',
+  name: '超级尊者',
+  tag: '超级管理员',
+  price: 0,
+  credits: Infinity,
+  unit: '',
+  desc: '开发与运营专用的全量权限档位。',
+  perks: ['全站功能无限使用', '管理控制台完整权限', '开发与测试专用'],
+  benefits: ['全站功能无限使用', '管理控制台完整权限'],
+}
+
+/** 角色由服务端账号库保存，前端字段只用于展示，绝不能作为授权依据。 */
+export function isSuperAdmin(user) {
+  return Boolean(user && user.role === 'super_admin')
+}
+
 /** 会员是否已过期（free 档不会过期） */
 export function isPlanExpired(user, now = Date.now()) {
   if (!user) return false
+  if (isSuperAdmin(user)) return false
   if (!user.plan || user.plan === FREE_PLAN.key) return false
   const exp = user.planExpiresAt || 0
   return exp > 0 && exp <= now
@@ -180,6 +202,7 @@ export const FEATURE_COSTS = {
 
 /* ---- 工具 ---- */
 export function planByKey(key) {
+  if (key === SUPER_PLAN.key) return SUPER_PLAN
   if (key === FREE_PLAN.key) return FREE_PLAN
   return PLANS.find(p => p.key === key) || PLANS[0]
 }
@@ -187,6 +210,7 @@ export function planByKey(key) {
 /** 用户的「本月积分余额」—— 若周期已过期，先做月度重置 */
 export function getMonthlyCredits(user) {
   if (!user) return 0
+  if (isSuperAdmin(user)) return Infinity
   // 过期后额度按 free 档算。否则「到期不降级」在余额上完全看不出来：
   // 一个三个月前就过期的天机境账号，顶栏照样显示 1000 积分可用。
   const plan = isPlanExpired(user) ? FREE_PLAN : planByKey(user.plan)
@@ -203,6 +227,7 @@ export function getMonthlyCredits(user) {
 /** 月度进度：已用 / 总额，0~1 */
 export function getMonthlyProgress(user) {
   if (!user) return 0
+  if (isSuperAdmin(user)) return 0
   const plan = isPlanExpired(user) ? FREE_PLAN : planByKey(user.plan)
   const total = Math.max(1, plan.credits)
   const used = Math.min(plan.credits, user.creditsUsed || 0)
@@ -211,6 +236,7 @@ export function getMonthlyProgress(user) {
 
 /** 是否还够积分扣减指定功能 */
 export function canAfford(user, featureKey) {
+  if (isSuperAdmin(user)) return true
   const cost = FEATURE_COSTS[featureKey]
   if (cost == null) return true // 未列入积分表 = 视为免费/已放行
   return getMonthlyCredits(user) >= cost
@@ -230,10 +256,11 @@ export function nextResetAt(now = Date.now()) {
 
 /* ---- 文案 ---- */
 export const PLAN_LABEL = {
-  free: '凡人',
-  earth: '凡境',
-  heaven: '玄境',
-  oracle: '天机境',
+  free: '游客',
+  earth: '凡者',
+  heaven: '玄者',
+  oracle: '天者',
+  supreme: '超级尊者',
 }
 
 /**
@@ -244,7 +271,7 @@ export const PLAN_LABEL = {
  * 已是最高档时返回 null，调用方据此显示「已是最高档位」。
  */
 export function nextPlanKey(planKey) {
-  if (planKey === 'oracle') return null
+  if (planKey === 'oracle' || planKey === SUPER_PLAN.key) return null
   return planKey === 'heaven' ? 'oracle' : 'heaven'
 }
 

@@ -228,14 +228,14 @@ function noChartReply(q) {
   const intent = detectIntent(q)
   if (!intent || intent.key === 'gate') {
     return [
-      `我是「司命」，三门命理的 AI 命理 Agent。`,
+      `我是「三门先生」，一位玄学大师。`,
       `八字、紫微、六爻，三法归一。你可以直接问我问题，也可以先排一份命盘，让回答更贴合你的命局。`,
       `请告诉我你的生辰八字，我来帮你排盘+大运，或者你先讨论什么问题，请告诉我。`
     ]
   }
   if (intent.key === 'greeting') {
     return [
-      `你好，我是司命。`,
+      `你好，我是三门先生。`,
       `在我这里，八字、紫微、六爻三门皆通。想问事业、财运、感情，还是先排一份命盘？`
     ]
   }
@@ -266,7 +266,7 @@ export function generateReply(chart, question) {
 
   if (intent.key === 'greeting') {
     return [
-      `你好呀，我在的。我是司命，三门命理的 AI 命理 Agent。`,
+      `你好呀，我在的。我是三门先生，一位玄学大师。`,
       `你的命盘我已记得清清楚楚：日主${ctx.dayMaster}（${ctx.dayMasterWx}），生肖${ctx.shengxiao}。`,
       `今天想聊点什么？事业、财运、感情，还是今年的运势？也可以到六爻门起一卦。`
     ]
@@ -290,7 +290,7 @@ export function generateReply(chart, question) {
 
   if (intent.key === 'gate') {
     return [
-      `我是「司命」，三门命理的 AI 命理 Agent。`,
+      `我是「三门先生」，一位玄学大师。`,
       `三门即三法：八字推命、紫微斗数、六爻占卜，三法归一，可断一生之格局，可解一时之疑惑。`,
       `你可以在首页直接问我问题，或点开八字门排盘、六爻门起卦、紫微门览星。心有所问，尽管开口。`
     ]
@@ -309,7 +309,7 @@ export function generateReply(chart, question) {
 export function openingLine(chart) {
   const ctx = buildContext(chart)
   return [
-    `命盘已排定。你好，我是司命——三门命理的 AI 命理 Agent。`,
+    `命盘已排定。你好，我是三门先生，一位玄学大师。`,
     `你是${ctx.dayMaster}日主（${ctx.dayMasterWx}），生肖${ctx.shengxiao}，四柱：${ctx.pillars}。今年${ctx.nowGan}${ctx.nowZhi}年，整体来看${ctx.yearRemark}`,
     `事业、财运、感情、健康……有什么想问的，尽管开口。`
   ]
@@ -318,7 +318,7 @@ export function openingLine(chart) {
 // 无命盘时的开场白
 export function openingNoChart() {
   return [
-    `我是「司命」，三门命理的 AI 命理 Agent。`,
+    `我是「三门先生」，一位玄学大师。`,
     `八字、紫微、六爻，三法归一。你可以直接问我问题，也可以先排一份命盘，让我的回答贴合你的命局。`,
     `请告诉我你的生辰八字，我来帮你排盘+大运，或者你先讨论什么问题，请告诉我。`
   ]

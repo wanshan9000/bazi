@@ -17,12 +17,18 @@ export default function HoroscopePage({ onBack }) {
     <div className="page-wrap">
       <div className="container">
         <div className="page-head rise">
-          <button className="back-btn" onClick={onBack}>← 返回首页</button>
-          <button className="btn ghost small" onClick={() => setPickerOpen(!pickerOpen)}>
+          <button className="back-btn" onClick={onBack}>‹ 返回</button>
+        </div>
+        <div className="hs-title-row rise rise-1">
+          <h1 className="page-title hs-page-title">星座运势</h1>
+          <button
+            className="btn ghost small hs-switch-btn"
+            onClick={() => setPickerOpen(!pickerOpen)}
+            aria-expanded={pickerOpen}
+          >
             {pickerOpen ? '收起选择' : '切换星座'}
           </button>
         </div>
-        <h1 className="page-title rise rise-1">星座运势 ✦</h1>
         <p className="page-sub rise rise-2">今日 {date.getMonth() + 1}.{date.getDate()} · 行星行运速览</p>
 
         {pickerOpen && (

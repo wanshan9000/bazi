@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react'
-import { login } from '../data/users.js'
-import { loadQuota, tokensToCredits, isAgentOverQuota, AGENT_QUOTA_TOKENS } from '../engine/freeQuota.js'
+import { login, loginBySms, registerByWechat, sendAuthSmsCode } from '../data/users.js'
+import { api } from '../api/client.js'
+import { loadQuota, tokensToCredits, isAgentOverQuota } from '../engine/freeQuota.js'
 
 export default function LoginPage({ onBack, onSwitch, onSuccess }) {
+  const [method, setMethod] = useState('sms')
   const [account, setAccount] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [smsNote, setSmsNote] = useState('')
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
   const [agentTokens, setAgentTokens] = useState(0)
@@ -13,24 +19,52 @@ export default function LoginPage({ onBack, onSwitch, onSuccess }) {
     setAgentTokens(loadQuota().agentTokens || 0)
   }, [])
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setErr('')
     setLoading(true)
-    // 模拟异步，保证交互反馈
-    // login 现在是异步的（PBKDF2 派生要花几十毫秒），原来那个纯装饰用的
-    // setTimeout 延时不再需要，等待本身就是真实耗时。
-    setTimeout(async () => {
-      try {
-        const res = await login(account, password)
-        if (!res.ok) { setErr(res.msg); return }
-        onSuccess(res.user)
-      } catch (e) {
-        setErr('登录失败，请重试')
-      } finally {
-        setLoading(false)
+    try {
+      const res = await login(account, password)
+      if (!res.ok) { setErr(res.msg); return }
+      onSuccess(res.user)
+    } catch (e) {
+      setErr('登录失败，请重试')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSendCode = async () => {
+    setErr(''); setSmsNote(''); setLoading(true)
+    try {
+      const res = await sendAuthSmsCode(phone, 'login')
+      if (!res.ok) { setErr(res.msg); return }
+      setSmsNote(res.devCode ? `开发验证码：${res.devCode}` : '验证码已发送，请注意查收。')
+    } finally { setLoading(false) }
+  }
+
+  const handleSmsLogin = async (e) => {
+    e.preventDefault(); setErr(''); setLoading(true)
+    try {
+      const res = await loginBySms(phone, code)
+      if (!res.ok) { setErr(res.msg); return }
+      onSuccess(res.user)
+    } finally { setLoading(false) }
+  }
+
+  const handleWechatLogin = async () => {
+    setErr(''); setLoading(true)
+    try {
+      const qr = await api.wechatQr()
+      if (!qr.mock && qr.url) {
+        window.location.href = qr.url
+        return
       }
-    }, 260)
+      const done = await api.wechatMockDone({})
+      const res = await registerByWechat(done.openid || done.token, '微信用户')
+      if (!res.ok) { setErr(res.msg); return }
+      onSuccess(res.user)
+    } finally { setLoading(false) }
   }
 
   const credits = tokensToCredits(agentTokens)
@@ -46,15 +80,22 @@ export default function LoginPage({ onBack, onSwitch, onSuccess }) {
       </button>
 
       <div className="auth-wrap">
-        {/* 游客积分提示（移自元气AI页面顶部） */}
+        {/* 游客体验额度 */}
         {agentTokens > 0 && (
-          <div className={`agent-credit-hint auth-credit-hint ${over ? 'over' : ''}`}>
-            {over ? (
-              <span className="ach-text">💎 游客积分已用尽 · 累计 {credits.toFixed(1)} / 100 积分（≈ {AGENT_QUOTA_TOKENS.toLocaleString()} token）</span>
-            ) : (
-              <span className="ach-text">我的元气 · 游客积分 <b>{credits.toFixed(1)}</b> / 100（1 积分 ≈ 10 万 token）</span>
-            )}
-          </div>
+          <aside className={`agent-credit-hint auth-credit-hint auth-wish-panel ${over ? 'over' : ''}`}>
+            <div className="auth-wish-stars" aria-hidden="true"><i>✦</i><i>✧</i><i>✦</i></div>
+            <div className="auth-wish-seal" aria-hidden="true"><span>愿</span></div>
+            <p className="auth-wish-eyebrow">TODAY'S LITTLE WISH</p>
+            <h2 className="auth-wish-title">把心愿，<em>交给今天</em></h2>
+            <p className="auth-wish-copy">愿你认真期待的事，都在自己的节奏里慢慢靠近。</p>
+            <div className="auth-wish-note"><span aria-hidden="true">✦</span> 今天也请温柔地相信自己</div>
+            <div className="auth-credit-balance">
+              <span>{over ? '体验额度已用尽' : '今日可用元氣'}</span>
+              <strong>{credits.toFixed(1)}<small>/ 100</small></strong>
+            </div>
+            <p className="auth-credit-copy">登录后，命盘、对话与订阅记录都会安稳地留在这里。</p>
+            {!over && <div className="auth-credit-tags" aria-label="登录后可保留的信息"><span>命盘留存</span><span>会话同步</span><span>心愿不丢失</span></div>}
+          </aside>
         )}
 
         <div className="auth-card">
@@ -67,7 +108,13 @@ export default function LoginPage({ onBack, onSwitch, onSuccess }) {
           </h2>
           <p className="auth-sub">登录后保存你的命盘足迹，解锁会员权益</p>
 
-          <form className="auth-form" onSubmit={handleSubmit} noValidate>
+          <div className="auth-methods auth-methods-three" role="tablist" aria-label="登录方式">
+            <button className={`auth-method ${method === 'wechat' ? 'active' : ''}`} onClick={() => { setMethod('wechat'); setErr('') }} role="tab" aria-selected={method === 'wechat'}>扫码登录</button>
+            <button className={`auth-method ${method === 'sms' ? 'active' : ''}`} onClick={() => { setMethod('sms'); setErr('') }} role="tab" aria-selected={method === 'sms'}>手机短信</button>
+            <button className={`auth-method ${method === 'account' ? 'active' : ''}`} onClick={() => { setMethod('account'); setErr('') }} role="tab" aria-selected={method === 'account'}>账号登录</button>
+          </div>
+
+          {method === 'account' && <form className="auth-form" onSubmit={handleSubmit} noValidate>
             <div className="auth-field">
               <label htmlFor="login-account">账号</label>
               <input
@@ -81,14 +128,12 @@ export default function LoginPage({ onBack, onSwitch, onSuccess }) {
             </div>
             <div className="auth-field">
               <label htmlFor="login-pwd">密码</label>
-              <input
-                id="login-pwd"
-                type="password"
-                placeholder="请输入密码"
-                value={password}
-                autoComplete="current-password"
-                onChange={e => setPassword(e.target.value)}
-              />
+              <div className="auth-password-wrap">
+                <input id="login-pwd" type={showPassword ? 'text' : 'password'} placeholder="请输入密码" value={password} autoComplete="current-password" onChange={e => setPassword(e.target.value)} />
+                <button type="button" className="auth-password-toggle" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? '隐藏密码' : '显示密码'} title={showPassword ? '隐藏密码' : '显示密码'}>
+                  <EyeIcon open={showPassword} />
+                </button>
+              </div>
             </div>
 
             {err && <p className="auth-err">{err}</p>}
@@ -96,7 +141,31 @@ export default function LoginPage({ onBack, onSwitch, onSuccess }) {
             <button type="submit" className="auth-btn" disabled={loading}>
               {loading ? '登 录 中…' : '登 录'}
             </button>
-          </form>
+          </form>}
+
+          {method === 'sms' && <form className="auth-form" onSubmit={handleSmsLogin} noValidate>
+            <div className="auth-field">
+              <label htmlFor="login-phone">手机号</label>
+              <input id="login-phone" type="tel" inputMode="numeric" placeholder="请输入 11 位手机号" value={phone} autoComplete="tel" onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} />
+            </div>
+            <div className="auth-field">
+              <label htmlFor="login-code">验证码</label>
+              <div className="auth-code-wrap">
+                <input id="login-code" inputMode="numeric" placeholder="6 位验证码" value={code} autoComplete="one-time-code" onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+                <button type="button" className="auth-code-send" onClick={handleSendCode} disabled={loading || phone.length !== 11}>获取验证码</button>
+              </div>
+            </div>
+            {smsNote && <p className="auth-dev-note">{smsNote}</p>}
+            {err && <p className="auth-err">{err}</p>}
+            <button type="submit" className="auth-btn" disabled={loading}>{loading ? '登 录 中…' : '短信登录'}</button>
+          </form>}
+
+          {method === 'wechat' && <div className="auth-wechat">
+            <div className="auth-qr-box" aria-hidden="true"><span className="auth-qr-grid" /><span className="auth-qr-logo">微</span></div>
+            <p className="auth-wechat-tip">使用微信扫一扫确认登录，无需输入密码。</p>
+            {err && <p className="auth-err">{err}</p>}
+            <button className="auth-btn" onClick={handleWechatLogin} disabled={loading}>{loading ? '登录中…' : '打开扫码登录'}</button>
+          </div>}
 
           <p className="auth-switch">
             还没有账号？
@@ -108,4 +177,8 @@ export default function LoginPage({ onBack, onSwitch, onSuccess }) {
       </div>
     </section>
   )
+}
+
+function EyeIcon({ open }) {
+  return open ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 3l18 18" /><path d="M10.6 10.6a2 2 0 002.8 2.8" /><path d="M9.9 4.2A10.8 10.8 0 0112 4c5.2 0 8.6 4.1 9.6 6.1a1.9 1.9 0 010 1.8 13.9 13.9 0 01-3.3 4.1" /><path d="M6.3 6.3A13.8 13.8 0 002.4 10.1a1.9 1.9 0 000 1.8C3.4 13.9 6.8 18 12 18c1.2 0 2.3-.2 3.3-.6" /></svg> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2.4 12S5.8 6 12 6s9.6 6 9.6 6-3.4 6-9.6 6-9.6-6-9.6-6z" /><circle cx="12" cy="12" r="2.7" /></svg>
 }

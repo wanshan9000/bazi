@@ -190,7 +190,7 @@ export function castQimen(date = new Date()) {
   return buildPan(date)
 }
 
-// ─── 完整排盘文本（供元气AI技能） ──────────────
+// ─── 完整排盘文本（供元氣AI技能） ──────────────
 
 function toGz(str) {
   return str || ''

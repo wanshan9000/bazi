@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { register, registerByWechat } from '../data/users.js'
+import { register, registerBySms, registerByWechat, sendAuthSmsCode } from '../data/users.js'
 import { api } from '../api/client.js'
+import TurnstileField from './TurnstileField.jsx'
 
 export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
   // 注册优先「扫码识别」：默认停在扫码注册 tab，扫码成功自动建号并登录
@@ -9,8 +10,14 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
   const [account, setAccount] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [phone, setPhone] = useState('')
+  const [smsCode, setSmsCode] = useState('')
+  const [smsNote, setSmsNote] = useState('')
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState('')
 
   // 微信扫码注册
   const [busy, setBusy] = useState(false)
@@ -36,7 +43,7 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
     return () => { alive = false }
   }, [])
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setErr('')
     if (password !== confirm) {
@@ -44,17 +51,33 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
       return
     }
     setLoading(true)
-    setTimeout(async () => {
-      try {
-        const res = await register({ nickname, account, password })
-        if (!res.ok) { setErr(res.msg); return }
-        onSuccess(res.user)
-      } catch (e) {
-        setErr('注册失败，请重试')
-      } finally {
-        setLoading(false)
-      }
-    }, 320)
+    try {
+      const res = await register({ nickname, account, password, captchaToken })
+      if (!res.ok) { setErr(res.msg); return }
+      onSuccess(res.user)
+    } catch (e) {
+      setErr('注册失败，请重试')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSendCode = async () => {
+    setErr(''); setSmsNote(''); setLoading(true)
+    try {
+      const res = await sendAuthSmsCode(phone, 'register')
+      if (!res.ok) { setErr(res.msg); return }
+      setSmsNote(res.devCode ? `开发验证码：${res.devCode}` : '验证码已发送，请注意查收。')
+    } finally { setLoading(false) }
+  }
+
+  const handleSmsRegister = async (e) => {
+    e.preventDefault(); setErr(''); setLoading(true)
+    try {
+      const res = await registerBySms(phone, smsCode)
+      if (!res.ok) { setErr(res.msg); return }
+      onSuccess(res.user)
+    } finally { setLoading(false) }
   }
 
   // 扫码注册：后端已配置则跳转真实微信授权，未连接/未配置则本地演示（模拟扫码即自动建号登录）
@@ -126,19 +149,30 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
           <h2 className="auth-title">
             遇见<span className="zhushi">·</span>元氣滿滿
           </h2>
-          <p className="auth-sub">创建一个账号，开启你的元气命理之旅</p>
+          <p className="auth-sub">创建一个账号，开启你的元氣命理之旅</p>
 
-          {/* 注册方式切换（扫码注册优先） */}
-          <div className="auth-methods">
+          <div className="auth-methods auth-methods-three" role="tablist" aria-label="注册方式">
             <button
               className={`auth-method ${method === 'wechat' ? 'active' : ''}`}
               onClick={() => { setMethod('wechat'); setErr('') }}
+              role="tab"
+              aria-selected={method === 'wechat'}
             >
-              扫码注册<span className="auth-hot-tag">推荐</span>
+              扫码注册
+            </button>
+            <button
+              className={`auth-method ${method === 'sms' ? 'active' : ''}`}
+              onClick={() => { setMethod('sms'); setErr('') }}
+              role="tab"
+              aria-selected={method === 'sms'}
+            >
+              手机短信<span className="auth-hot-tag">推荐</span>
             </button>
             <button
               className={`auth-method ${method === 'account' ? 'active' : ''}`}
               onClick={() => { setMethod('account'); setErr('') }}
+              role="tab"
+              aria-selected={method === 'account'}
             >
               账号注册
             </button>
@@ -151,7 +185,7 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
                 <input
                   id="reg-nick"
                   type="text"
-                  placeholder="给自己起个元气昵称"
+                  placeholder="给自己起个元氣昵称"
                   value={nickname}
                   maxLength={16}
                   autoComplete="nickname"
@@ -172,33 +206,44 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
               <div className="auth-row">
                 <div className="auth-field">
                   <label htmlFor="reg-pwd">密码</label>
-                  <input
-                    id="reg-pwd"
-                    type="password"
-                    placeholder="至少 6 位"
-                    value={password}
-                    autoComplete="new-password"
-                    onChange={e => setPassword(e.target.value)}
-                  />
+                  <div className="auth-password-wrap">
+                    <input id="reg-pwd" type={showPassword ? 'text' : 'password'} placeholder="至少 8 位，含字母和数字" value={password} autoComplete="new-password" onChange={e => setPassword(e.target.value)} />
+                    <button type="button" className="auth-password-toggle" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? '隐藏密码' : '显示密码'} title={showPassword ? '隐藏密码' : '显示密码'}><EyeIcon open={showPassword} /></button>
+                  </div>
                 </div>
                 <div className="auth-field">
                   <label htmlFor="reg-pwd2">确认密码</label>
-                  <input
-                    id="reg-pwd2"
-                    type="password"
-                    placeholder="再输一遍"
-                    value={confirm}
-                    autoComplete="new-password"
-                    onChange={e => setConfirm(e.target.value)}
-                  />
+                  <div className="auth-password-wrap">
+                    <input id="reg-pwd2" type={showConfirm ? 'text' : 'password'} placeholder="再输一遍" value={confirm} autoComplete="new-password" onChange={e => setConfirm(e.target.value)} />
+                    <button type="button" className="auth-password-toggle" onClick={() => setShowConfirm(value => !value)} aria-label={showConfirm ? '隐藏密码' : '显示密码'} title={showConfirm ? '隐藏密码' : '显示密码'}><EyeIcon open={showConfirm} /></button>
+                  </div>
                 </div>
               </div>
+
+              <TurnstileField onToken={setCaptchaToken} onError={setErr} />
 
               {err && <p className="auth-err">{err}</p>}
 
               <button type="submit" className="auth-btn" disabled={loading}>
                 {loading ? '注 册 中…' : '注 册'}
               </button>
+            </form>
+          ) : method === 'sms' ? (
+            <form className="auth-form" onSubmit={handleSmsRegister} noValidate>
+              <div className="auth-field">
+                <label htmlFor="reg-phone">手机号</label>
+                <input id="reg-phone" type="tel" inputMode="numeric" placeholder="请输入 11 位手机号" value={phone} autoComplete="tel" onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} />
+              </div>
+              <div className="auth-field">
+                <label htmlFor="reg-code">验证码</label>
+                <div className="auth-code-wrap">
+                  <input id="reg-code" inputMode="numeric" placeholder="6 位验证码" value={smsCode} autoComplete="one-time-code" onChange={e => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+                  <button type="button" className="auth-code-send" onClick={handleSendCode} disabled={loading || phone.length !== 11}>获取验证码</button>
+                </div>
+              </div>
+              {smsNote && <p className="auth-dev-note">{smsNote}</p>}
+              {err && <p className="auth-err">{err}</p>}
+              <button type="submit" className="auth-btn" disabled={loading}>{loading ? '注 册 中…' : '短信注册'}</button>
             </form>
           ) : (
             <div className="auth-wechat">
@@ -238,4 +283,8 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
       </div>
     </section>
   )
+}
+
+function EyeIcon({ open }) {
+  return open ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 3l18 18" /><path d="M10.6 10.6a2 2 0 002.8 2.8" /><path d="M9.9 4.2A10.8 10.8 0 0112 4c5.2 0 8.6 4.1 9.6 6.1a1.9 1.9 0 010 1.8 13.9 13.9 0 01-3.3 4.1" /><path d="M6.3 6.3A13.8 13.8 0 002.4 10.1a1.9 1.9 0 000 1.8C3.4 13.9 6.8 18 12 18c1.2 0 2.3-.2 3.3-.6" /></svg> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2.4 12S5.8 6 12 6s9.6 6 9.6 6-3.4 6-9.6 6-9.6-6-9.6-6z" /><circle cx="12" cy="12" r="2.7" /></svg>
 }

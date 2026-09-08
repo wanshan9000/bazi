@@ -37,7 +37,7 @@ export const REPORT_META = {
   hehun:   { icon: '💞', title: '合婚 · 双人合盘报告', tool: 'hehun_report',    name: '合婚' },
   zejiri:  { icon: '📅', title: '择吉 · 择日报告',     tool: 'zejiri_report',   name: '择吉' },
   consult: { icon: '🔀', title: '多流派 · 命理会诊报告', tool: 'consult_report',  name: '会诊' },
-  full:    { icon: '🧿', title: '司命 · 命局综合完整报告', tool: 'full_report',     name: '综合' },
+  full:    { icon: '🧿', title: '三门 · 命局综合完整报告', tool: 'full_report',     name: '综合' },
 }
 
 export function metaOf(type) {
@@ -45,7 +45,7 @@ export function metaOf(type) {
 }
 
 // 生成统一报告外壳（各门类引擎调用）
-// 自动读取元气 AI 技能库，在报告开头注入「技法总纲」导读区块
+// 自动读取元氣 AI 技能库，在报告开头注入「技法总纲」导读区块
 export function makeReport(type, { sub, hero, meta, sections, advice }) {
   const m = metaOf(type)
   const guide = guideSectionOf(type)
@@ -91,7 +91,7 @@ function sectionToMd(s) {
   L.push('')
   switch (s.kind) {
     case 'guide': {
-      L.push(`> 🧭 本报告由元气AI「${s.data.name}」技能指导。解读思路：${s.data.methodText}`)
+      L.push(`> 🧭 本报告由元氣AI「${s.data.name}」技能指导。解读思路：${s.data.methodText}`)
       break
     }
     case 'note': {
@@ -188,6 +188,31 @@ function sectionToMd(s) {
       }
       break
     }
+    case 'identity': {
+      const d = s.data || {}
+      const pillars = (d.pillars || []).map(p => `${p.label || ''}${p.gan || ''}${p.zhi || ''}`).filter(Boolean)
+      if (pillars.length) L.push(`- **四柱**：${pillars.join(' · ')}`)
+      if (d.dayMaster?.name) L.push(`- **日主**：${d.dayMaster.name}${d.dayMaster.wuxing ? `（${d.dayMaster.wuxing}）` : ''}`)
+      if (d.favorable?.length) L.push(`- **喜用**：${d.favorable.join('、')}`)
+      if (d.avoid?.length) L.push(`- **忌用**：${d.avoid.join('、')}`)
+      if (d.qiyun?.text) L.push(`- **起运**：${d.qiyun.text}${d.qiyun.date ? ` · ${d.qiyun.date}` : ''}`)
+      const basics = [['公历', d.solar], ['农历', d.lunar], ['生肖', d.zodiac], ['五行局', d.ju], ['命主', d.soul?.name], ['身主', d.body?.name]]
+        .filter(([, value]) => value)
+        .map(([label, value]) => `${label}：${value}`)
+      if (basics.length) L.push(`- **盘面资料**：${basics.join(' · ')}`)
+      break
+    }
+    case 'bifold': {
+      for (const block of ['dec', 'yr'].map(key => s.data?.[key]).filter(Boolean)) {
+        const lead = [block.label, block.range, block.name, block.ganzhi].filter(Boolean).join(' · ')
+        if (lead) L.push(`- **${lead}**`)
+        if (block.note) L.push(`  - ${block.note}`)
+        if (block.stars?.length) L.push(`  - 星曜：${block.stars.join('、')}`)
+        if (block.mutagen?.length) L.push(`  - 四化：${block.mutagen.join('；')}`)
+        if (block.shensha?.length) L.push(`  - 神煞：${block.shensha.join('、')}`)
+      }
+      break
+    }
     // 复合章节：内部再套一组子章节，逐个递归渲染。
     // ⚠ 没有这一支的话会掉进下面的 default，把整块结构原样 JSON.stringify 出来 ——
     // 子平派完整报告的第一章就是 kvComposite，导出的 markdown 里因此夹着一大段
@@ -239,7 +264,7 @@ export function schemaToMarkdown(report) {
     L.push('')
   }
   L.push('---')
-  L.push(`> 本报告由元气AI「${m.name}」高精度引擎生成，仅供娱乐与参考，不构成任何决策依据。`)
+  L.push(`> 本报告由元氣AI「${m.name}」高精度引擎生成，仅供娱乐与参考，不构成任何决策依据。`)
   return L.join('\n')
 }
 

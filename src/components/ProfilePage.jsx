@@ -6,10 +6,11 @@ const PLAN_STYLE = {
   // free 是「未订阅 / 已过期」的落点，不在可购买的 PLANS 里，但个人中心一定会
   // 渲染到它 —— 漏了这一项就是 PLAN_STYLE[plan].cls 读 undefined，
   // 过期用户一进个人中心整页白屏。
-  free: { label: '凡人', cls: 'pr-free' },
-  earth: { label: '凡境', cls: 'pr-earth' },
-  heaven: { label: '玄境', cls: 'pr-heaven' },
-  oracle: { label: '天机境', cls: 'pr-oracle' }
+  free: { label: '游客', cls: 'pr-free' },
+  earth: { label: '凡者', cls: 'pr-earth' },
+  heaven: { label: '玄者', cls: 'pr-heaven' },
+  oracle: { label: '天者', cls: 'pr-oracle' },
+  supreme: { label: '超级尊者', cls: 'pr-supreme' }
 }
 
 // onSubscribe 由 App 传入（openSubscribe），此前漏在解构里，而第 55/168/174 行直接引用它，
@@ -28,6 +29,8 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
   // 必须走 planByKey：PLANS 里没有 free，用 find 会静默回落到 PLANS[0]（凡境），
   // 于是一个已过期的账号在个人中心显示成付费档，额度和到期时间也跟着错。
   const plan = planByKey(user.plan)
+  const isSuper = Boolean(user.isSuperAdmin)
+  const nextPlan = nextPlanKey(plan.key)
   const remaining = getMonthlyCredits(user)
   const used = user.creditsUsed || 0
   const progress = getMonthlyProgress(user)
@@ -94,7 +97,7 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
           <span>返回</span>
         </button>
         <h1 className="page-title">
-          我的<span className="zhushi">元气</span>
+          我的<span className="zhushi">元氣</span>
           <span className="page-subtitle">用户中心 · 会员权益 · 账号设置</span>
         </h1>
       </div>
@@ -149,42 +152,56 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
             <span className="pr-stat-label">塔罗足迹</span>
           </div>
           <div className="pr-stat">
-            <span className="pr-stat-num">{plan.price}</span>
+            <span className="pr-stat-num">{isSuper ? '—' : plan.price}</span>
             <span className="pr-stat-label">当前月费 ¥</span>
           </div>
         </div>
 
         {/* 积分余额（核心新增） */}
         <div className="profile-card pr-credits">
-          <div className="pr-cr-head">
-            <div>
-              <span className="pr-cr-label">本月积分余额</span>
-              <span className="pr-cr-num"><b>{remaining}</b> <i>/ {plan.credits}</i></span>
+          <div className="pr-cr-top">
+            <div className="pr-cr-title">
+              <span className="pr-cr-eyebrow">月度权益</span>
+              <h3>积分额度</h3>
             </div>
-            <div className="pr-cr-meta">
-              <span>已用 <b>{used}</b> 积分</span>
-              <span>·</span>
-              <span>到期 {fmtDate(expiresAt)}{daysLeft > 0 ? `（剩 ${daysLeft} 天）` : ''}</span>
+            <span className="pr-cr-plan">{plan.name}</span>
+          </div>
+
+          <div className="pr-cr-overview">
+            <div className="pr-cr-balance">
+              <span className="pr-cr-label">本月可用积分</span>
+              <div className="pr-cr-num"><b>{isSuper ? '∞' : remaining}</b><i>/ {isSuper ? '∞' : plan.credits}</i></div>
+            </div>
+            <div className="pr-cr-meta" aria-label="积分使用详情">
+              <div><span>{isSuper ? '权限' : '已用'}</span><b>{isSuper ? '全量' : used}</b><em>{isSuper ? '访问' : '积分'}</em></div>
+              <div><span>{isSuper ? '有效期' : '到期日'}</span><b>{isSuper ? '永久' : fmtDate(expiresAt)}</b></div>
+              <div><span>{isSuper ? '后台' : '剩余'}</span><b>{isSuper ? '已授权' : daysLeft}</b><em>{isSuper ? '' : '天'}</em></div>
             </div>
           </div>
-          <div className="pr-cr-bar">
-            <i style={{ width: `${Math.min(100, Math.round(progress * 100))}%` }} />
+
+          <div className="pr-cr-progress">
+            <div className="pr-cr-progress-head"><span>额度使用进度</span><b>{Math.min(100, Math.round(progress * 100))}%</b></div>
+            <div className="pr-cr-bar" role="progressbar" aria-label="本月积分使用进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.min(100, Math.round(progress * 100))}>
+              <i style={{ width: `${Math.min(100, Math.round(progress * 100))}%` }} />
+            </div>
           </div>
+
           <p className="pr-cr-tip">
-            完整命书 / AI 解读 / 元氣 AI 对话按消耗扣积分；积分每月自动续期，到期前可手动续费。
+            完整命书、AI 解读与元氣 AI 对话按次扣减积分；额度每月自动续期。
           </p>
           <div className="pr-cr-actions">
             <button
-              className="pr-set-btn"
-              onClick={() => nextPlanKey(plan.key) && onSubscribe && onSubscribe(nextPlanKey(plan.key))}
+              className="pr-cr-action primary"
+              disabled={!nextPlan}
+              onClick={() => nextPlan && upgrade(nextPlan)}
             >
-              {plan.key === 'oracle' ? '已是最高档位' : `升级至${PLAN_STYLE[nextPlanKey(plan.key)].label}`}
+              {nextPlan ? `升级至${PLAN_STYLE[nextPlan].label}` : '已是最高档位'}
             </button>
             <button
-              className="pr-set-btn ghost"
+              className="pr-cr-action secondary"
               onClick={() => onSubscribe && onSubscribe(plan.key)}
             >
-              续费 {plan.name}
+              续费当前会员
             </button>
           </div>
         </div>
@@ -218,30 +235,38 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
         </div>
 
         {/* 账号设置 */}
-        <div className="profile-block">
+        <div className="profile-block pr-account-block">
           <h3 className="pr-block-title">账号设置</h3>
-          <div className="profile-card pr-set">
-            <div className="pr-set-row">
-              <div className="pr-set-label">
-                <span className="pr-set-icon">🔒</span>
-                <div><b>修改密码</b><p>定期更换密码更安全</p></div>
-              </div>
-              <div className="pr-pwd-fields">
-                <input type="password" placeholder="当前密码" value={oldPwd} onChange={e => setOldPwd(e.target.value)} />
-                <input type="password" placeholder="新密码（至少 6 位）" value={newPwd} onChange={e => setNewPwd(e.target.value)} />
-                <input type="password" placeholder="确认新密码" value={confirm} onChange={e => setConfirm(e.target.value)} />
-                <button className="pr-set-btn" onClick={savePwd}>更新密码</button>
+          <div className="profile-card pr-account-settings">
+            <div className="pr-set">
+              <div className="pr-set-row">
+                <div className="pr-set-label">
+                  <span className="pr-set-icon">🔒</span>
+                  <div className="pr-set-copy">
+                    <b>密码安全</b>
+                    <p>定期更新密码，保护账户安全</p>
+                    <button className="pr-set-btn" onClick={savePwd}>修改密码</button>
+                  </div>
+                </div>
+                <div className="pr-pwd-fields">
+                  <input type="password" placeholder="当前密码" value={oldPwd} onChange={e => setOldPwd(e.target.value)} />
+                  <input type="password" placeholder="新密码（至少 8 位）" value={newPwd} onChange={e => setNewPwd(e.target.value)} />
+                  <input type="password" placeholder="确认新密码" value={confirm} onChange={e => setConfirm(e.target.value)} />
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="profile-card pr-set">
-            <div className="pr-set-row pr-set-danger">
-              <div className="pr-set-label">
-                <span className="pr-set-icon">🚪</span>
-                <div><b>退出登录</b><p>退出后本地命盘记录仍会保留</p></div>
+            <div className="pr-set">
+              <div className="pr-set-row pr-set-danger">
+                <div className="pr-set-label">
+                  <span className="pr-set-icon">🚪</span>
+                  <div className="pr-set-copy">
+                    <b>账户会话</b>
+                    <p>退出后，本地命盘记录仍会保留</p>
+                    <button className="pr-set-btn pr-set-btn-danger" onClick={doLogout}>退出登录</button>
+                  </div>
+                </div>
               </div>
-              <button className="pr-set-btn pr-set-btn-danger" onClick={doLogout}>退出登录</button>
             </div>
           </div>
         </div>

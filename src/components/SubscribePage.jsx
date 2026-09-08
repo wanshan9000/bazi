@@ -50,7 +50,7 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
   const [channels, setChannels] = useState({ sms: null, wechat: null })
   useEffect(() => {
     api.health().then(h => {
-      // 订阅只依赖短信/微信通道，与元气 AI 是否就绪无关。
+      // 订阅只依赖短信/微信通道，与元氣 AI 是否就绪无关。
       // 用 reachable 而不是 ok：否则没配 AI 密钥时，订阅页会谎称后端不可用。
       setServerOk(Boolean(h.reachable))
       setChannels({ sms: h.sms || null, wechat: h.wechat || null })
@@ -91,7 +91,7 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
       return
     }
     if (Notification.permission === 'granted') {
-      new Notification('元气黄历', { body: '通知已开启，每日黄历将在此提醒你。' })
+      new Notification('元氣黄历', { body: '通知已开启，每日黄历将在此提醒你。' })
       return
     }
     if (Notification.permission === 'denied') {
@@ -99,23 +99,31 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
       return
     }
     const p = await Notification.requestPermission()
-    if (p === 'granted') new Notification('元气黄历', { body: '通知已开启，每日黄历将在此提醒你。' })
+    if (p === 'granted') new Notification('元氣黄历', { body: '通知已开启，每日黄历将在此提醒你。' })
   }
 
   return (
     <div className="page-wrap hl-page">
       <div className="container">
         <div className="page-head rise">
-          <button className="back-btn" onClick={onBack}>← 返回首页</button>
-          {!showForm && (
-            <button className="change-chart-btn" onClick={() => setShowForm(true)}>更换生辰</button>
-          )}
+          <button className="back-btn" onClick={onBack}>‹ 返回</button>
         </div>
 
         {/* 黄历 · 品牌主标题 */}
         <div className="hl-hero rise rise-1">
           <div className="hl-hero-title">
-            <span className="hl-hero-main">黄历<span className="hl-hero-leaf">🌿</span></span>
+            <span className="hl-hero-main">
+              <span>黄历</span>
+              {!showForm && (
+                <button className="title-chart-change" onClick={() => setShowForm(true)} title="更换生辰" aria-label="更换生辰">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7" />
+                    <path d="M3 3v5h5" />
+                  </svg>
+                  <span>更换生辰</span>
+                </button>
+              )}
+            </span>
           </div>
           <div className="hl-hero-sub">查每日宜忌 · 配生辰开运 · 找到你的出厂设置</div>
         </div>
@@ -162,7 +170,6 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
             <MonthCurve chart={chart} today={today} />
 
             <div className="card" style={{ marginTop: 16, textAlign: 'center', padding: '16px' }}>
-              <button className="change-chart-btn" style={{ marginRight: 8 }} onClick={() => setShowForm(true)}>更换生辰</button>
               <button className="btn ghost small" onClick={() => { setToday(new Date()); window.scrollTo(0, 0) }}>回到今天</button>
             </div>
 
@@ -223,8 +230,12 @@ function BirthForm({ onDone }) {
   }
 
   return (
-    <div className="card rise rise-3">
-      <div className="hl-form-head">✦ 用你的八字订制每日黄历 ✦</div>
+    <div className="card rise rise-3 huangli-entry-form">
+      <div className="hl-form-head">
+        <span className="hl-form-spark" aria-hidden="true">✦</span>
+        <span>用你的八字订制每日黄历</span>
+        <span className="hl-form-spark" aria-hidden="true">✦</span>
+      </div>
       <p className="hl-form-sub">填入出生信息，生成专属于你的每日开运提示</p>
 
       <div className="field-pair">
@@ -238,7 +249,7 @@ function BirthForm({ onDone }) {
           </div>
         </div>
         <div className="field">
-          <label>你的身份 <span className="opt">(选填 · 不选则按年纪自动推断)</span></label>
+          <label>你的身份</label>
           <div className="select-wrap">
             <select value={role} onChange={e => setRole(e.target.value)}>
               <option value="">不选（按年纪自动推断）</option>
@@ -325,9 +336,6 @@ function BirthForm({ onDone }) {
 function ProfileBar({ profile }) {
   return (
     <div className="hl-profile rise rise-3">
-      <div className="hl-profile-wx" style={{ background: WUXING_COLOR[profile.dayMasterWx] }}>
-        {WUXING_ICON[profile.dayMasterWx]}
-      </div>
       <div className="hl-profile-info">
         <div className="hl-profile-line">
           <span className="hl-profile-title">
@@ -480,7 +488,7 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
       {!user && (
         <div className="hl-sub-login">
           <span className="hl-sub-login-ic" aria-hidden>🔒</span>
-          <span className="hl-sub-login-txt">订阅黄历是「凡境」会员权益 · 注册登录后即可开通每日宜忌推送（扫码识别一步注册 · 自动登录）</span>
+          <span className="hl-sub-login-txt">订阅黄历是「凡者」会员权益 · 注册登录后即可开通每日宜忌推送（扫码识别一步注册 · 自动登录）</span>
           <button className="hl-sub-login-btn" onClick={() => onRequireLogin && onRequireLogin()}>注册 / 登录</button>
         </div>
       )}

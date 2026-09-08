@@ -37,17 +37,23 @@ beforeEach(() => { clearAuth(); localStorage.clear() })
 const { default: LoginPage } = await import('../LoginPage.jsx')
 const { default: MembershipModal } = await import('../MembershipModal.jsx')
 
+async function openAccountLogin(r) {
+  const tab = r.findByText('账号登录')
+  assert.ok(tab, '应提供账号登录方式')
+  r.click(tab)
+  await flush()
+}
+
 test('登录成功：把服务端返回的用户交给 onSuccess，并存下 token', async () => {
   stubFetch({ '/api/auth/login': { body: { ok: true, token: 'jwt-abc', user: USER } } })
   let got = null
   const r = render(LoginPage, { onBack: () => {}, onSwitch: () => {}, onSuccess: u => { got = u } })
+  await openAccountLogin(r)
   const [acct, pwd] = r.$$('input')
   r.type(acct, 'tester')
   r.type(pwd, 'secret123')
   r.click(r.$('button[type="submit"]'))
-  // 提交里有一段 260ms 的延时
-  await new Promise(res => setTimeout(res, 400))
-  await flush()
+  await flush(5)
 
   assert.ok(got, '登录成功必须把用户交出去')
   assert.equal(got.id, 'u-1')
@@ -59,12 +65,12 @@ test('登录失败：显示服务端的提示，不调用 onSuccess', async () =
   stubFetch({ '/api/auth/login': { status: 401, body: { ok: false, msg: '账号或密码不正确' } } })
   let called = false
   const r = render(LoginPage, { onBack: () => {}, onSwitch: () => {}, onSuccess: () => { called = true } })
+  await openAccountLogin(r)
   const [acct, pwd] = r.$$('input')
   r.type(acct, 'tester')
   r.type(pwd, 'wrong')
   r.click(r.$('button[type="submit"]'))
-  await new Promise(res => setTimeout(res, 400))
-  await flush()
+  await flush(5)
 
   assert.equal(called, false, '登录失败不得放行')
   assert.ok(r.text().includes('账号或密码不正确'), `没有显示错误提示：${r.text().slice(0, 200)}`)
@@ -75,12 +81,12 @@ test('登录失败：显示服务端的提示，不调用 onSuccess', async () =
 test('登录请求不把口令写进 URL', async () => {
   const calls = stubFetch({ '/api/auth/login': { body: { ok: true, token: 't', user: USER } } })
   const r = render(LoginPage, { onBack: () => {}, onSwitch: () => {}, onSuccess: () => {} })
+  await openAccountLogin(r)
   const [acct, pwd] = r.$$('input')
   r.type(acct, 'tester')
   r.type(pwd, 'secret123')
   r.click(r.$('button[type="submit"]'))
-  await new Promise(res => setTimeout(res, 400))
-  await flush()
+  await flush(5)
   const login = calls.find(c => c.path.includes('/api/auth/login'))
   assert.equal(login.method, 'POST')
   assert.ok(!login.path.includes('secret123'), '口令绝不能出现在 URL 里（会进日志和 Referer）')

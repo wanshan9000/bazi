@@ -11,7 +11,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { promisify } from 'node:util'
 import { config } from './config.js'
-import { planByKey, FEATURE_COSTS, nextResetAt, FREE_PLAN, isPlanExpired } from '../src/engine/membership.js'
+import { planByKey, FEATURE_COSTS, nextResetAt, FREE_PLAN, SUPER_PLAN, isPlanExpired, isSuperAdmin } from '../src/engine/membership.js'
 
 const scrypt = promisify(crypto.scrypt)
 
@@ -132,6 +132,9 @@ export function createAccountStore(file) {
       account: u.account,
       avatar: u.avatar,
       plan: u.plan || FREE_PLAN.key,
+      role: u.role || 'user',
+      status: u.status || 'active',
+      isSuperAdmin: isSuperAdmin(u),
       createdAt: u.createdAt,
       lastLoginAt: u.lastLoginAt,
       creditsUsed: u.creditsUsed || 0,
@@ -168,7 +171,7 @@ export function createAccountStore(file) {
 
   const AVATARS = ['🐻', '🌸', '🌟', '🦋', '🍑', '🌙', '🪷', '☁️', '🍀', '🦊']
 
-  async function create({ account, password, nickname, avatar, wechatOpenid, plan = 'earth' }) {
+  async function create({ account, password, nickname, avatar, wechatOpenid, plan = 'free' }) {
     const db = load()
     const now = Date.now()
     const u = {
@@ -178,10 +181,11 @@ export function createAccountStore(file) {
       avatar: avatar || AVATARS[now % AVATARS.length],
       passHash: password ? await hashPassword(password) : null,
       wechatOpenid: wechatOpenid || null,
+      status: 'active',
       plan,
       creditsUsed: 0,
       planCreditsResetAt: nextResetAt(now),
-      // free 档不设到期；付费档给 30 天（沿用原注册即送 earth 的口径）
+      // 游客档不设到期；付费权益只能在真实支付完成后由服务端开通。
       planExpiresAt: plan === FREE_PLAN.key ? 0 : nextResetAt(now),
       createdAt: now,
       lastLoginAt: now,
@@ -206,6 +210,23 @@ export function createAccountStore(file) {
     u.lastLoginAt = Date.now()
     refresh(u)
     save()
+  }
+
+  function isActive(u) {
+    return Boolean(u) && (u.status || 'active') === 'active'
+  }
+
+  /** 仅管理端可调用的账号状态变更；超级尊者不可被此入口停用。 */
+  function setStatus(id, status, reason = '') {
+    const u = get(id)
+    if (!u) return { ok: false, msg: '用户不存在' }
+    if (isSuperAdmin(u)) return { ok: false, msg: '超级尊者状态不可通过后台修改' }
+    if (!['active', 'suspended'].includes(status)) return { ok: false, msg: '账号状态无效' }
+    u.status = status
+    u.statusReason = status === 'suspended' ? String(reason || '').trim().slice(0, 200) : ''
+    u.statusUpdatedAt = Date.now()
+    save()
+    return { ok: true, user: publicUser(u) }
   }
 
   function update(id, patch) {
@@ -241,8 +262,9 @@ export function createAccountStore(file) {
   function changePlan(id, newKey) {
     const u = get(id)
     if (!u) return { ok: false, msg: '用户不存在' }
+    if (isSuperAdmin(u)) return { ok: false, msg: '超级尊者权限不可通过会员切换修改' }
     // free 是过期落点，不是商品，不能通过购买接口切进去
-    if (newKey === FREE_PLAN.key) return { ok: false, msg: '档位不存在' }
+    if (newKey === FREE_PLAN.key || newKey === SUPER_PLAN.key) return { ok: false, msg: '档位不存在' }
     const plan = planByKey(newKey)
     if (!plan || plan.key !== newKey) return { ok: false, msg: '档位不存在' }
     const now = Date.now()
@@ -256,12 +278,41 @@ export function createAccountStore(file) {
     return { ok: true, user: publicUser(u), plan, renewed: samePlan }
   }
 
+  /**
+   * 后台订阅调整。与用户侧 changePlan 分开，允许管理员取消到 free，
+   * 但仍禁止通过 HTTP 修改超级尊者的维护权限。
+   */
+  function adminSetPlan(id, newKey) {
+    const u = get(id)
+    if (!u) return { ok: false, msg: '会员不存在' }
+    if (isSuperAdmin(u)) return { ok: false, msg: '超级尊者权限不可通过会员管理修改' }
+    const now = Date.now()
+    if (newKey === FREE_PLAN.key) {
+      u.plan = FREE_PLAN.key
+      u.creditsUsed = 0
+      u.planCreditsResetAt = now + MONTH_MS
+      u.planExpiresAt = 0
+      save()
+      return { ok: true, user: publicUser(u), plan: FREE_PLAN }
+    }
+    if (newKey === SUPER_PLAN.key) return { ok: false, msg: '超级尊者只能由受控维护入口授予' }
+    const plan = planByKey(newKey)
+    if (!plan || plan.key !== newKey) return { ok: false, msg: '档位不存在' }
+    u.plan = plan.key
+    u.creditsUsed = 0
+    u.planCreditsResetAt = nextResetAt(now)
+    u.planExpiresAt = nextResetAt(now)
+    save()
+    return { ok: true, user: publicUser(u), plan }
+  }
+
   /** 扣积分。额度与扣减都在服务端，客户端改不动。 */
   function consumeCredit(id, featureKey) {
     const cost = FEATURE_COSTS[featureKey]
     if (cost == null) return { ok: true, cost: 0 } // 未列入积分表 = 免费
     const u = get(id)
     if (!u) return { ok: false, reason: 'no_user' }
+    if (isSuperAdmin(u)) return { ok: true, user: publicUser(u), cost: 0, remaining: Infinity }
     const plan = planByKey(u.plan)
     const used = u.creditsUsed || 0
     const available = plan.credits - used
@@ -294,9 +345,25 @@ export function createAccountStore(file) {
     return true
   }
 
+  /**
+   * 受控维护入口：按登录账号名授予超级管理员角色。
+   * 不暴露为 HTTP 接口，避免任何前端请求自行提权。
+   */
+  function grantSuperAdminByAccount(account) {
+    const u = byAccount(account)
+    if (!u) return { ok: false, msg: '账号不存在' }
+    u.role = 'super_admin'
+    u.plan = SUPER_PLAN.key
+    u.creditsUsed = 0
+    u.planCreditsResetAt = 0
+    u.planExpiresAt = 0
+    save()
+    return { ok: true, user: publicUser(u) }
+  }
+
   return {
     get, byAccount, byOpenid, create, checkPassword, dummyPasswordCheck,
-    touchLogin, update, setPassword, changePlan, consumeCredit, refundCredit, remove,
+    touchLogin, isActive, setStatus, update, setPassword, changePlan, adminSetPlan, consumeCredit, refundCredit, remove, grantSuperAdminByAccount,
     publicUser, refresh,
     count: () => load().users.length,
     list: () => load().users.map(publicUser),

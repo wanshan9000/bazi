@@ -263,6 +263,30 @@ test('合法 chart 会拼出命盘行；时辰未知不伪装成 12 时', async 
   } finally { srv.close() }
 })
 
+test('聊天内排出命盘后，会话历史以命盘摘要命名', async () => {
+  const pool = {
+    isBusy: () => false,
+    async run({ onEvent }) {
+      onEvent({ type: 'tool_call', name: 'bazi', args: { year: 1975, month: 10, day: 13, hour: 6, gender: '男' } })
+      onEvent({ type: 'tool_result', name: 'bazi', ok: true, kind: 'data', text: '排盘成功' })
+      onEvent({ type: 'text', delta: '已排盘' })
+      return { finalText: '已排盘', usage: null, title: null }
+    },
+  }
+  const { app, store } = mkApp(pool)
+  const { srv, base } = await listen(app)
+  try {
+    await fetch(`${base}/api/agent/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...guest('bazi-title') },
+      body: JSON.stringify({ text: '1975年10月13日早上6点，男，帮我排盘' }),
+    })
+    const [session] = store.listSessions('anon:bazi-title')
+    assert.equal(session.chartKey, '1975-10-13-6-男')
+    assert.equal(session.title, '乾造 · 1975年10月13日 · 卯时')
+  } finally { srv.close() }
+})
+
 // 游客聊过之后登录，uid 从 anon:xxx 变成账号 id；不做过户的话之前的会话直接消失。
 test('登录后可认领游客会话，且只能认领匿名标识的', async () => {
   const { app, store, accounts } = mkApp(fakePool([]))

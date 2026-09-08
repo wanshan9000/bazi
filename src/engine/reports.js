@@ -223,9 +223,13 @@ function ziweiPalaceCard(p, opts = {}) {
 // 五行 → 星曜概览（原页面 meta-grid 四格）
 // 十二宫速览（紫微视角：主星 + 亮度 + 四化 + 宫位本义）
 function ziweiQuickPalaces(a, sanfang) {
-  return a.palaces.map(p => {
+  return a.palaces
+    .filter(p => p.majorStars.length || p.minorStars.length || p.adjectiveStars.length)
+    .map(p => {
     const meaning = ZW_PALACE_MEANING[p.name] || ''
     const lead = p.majorStars[0]
+    const supportingStars = [...p.minorStars, ...p.adjectiveStars]
+    const supportingText = supportingStars.map(s => s.name).join('、')
     const bright = lead && lead.brightness ? `（${lead.brightness}）` : ''
     const mu = p.majorStars.find(s => s.mutagen)
     const muTxt = mu ? `化${mutagenText(mu.mutagen)}` : ''
@@ -235,15 +239,15 @@ function ziweiQuickPalaces(a, sanfang) {
     if (lead) {
       summary = `${meaning}。主星${lead.name}${bright}入宫，${trait ? trait + '。' : ''}${zh ? `中州断：${zh}` : ''}${mu ? `本宫${muTxt}，主其${ZW_SIHUA[mu.mutagen]}。` : ''}`
     } else {
-      summary = `${meaning}。${mu ? `宫干${muTxt}，主其${ZW_SIHUA[mu.mutagen]}。` : ''}`
+      summary = `${meaning}。辅星${supportingText}入宫。`
     }
     return {
       name: p.name,
       tag: sanfang && sanfang.includes(p.name) ? '三方' : (p.name === '命宫' ? '命' : `${p.heavenlyStem}${p.earthlyBranch}`),
-      sub: lead ? `${lead.name}${bright}${mu ? ' · ' + muTxt : ''}` : '',
+      sub: lead ? `${lead.name}${bright}${mu ? ' · ' + muTxt : ''}` : supportingText,
       desc: summary,
     }
-  })
+    })
 }
 
 // 星曜概览（真实盘面数据：命宫主星、身宫、格局、四化、吉凶星）
@@ -535,8 +539,8 @@ export function buildZiweiReport(chart, targetDate) {
         note: (() => {
           const key = sanfangNames.length ? sanfangNames.join('、') : '命宫、财帛、官禄、迁移'
           return {
-            term: `速览平铺十二宫；「三方」即命宫三方四正（${key}），此四宫联动定命局高低。`,
-            plain: `快速扫一眼全盘：标「三方」的四个宫（${key}）是你人生的"主战场"——命宫看性格、财帛看求财、官禄看事业、迁移看际遇，四宫连着看才是你的主线；其余八宫是支线，作辅助参考。`,
+            term: `速览仅列本命有星曜落入的宫；「三方」即命宫三方四正（${key}），此四宫联动定命局高低。`,
+            plain: `快速看本命中有星曜坐守的宫位：标「三方」的宫位（${key}）是你人生的"主战场"——命宫看性格、财帛看求财、官禄看事业、迁移看际遇，四宫连着看才是你的主线。`,
           }
         })(),
       },

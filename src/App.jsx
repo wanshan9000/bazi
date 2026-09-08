@@ -1,25 +1,5 @@
-import { useEffect, useState } from 'react'
+import { lazy, startTransition, Suspense, useEffect, useState } from 'react'
 import Landing from './components/Landing.jsx'
-import BaziPage from './components/BaziPage.jsx'
-import ZiweiPage from './components/ZiweiPage.jsx'
-import ChengguPage from './components/ChengguPage.jsx'
-import NamePage from './components/NamePage.jsx'
-import HoroscopePage from './components/HoroscopePage.jsx'
-import QimenPage from './components/QimenPage.jsx'
-import FengshuiPage from './components/FengshuiPage.jsx'
-import ArticlesPage from './components/ArticlesPage.jsx'
-import ArticleView from './components/ArticleView.jsx'
-import TarotPage from './components/TarotPage.jsx'
-import TarotReading from './components/TarotReading.jsx'
-import AdminPage from './components/AdminPage.jsx'
-import AgentChat from './components/AgentChat.jsx'
-import AgentChatDsh from './components/AgentChatDsh.jsx'
-import SubscribePage from './components/SubscribePage.jsx'
-import LoginPage from './components/LoginPage.jsx'
-import RegisterPage from './components/RegisterPage.jsx'
-import ProfilePage from './components/ProfilePage.jsx'
-import ReportView from './components/ReportView.jsx'
-import MembershipModal from './components/MembershipModal.jsx'
 import { buildChart } from './engine/bazi.js'
 import { loadHistory as loadTarot } from './data/tarot.js'
 import { getSession, logout as doLogout, refreshSession, consumeCredit } from './data/users.js'
@@ -28,20 +8,46 @@ import { loadQuota, incTarot, isTarotOverLimit } from './engine/freeQuota.js'
 import { getMonthlyCredits } from './engine/membership.js'
 import { createAgentApi } from './api/agent.js'
 
-// VITE_AGENT_BACKEND=legacy 时走旧浏览器内编排；默认 dsh 基座
-const AgentChatImpl = import.meta.env.VITE_AGENT_BACKEND === 'legacy' ? AgentChat : AgentChatDsh
+// 首屏只需要首页和应用壳；具体阅读、排盘与管理页进入后才下载。
+const BaziPage = lazy(() => import('./components/BaziPage.jsx'))
+const ZiweiPage = lazy(() => import('./components/ZiweiPage.jsx'))
+const ChengguPage = lazy(() => import('./components/ChengguPage.jsx'))
+const NamePage = lazy(() => import('./components/NamePage.jsx'))
+const HoroscopePage = lazy(() => import('./components/HoroscopePage.jsx'))
+const QimenPage = lazy(() => import('./components/QimenPage.jsx'))
+const FengshuiPage = lazy(() => import('./components/FengshuiPage.jsx'))
+const ArticlesPage = lazy(() => import('./components/ArticlesPage.jsx'))
+const ArticleView = lazy(() => import('./components/ArticleView.jsx'))
+const TarotPage = lazy(() => import('./components/TarotPage.jsx'))
+const TarotReading = lazy(() => import('./components/TarotReading.jsx'))
+const AdminPage = lazy(() => import('./components/AdminPage.jsx'))
+const SubscribePage = lazy(() => import('./components/SubscribePage.jsx'))
+const LoginPage = lazy(() => import('./components/LoginPage.jsx'))
+const RegisterPage = lazy(() => import('./components/RegisterPage.jsx'))
+const ProfilePage = lazy(() => import('./components/ProfilePage.jsx'))
+const ReportView = lazy(() => import('./components/ReportView.jsx'))
+const MembershipModal = lazy(() => import('./components/MembershipModal.jsx'))
+
+// VITE_AGENT_BACKEND=legacy 时走旧浏览器内编排；默认 dsh 基座。
+const AgentChatImpl = import.meta.env.VITE_AGENT_BACKEND === 'legacy'
+  ? lazy(() => import('./components/AgentChat.jsx'))
+  : lazy(() => import('./components/AgentChatDsh.jsx'))
 
 const LS_KEY = 'sanmen-history'
 
 const NAV = [
   { key: 'home', glyph: '🏠', label: '首页', en: 'Home' },
-  { key: 'agent', glyph: '✨', label: '元气AI', en: 'AI Agent' },
+  { key: 'agent', glyph: '✨', label: '元氣AI', en: 'AI Agent' },
   { key: 'bazi', glyph: '🌿', label: '八字', en: 'Bazi' },
   { key: 'huangli', glyph: '🍀', label: '黄历', en: 'Almanac' },
   { key: 'ziwei', glyph: '⭐', label: '紫微', en: 'Zǐwēi' },
   { key: 'tarot', glyph: '🃏', label: '塔罗', en: 'Tarot' },
   { key: 'wenku', glyph: '📚', label: '文库', en: 'Library' }
 ]
+
+function RouteFallback() {
+  return <div className="route-loading" role="status" aria-label="页面载入中"><span /></div>
+}
 
 function TopBar({ view, onNav, user, onUser, credits }) {
   return (
@@ -70,10 +76,11 @@ function TopBar({ view, onNav, user, onUser, credits }) {
           </div>
         </div>
         <nav className="topnav">
-          {NAV.map(n => (
+          {NAV.filter(n => n.key !== 'home').map(n => (
             <button
               key={n.key}
               className={`topnav-link ${view === n.key || (n.key === 'wenku' && view === 'article') || (n.key === 'tarot' && view === 'tarot-reading') ? 'active' : ''}`}
+              data-nav-key={n.key}
               onClick={() => onNav(n.key)}
             >
               <span className="tl">{n.label}</span>
@@ -85,10 +92,9 @@ function TopBar({ view, onNav, user, onUser, credits }) {
             <>
               <button className="credits-chip" onClick={() => onUser('profile')} title="点击查看积分明细">
                 <span className="cc-icon" aria-hidden="true">✦</span>
-                <span className="cc-num">{credits}</span>
-                <span className="cc-lbl">积分</span>
+                <span className="cc-num">{credits === Infinity ? '∞' : credits}</span>
               </button>
-              <button className="user-chip" onClick={() => onUser('profile')} title="我的元气">
+              <button className="user-chip" onClick={() => onUser('profile')} title="我的元氣">
                 <span className="user-chip-avatar">{user.avatar}</span>
                 <span className="user-chip-name">{user.nickname}</span>
               </button>
@@ -110,10 +116,25 @@ function BottomNav({ view, onNav }) {
       {NAV.map(n => (
         <button
           key={n.key}
-          className={`bn-link ${view === n.key || (n.key === 'wenku' && view === 'article') || (n.key === 'tarot' && view === 'tarot-reading') ? 'active' : ''}`}
+          className={`bn-link${n.key === 'home' ? ' bn-link-home' : ''} ${view === n.key || (n.key === 'wenku' && view === 'article') || (n.key === 'tarot' && view === 'tarot-reading') ? 'active' : ''}`}
           onClick={() => onNav(n.key)}
+          aria-label={n.label}
+          title={n.label}
         >
-          <span className="bl">{n.label}</span>
+          {n.key === 'home' ? (
+            <span className="bn-home-logo" aria-hidden="true">
+              <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="9.2" cy="9.5" r="4.2" />
+                <circle cx="22.8" cy="9.5" r="4.2" />
+                <circle cx="16" cy="14.2" r="7.4" />
+                <ellipse cx="16" cy="23.8" rx="8" ry="6.2" />
+                <ellipse cx="8.2" cy="23" rx="2.8" ry="5.2" />
+                <ellipse cx="23.8" cy="23" rx="2.8" ry="5.2" />
+                <ellipse cx="12.4" cy="28.6" rx="2.6" ry="2" />
+                <ellipse cx="19.6" cy="28.6" rx="2.6" ry="2" />
+              </svg>
+            </span>
+          ) : <span className="bl">{n.label}</span>}
         </button>
       ))}
     </nav>
@@ -255,40 +276,48 @@ export default function App() {
   }, [])
 
   const goNav = (v, payload) => {
-    if (v === 'wenku') {
-      setView('wenku')
-      setArticleId(null)
-    } else {
-      setView(v)
-      if (v !== 'tarot-reading') setSpreadId(null)
-    }
+    // 懒加载页面时保留当前界面，弱网下不会因一次点击突然退回到空白载入态。
+    startTransition(() => {
+      if (v === 'wenku') {
+        setView('wenku')
+        setArticleId(null)
+      } else {
+        setView(v)
+        if (v !== 'tarot-reading') setSpreadId(null)
+      }
+      if (payload && typeof payload === 'object' && payload.seedQuery) {
+        setAgentSeed(payload.seedQuery)
+      } else if (v !== 'agent') {
+        setAgentSeed(null)
+      }
+    })
     // 同步 URL hash（#/view），支持直达与刷新恢复；分享/文章等有独立子状态的不写
     if (HASH_VIEWS.includes(v) && v !== 'share') {
       try { window.history.replaceState(null, '', `#/${v}`) } catch { /* ignore */ }
-    }
-    if (payload && typeof payload === 'object' && payload.seedQuery) {
-      setAgentSeed(payload.seedQuery)
-    } else if (v !== 'agent') {
-      setAgentSeed(null)
     }
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const openAgentWith = (q) => {
-    setAgentSeed(q)
-    setView('agent')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    // 首页智能体入口始终开启一段无命盘上下文的新会话。否则用户此前排过八字后，
+    // App 里残留的 chart 会被带入元氣 AI，造成未提供生辰却被默认按八字解读。
+    setChart(null)
+    goNav('agent', { seedQuery: q })
   }
 
   const openArticle = (id) => {
-    setArticleId(id)
-    setView('article')
+    startTransition(() => {
+      setArticleId(id)
+      setView('article')
+    })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const startTarot = (id) => {
-    setSpreadId(id)
-    setView('tarot-reading')
+    startTransition(() => {
+      setSpreadId(id)
+      setView('tarot-reading')
+    })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -330,8 +359,10 @@ export default function App() {
 
   // 排盘查看结果需登录：记录待返回视图并跳注册/登录
   const requireLogin = (backView) => {
-    setPendingView(backView || 'bazi')
-    setView('register')
+    startTransition(() => {
+      setPendingView(backView || 'bazi')
+      setView('register')
+    })
     try { window.history.replaceState(null, '', `#/register`) } catch { /* ignore */ }
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -386,6 +417,7 @@ export default function App() {
         credits={user ? getMonthlyCredits(user) : 0}
       />
       <main className="app-main">
+        <Suspense fallback={<RouteFallback />}>
         {view === 'home' && (
           <Landing
             onGate={goNav}
@@ -544,19 +576,24 @@ export default function App() {
             }}
           />
         )}
+        </Suspense>
       </main>
       <BottomNav view={view} onNav={goNav} />
       <TailBand onNav={goNav} hideOnMobile={view === 'share'} />
 
       {/* 全局订阅 Modal（会员方案 · 三重境界） */}
-      <MembershipModal
-        open={!!subscribeModal}
-        planKey={subscribeModal}
-        user={user}
-        onClose={() => setSubscribeModal(null)}
-        onSuccess={handleSubscribeSuccess}
-        onRequireLogin={() => requireLogin('subscribe')}
-      />
+      {subscribeModal && (
+        <Suspense fallback={null}>
+          <MembershipModal
+            open
+            planKey={subscribeModal}
+            user={user}
+            onClose={() => setSubscribeModal(null)}
+            onSuccess={handleSubscribeSuccess}
+            onRequireLogin={() => requireLogin('subscribe')}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
@@ -571,7 +608,7 @@ function loadHistory() {
 }
 
 // onUpgrade 由调用处传入（App 里绑的是 openSubscribe），此前没解构也没往下传，
-// 于是元气 AI 里积分不足的分支永远拿不到回调，用户点了没有任何反应。
+// 于是元氣 AI 里积分不足的分支永远拿不到回调，用户点了没有任何反应。
 function AgentPage({ chart, onBack, seedQuery, user, onRequireLogin, onUpgrade, onUserChange }) {
   return (
     <section className="agent-page page-shell">
@@ -582,8 +619,8 @@ function AgentPage({ chart, onBack, seedQuery, user, onRequireLogin, onUpgrade, 
         <span>返回</span>
       </button>
       <h1 className="page-title">
-        元气<span className="zhushi">AI</span>
-        <span className="page-subtitle">问司命 · 八字 · 紫微，两门通晓</span>
+        元氣<span className="zhushi">AI</span>
+        <span className="page-subtitle">问三门 · 八字 · 紫微，两门通晓</span>
       </h1>
       <div className="agent-page-card">
         <AgentChatImpl key={seedQuery || 'fresh'} chart={chart} seedQuery={seedQuery} user={user} onRequireLogin={onRequireLogin} onUpgrade={onUpgrade} onUserChange={onUserChange} />
@@ -629,7 +666,7 @@ function TailBand({ onNav, hideOnMobile }) {
               <li><a onClick={() => onNav('bazi')}>八字排盘</a></li>
               <li><a onClick={() => onNav('ziwei')}>紫微斗数</a></li>
               <li><a onClick={() => onNav('tarot')}>塔罗指引</a></li>
-              <li><a onClick={() => onNav('agent')}>元气 AI</a></li>
+              <li><a onClick={() => onNav('agent')}>元氣 AI</a></li>
             </ul>
           </div>
           <div className="tail-col">
@@ -637,7 +674,7 @@ function TailBand({ onNav, hideOnMobile }) {
             <ul>
               <li><a onClick={() => onNav('wenku')}>文库精选</a></li>
               <li><a onClick={() => onNav('huangli')}>订阅黄历</a></li>
-              <li><a onClick={() => onNav('profile')}>我的元气</a></li>
+              <li><a onClick={() => onNav('profile')}>我的元氣</a></li>
             </ul>
           </div>
           <div className="tail-col">

@@ -10,6 +10,7 @@ import { sharedAccounts } from '../accounts.js'
 import { sharedGuestQuota } from '../guestQuota.js'
 import { TOOL_NAME_CN } from '../dsh/events.js'
 import { identify } from './auth.js'
+import { config } from '../config.js'
 
 const MAX_TEXT = 2000
 const RATE_LIMIT = 20 // 次/分钟/uid+IP
@@ -58,11 +59,56 @@ function chartLine(chart) {
   return `【当前缘主命盘】${chart.year}年${chart.month}月${chart.day}日 ${hour} ${chart.gender}（公历）`
 }
 
+function chartSessionTitle(chart) {
+  if (!chart) return null
+  const shiChen = chart.hour === null || chart.hour === undefined
+    ? '时辰未知'
+    : `${['子', '丑', '丑', '寅', '寅', '卯', '卯', '辰', '辰', '巳', '巳', '午', '午', '未', '未', '申', '申', '酉', '酉', '戌', '戌', '亥', '亥', '子'][chart.hour]}时`
+  return `${chart.gender === '女' ? '坤造' : '乾造'} · ${chart.year}年${chart.month}月${chart.day}日 · ${shiChen}`
+}
+
+function inferStoredChart(messages) {
+  // 仅迁移同时出现「八字排盘」工具记录与完整出生信息的旧会话，避免把普通聊天里的
+  // 日期、性别误当成命盘。新会话由工具参数直接落库，不会走这里。
+  if (!messages.some(m => m.role === 'tool' && String(m.text).includes('八字排盘'))) return null
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const text = String(messages[i].text || '')
+    if (messages[i].role !== 'user') continue
+    const birth = text.match(/(19\d{2}|20\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*(?:日|号)/)
+    const gender = text.match(/(?:性别\s*[:：]?\s*)?(男|女)(?:性|士|生)?/)
+    if (!birth || !gender) continue
+    const hour = text.match(/(?:凌晨|早上|上午|中午|下午|晚上|傍晚)?\s*(\d{1,2})(?:(?:\s*[:：]\s*\d{1,2})(?:\s*分)?|\s*(?:点|时))/)
+    return normalizeChart({ year: birth[1], month: birth[2], day: birth[3], hour: hour ? hour[1] : null, gender: gender[1] })
+  }
+  return null
+}
+
 function timeNow() { return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
 
 export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), accounts = sharedAccounts(), guestQuota = sharedGuestQuota() } = {}) {
   const r = Router()
   const hits = new Map() // `${uid}|${ip}` → { count, resetAt }
+  const runningByUser = new Map()
+  const runningByIp = new Map()
+
+  function acquireRun(uid, ip) {
+    const userCount = runningByUser.get(uid) || 0
+    const ipCount = runningByIp.get(ip) || 0
+    if (userCount >= config.security.agentInFlightPerUser || ipCount >= config.security.agentInFlightPerIp) return false
+    runningByUser.set(uid, userCount + 1)
+    runningByIp.set(ip, ipCount + 1)
+    return true
+  }
+
+  function releaseRun(uid, ip) {
+    const release = (map, key) => {
+      const count = map.get(key) || 0
+      if (count <= 1) map.delete(key)
+      else map.set(key, count - 1)
+    }
+    release(runningByUser, uid)
+    release(runningByIp, ip)
+  }
 
   function bump(key, limit, now) {
     const h = hits.get(key)
@@ -93,6 +139,7 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
       // token 有效但账号已注销：不能让一张还没过期的 token 继续在无主 uid 下写数据。
       const acct = accounts.get(id.uid)
       if (!acct) return res.status(401).json({ ok: false, msg: '登录已失效，请重新登录' })
+      if (!accounts.isActive(acct)) return res.status(403).json({ ok: false, msg: '该账号已被限制，请联系管理员' })
       req.account = acct
     }
     if (rateLimited(id.uid, req.ip, id.authed)) return res.status(429).json({ ok: false, msg: '请求太频繁，请稍后再试' })
@@ -106,7 +153,14 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
   })
 
   r.get('/agent/sessions', (req, res) => {
-    res.json({ ok: true, sessions: store.listSessions(req.uid) })
+    const sessions = store.listSessions(req.uid).map(session => {
+      if (session.chartKey) return session
+      const inferred = inferStoredChart(store.listMessages(req.uid, session.id))
+      return inferred
+        ? store.updateSession(req.uid, session.id, { chartKey: chartKeyOf(inferred), title: chartSessionTitle(inferred) })
+        : session
+    })
+    res.json({ ok: true, sessions })
   })
 
   r.get('/agent/sessions/:id/messages', (req, res) => {
@@ -146,6 +200,12 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
       session = store.createSession(req.uid, { route: routeKey, title: q.slice(0, 14) })
     }
     if (pool.isBusy(session.id)) return res.status(409).json({ ok: false, msg: '正在回复中，请稍候' })
+
+    // 同一用户可以开多个会话，但不能借此并发占满模型池。这里在扣积分前挡住，
+    // 被拒绝的请求不会扣额度；finally 必须释放，避免任何异常把用户永久锁住。
+    if (!acquireRun(req.uid, req.ip)) {
+      return res.status(429).json({ ok: false, msg: '当前对话请求过多，请等待上一轮回复完成' })
+    }
 
     // 额度在服务端把关。两条路：
     //   · 已登录 → 按账号扣积分（以前是前端改 localStorage，改回去就能白嫖）。
@@ -208,6 +268,10 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
     // writableFinished 为 true 说明是我们自己 res.end() 收尾的，不是真实断开。
     res.on('close', () => { if (!res.writableFinished) ac.abort() })
     const tools = []
+    // 用户也可直接在对话中报出生信息，由 bazi 工具排盘。这种会话没有前端传入的
+    // chart，因此需要从成功的工具调用中补齐会话命盘，历史标题才不会仍是提问摘要。
+    let baziToolChart = null
+    let inferredChart = null
     let sawError = false
     try {
       // session 帧与用户消息落库都放进 try：appendMessage 抛错时（磁盘满、
@@ -218,9 +282,13 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
         routeKey: session.route, sessionId: session.id, text: prompt, signal: ac.signal,
         onEvent: e => {
           if (e.type === 'text' && e.delta) { streamed += e.delta; producedOutput = true }
-          if (e.type === 'tool_call') tools.push(TOOL_NAME_CN[e.name] || e.name)
+          if (e.type === 'tool_call') {
+            tools.push(TOOL_NAME_CN[e.name] || e.name)
+            if (e.name === 'bazi') baziToolChart = normalizeChart(e.args)
+          }
           // e.ok === false 表示工具执行失败，e.text 是错误信息而不是报告正文。
           // 此前不看 ok，把「排盘失败：出生信息无效」也当成一张测算报告卡片持久化。
+          if (e.type === 'tool_result' && e.name === 'bazi' && e.ok !== false && baziToolChart) inferredChart = baziToolChart
           if (e.type === 'tool_result' && e.kind === 'report' && e.ok !== false) { producedOutput = true; store.appendMessage(req.uid, session.id, { role: 'ai', kind: 'report', name: e.name, text: e.text, time: timeNow() }) }
           if (e.type === 'title' && session.title.length <= 14) store.updateSession(req.uid, session.id, { title: e.title })
           if (e.type === 'error') sawError = true
@@ -234,7 +302,10 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
       if (result.usage && result.usage.totalTokens) usedTokens = result.usage.totalTokens
       if (finalText) store.appendMessage(req.uid, session.id, { role: 'ai', text: finalText, time: timeNow() })
       streamed = ''
-      if (chartChanged) store.updateSession(req.uid, session.id, { chartKey: ck })
+      // 命盘是这段会话最稳定、最容易辨认的身份。排盘成功后用其覆盖提问摘要，
+      // 让历史列表直接显示「乾造/坤造 · 出生日期 · 时辰」。
+      const sessionChart = inferredChart || (chartChanged ? safeChart : null)
+      if (sessionChart) store.updateSession(req.uid, session.id, { chartKey: chartKeyOf(sessionChart), title: chartSessionTitle(sessionChart) })
       if (!sawError) send({ type: 'done', reason: 'completed', usage: result.usage || undefined })
     } catch (err) {
       // 断开/失败时也要把已经流出去的正文写进镜像，否则用户回到会话只剩自己的提问。
@@ -256,6 +327,7 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
       if (!KNOWN[code]) console.error('[agent/chat]', code, err)
       send({ type: 'error', code, message })
     } finally {
+      releaseRun(req.uid, req.ip)
       clearInterval(beat)
       // 扣了积分却一个字都没产出（模型立刻报错、路由不存在等）→ 退还。
       // 只看「有没有正文」，不看是否 abort：用户主动停止时前面已经生成了内容，

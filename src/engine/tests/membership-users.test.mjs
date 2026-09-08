@@ -27,7 +27,7 @@ function installStorage(name) {
 const ls = installStorage('localStorage')
 installStorage('sessionStorage')
 
-const { getMonthlyCredits, getMonthlyProgress, planByKey, FREE_PLAN, isPlanExpired, canAfford } = await import('../membership.js')
+const { getMonthlyCredits, getMonthlyProgress, planByKey, FREE_PLAN, SUPER_PLAN, isPlanExpired, canAfford } = await import('../membership.js')
 const { localKey } = await import('../userScope.js')
 const { remapScopedKeys } = await import('../../data/legacyMigrate.js')
 const { setAuth, clearAuth } = await import('../../api/auth.js')
@@ -58,6 +58,14 @@ test('额度换算：未过期按本档，已过期按 free 档', () => {
 test('free 档本身不会过期', () => {
   assert.equal(isPlanExpired({ plan: 'free', planExpiresAt: 1 }), false)
   assert.equal(isPlanExpired(null), false)
+})
+
+test('超级尊者拥有无限额度且不会因会员有效期到期降级', () => {
+  const superAdmin = { role: 'super_admin', plan: SUPER_PLAN.key, planExpiresAt: 1, creditsUsed: 9999 }
+  assert.equal(isPlanExpired(superAdmin), false)
+  assert.equal(getMonthlyCredits(superAdmin), Infinity)
+  assert.equal(getMonthlyProgress(superAdmin), 0)
+  assert.equal(canAfford(superAdmin, 'agent.chat'), true)
 })
 
 test('planByKey 认识 free，但它不在可购买的 PLANS 里', async () => {
@@ -124,11 +132,12 @@ test('迁移：不覆盖新账号已有的数据', () => {
 // 「积分不足 → 去升级」的引导档位。此前各页面各写一遍
 // `plan === 'earth' ? 'heaven' : 'oracle'`，free 档不等于 earth，
 // 于是刚过期的账号会被直接推到最贵的天机境。
-test('nextPlanKey：free / earth 推玄境，玄境推天机境，天机境到顶', async () => {
+test('nextPlanKey：free / earth 推玄者，玄者推天者，天者与超级尊者到顶', async () => {
   const { nextPlanKey } = await import('../membership.js')
   assert.equal(nextPlanKey('free'), 'heaven')
   assert.equal(nextPlanKey('earth'), 'heaven')
   assert.equal(nextPlanKey('heaven'), 'oracle')
   assert.equal(nextPlanKey('oracle'), null)
+  assert.equal(nextPlanKey('supreme'), null)
   assert.equal(nextPlanKey(undefined), 'heaven', '档位缺失时按最低档处理，不该推最贵的')
 })

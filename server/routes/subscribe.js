@@ -11,8 +11,12 @@ import { sendVerifySms } from '../sms.js'
 import { qrAuthUrl, exchangeCode, mockOpenid } from '../wechat.js'
 import { chartFromSubscriber, buildPushContent } from '../huangli.js'
 import { requireAdmin } from '../adminAuth.js'
+import { createWindowLimiter } from '../rateLimit.js'
 
 const router = Router()
+const smsIpLimiter = createWindowLimiter({ windowMs: 60 * 60 * 1000, max: config.security.smsIpPerHour })
+const smsVerifyIpLimiter = createWindowLimiter({ windowMs: 60 * 60 * 1000, max: config.security.smsVerifyIpPerHour })
+const subscriptionIpLimiter = createWindowLimiter({ windowMs: 60 * 60 * 1000, max: config.security.subscriptionIpPerHour })
 // ⚠ 验证码不能用 Math.random：它不是密码学安全的，输出可预测。
 // 短信验证码是账号绑定的唯一凭据，必须走 CSPRNG。
 const genCode = () => String(crypto.randomInt(100000, 1000000))
@@ -41,8 +45,35 @@ function mockDisabled(res) {
 // 生成订阅号唯一 token（用于取消订阅、查状态）
 function freshToken() { return genToken() }
 
+function take(limiter, key, res, message) {
+  const attempt = limiter.take(key)
+  if (attempt.ok) return true
+  res.setHeader('Retry-After', Math.max(1, Math.ceil((attempt.resetAt - Date.now()) / 1000)))
+  res.status(429).json({ ok: false, msg: message })
+  return false
+}
+
+function normalizeSubscription({ birth, time, favZodiac }) {
+  let birthNorm = null
+  if (birth && birth.year && birth.month && birth.day) {
+    const year = Number(birth.year); const month = Number(birth.month); const day = Number(birth.day); const hour = Number(birth.hour ?? 12)
+    if (!Number.isInteger(year) || year < 1900 || year > 2100 || !Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(day) || day < 1 || day > 31 || !Number.isInteger(hour) || hour < 0 || hour > 23) return null
+    birthNorm = { year, month, day, hour, gender: birth.gender === 'f' ? 'f' : 'm' }
+  }
+  const safeTime = ['morning', 'noon', 'evening'].includes(time) ? time : 'morning'
+  const safeZodiac = Array.isArray(favZodiac)
+    ? [...new Set(favZodiac.map(item => String(item)).filter(item => item.length > 0 && item.length <= 8))].slice(0, 12)
+    : []
+  return { birth: birthNorm, time: safeTime, favZodiac: safeZodiac }
+}
+
 // ---- 1. 发送短信验证码 ----
 router.post('/sms/send-code', async (req, res) => {
+  const source = smsIpLimiter.take(req.ip || 'unknown')
+  if (!source.ok) {
+    res.setHeader('Retry-After', Math.max(1, Math.ceil((source.resetAt - Date.now()) / 1000)))
+    return res.status(429).json({ ok: false, msg: '该网络请求验证码过于频繁，请稍后再试' })
+  }
   const phone = String(req.body.phone || '').trim()
   if (!/^1\d{10}$/.test(phone)) return res.status(400).json({ ok: false, msg: '手机号格式不正确' })
 
@@ -69,6 +100,8 @@ router.post('/sms/send-code', async (req, res) => {
 // ---- 2. 短信验证码订阅（首次创建） ----
 router.post('/sms/subscribe', async (req, res) => {
   const { phone, code, birth, time, favZodiac = [] } = req.body
+  if (!take(subscriptionIpLimiter, `subscribe:${req.ip}`, res, '该网络订阅操作过于频繁，请稍后再试')) return
+  if (!take(smsVerifyIpLimiter, `verify:${req.ip}`, res, '验证码校验过于频繁，请稍后再试')) return
   if (!/^1\d{10}$/.test(phone)) return res.status(400).json({ ok: false, msg: '手机号格式不正确' })
   if (!code) return res.status(400).json({ ok: false, msg: '请输入验证码' })
 
@@ -82,20 +115,15 @@ router.post('/sms/subscribe', async (req, res) => {
   }
 
   // 记录八字信息（可选）
-  let birthNorm = null
-  if (birth && birth.year && birth.month && birth.day) {
-    birthNorm = {
-      year: Number(birth.year), month: Number(birth.month), day: Number(birth.day),
-      hour: Number(birth.hour ?? 12), gender: birth.gender ?? 'm',
-    }
-  }
+  const normalized = normalizeSubscription({ birth, time, favZodiac })
+  if (!normalized) return res.status(400).json({ ok: false, msg: '出生信息格式不正确' })
 
   const sub = upsertSubscriber({
     channel: 'sms',
     phone,
-    birth: birthNorm,
-    time: time || 'morning',
-    favZodiac,
+    birth: normalized.birth,
+    time: normalized.time,
+    favZodiac: normalized.favZodiac,
     enabled: true,
     token: freshToken(),
   })
@@ -209,6 +237,7 @@ router.get('/status', (req, res) => {
 // 无法查看、修改或退订自己的订阅，只能一直收推送。这条接口用同一套验证码流程
 // 重新验明身份后把令牌交还给本人。
 router.post('/sms/recover', (req, res) => {
+  if (!take(smsVerifyIpLimiter, `verify:${req.ip}`, res, '验证码校验过于频繁，请稍后再试')) return
   const phone = String(req.body?.phone || '').trim()
   const code = req.body?.code
   if (!/^1\d{10}$/.test(phone)) return res.status(400).json({ ok: false, msg: '手机号格式不正确' })
@@ -234,8 +263,14 @@ router.post('/update', (req, res) => {
   const sub = findByToken(token)
   if (!sub) return res.status(404).json({ ok: false, msg: '未找到订阅' })
   const patch = {}
-  if (time) patch.time = time
-  if (Array.isArray(favZodiac)) patch.favZodiac = favZodiac
+  if (time) {
+    if (!['morning', 'noon', 'evening'].includes(time)) return res.status(400).json({ ok: false, msg: '推送时段不正确' })
+    patch.time = time
+  }
+  if (favZodiac !== undefined) {
+    if (!Array.isArray(favZodiac)) return res.status(400).json({ ok: false, msg: '关注生肖格式不正确' })
+    patch.favZodiac = [...new Set(favZodiac.map(item => String(item)).filter(item => item.length > 0 && item.length <= 8))].slice(0, 12)
+  }
   if (typeof enabled === 'boolean') patch.enabled = enabled
   updateSubscriber(s => s.token === token, patch)
   res.json({ ok: true, msg: '已更新' })

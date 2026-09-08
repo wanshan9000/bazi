@@ -41,7 +41,7 @@ export default function NamePage({ chart, onBack, onChart }) {
     <div className="page-wrap">
       <div className="container">
         <div className="page-head rise">
-          <button className="back-btn" onClick={onBack}>← 返回首页</button>
+          <button className="back-btn" onClick={onBack}>‹ 返回</button>
         </div>
         <h1 className="page-title rise rise-1">姓名测算 ✒︎</h1>
         <p className="page-sub rise rise-2">五格剖象 · 三才配置 · 八字喜忌</p>

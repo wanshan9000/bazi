@@ -29,7 +29,7 @@ const WX_LABEL = { 木: '木 · 仁', 火: '火 · 礼', 土: '土 · 信', 金:
 
 export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin, onUpgrade, onUserChange }) {
   const [editing, setEditing] = useState(!chart)
-  const [tab, setTab] = useState('ziping')
+  const [tab, setTab] = useState('mangpai')
   // 命书扣减状态：paid=true 表示本次会话已成功扣分；reason=null 表示无错误；
   // reason='insufficient' 表示积分不足（展示升级卡）
   const [paid, setPaid] = useState(false)
@@ -59,15 +59,23 @@ export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin,
   }, [chart, user, onUserChange])
 
   return (
-    <div className="page-wrap">
+    <div className="page-wrap bazi-page">
       <div className="container">
         <div className="page-head rise">
-          <button className="back-btn" onClick={onBack}>← 返回首页</button>
-          {chart && !editing && (
-            <button className="change-chart-btn" onClick={() => { setEditing(true); setTab('ziping'); window.scrollTo(0, 0) }}>更换生辰</button>
-          )}
+          <button className="back-btn" onClick={onBack}>‹ 返回</button>
         </div>
-        <h1 className="page-title rise rise-1">八字门 🌿</h1>
+        <h1 className="page-title bazi-page-title rise rise-1">
+          <span>八字门</span>
+          {chart && !editing && (
+            <button className="title-chart-change" onClick={() => { setEditing(true); setTab('mangpai'); window.scrollTo(0, 0) }} title="更换生辰" aria-label="更换生辰">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7" />
+                <path d="M3 3v5h5" />
+              </svg>
+              <span>更换生辰</span>
+            </button>
+          )}
+        </h1>
         <p className="page-sub rise rise-2">排四柱 · 看五行 · 找到你的出厂设置</p>
 
         {editing || !chart ? (
@@ -76,7 +84,7 @@ export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin,
               onChart(data)
               // 游客可直接排盘：盘面/五行等基础分析免费展示；完整命书按下方登录态 + 积分扣减
               setEditing(false)
-              setTab('ziping')
+              setTab('mangpai')
               window.scrollTo(0, 0)
             }}
           />
@@ -153,7 +161,7 @@ function BirthFormComp({ onDone }) {
   }
 
   return (
-    <div className="card rise rise-3">
+    <div className="card rise rise-3 bazi-entry-form">
       <div className="form-head">✦ 获取出厂说明书 ✦</div>
       <p className="form-sub">输入生辰 · 排出你的四柱八字与五行命局</p>
 
@@ -281,35 +289,16 @@ function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, o
 
   return (
     <div className="rise bz-unified">
-      <div className="bz-head">
-        <div className="bz-tabs">
-          <button className={`bz-tab ${tab === 'ziping' ? 'active' : ''}`} onClick={() => setTab('ziping')}>
-            <span className="bz-tab-icon" aria-hidden>📜</span>
-            <span className="bz-tab-text">
-              <span className="bz-tab-title">子平派报告</span>
-              <span className="bz-tab-sub">正统 · 清源 · 法理</span>
-            </span>
-          </button>
-          <button className={`bz-tab ${tab === 'mangpai' ? 'active' : ''}`} onClick={() => setTab('mangpai')}>
-            <span className="bz-tab-icon" aria-hidden>⚡</span>
-            <span className="bz-tab-text">
-              <span className="bz-tab-title">盲派报告</span>
-              <span className="bz-tab-sub">口诀 · 捷径 · 实战</span>
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* 命盘主体（不含锦缎头） */}
+      {/* 命盘主体 */}
       <div className="rise">
-        <ChartBoard chart={chart} school={school} actionsEl={actionsEl} />
+        <ChartBoard chart={chart} school={school} onSchoolChange={setTab} actionsEl={actionsEl} />
       </div>
 
       {/* 报告正文（不含头部与 actions，由 ref 暴露导出/复制能力）
           · 未登录 → 引导注册
           · 已登录 + 积分够 → 解锁完整命书
           · 已登录 + 积分不足 → 升级提示 */}
-      <div className="rise">
+      <div className="rise bz-report-body">
         {!user ? (
           <ReportLock
             user={user}
@@ -336,7 +325,7 @@ function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, o
 }
 
 // ---- 命盘盘面（融入子平派 / 盲派两大报告的开篇） ----
-function ChartBoard({ chart, school = '子平派', actionsEl = null }) {
+function ChartBoard({ chart, school = '子平派', onSchoolChange, actionsEl = null }) {
   const now = currentYearGanzhi()
   const total = Object.values(chart.wuxing).reduce((a, b) => a + b, 0)
   const isMangpai = school === '盲派'
@@ -384,7 +373,20 @@ function ChartBoard({ chart, school = '子平派', actionsEl = null }) {
             <span className="name-text">
               {`${chart.gender === '女' ? '坤造' : '乾造'} · ${chart.name || '同学'}`}
             </span>
-            <span className="bazi-school-tag is-special">{isMangpai ? '盲派命书' : '子平命书'}</span>
+            <span className="bazi-school-switch" role="group" aria-label="命书流派">
+              <button
+                className={`bazi-school-tag is-special ${!isMangpai ? 'active' : ''}`}
+                onClick={() => onSchoolChange && onSchoolChange('ziping')}
+              >
+                子平命书
+              </button>
+              <button
+                className={`bazi-school-tag is-special ${isMangpai ? 'active' : ''}`}
+                onClick={() => onSchoolChange && onSchoolChange('mangpai')}
+              >
+                盲派命书
+              </button>
+            </span>
           </div>
           {/* 复制 / 分享按钮紧跟"命书"徽章后，与徽章同行靠右显示 */}
           {actionsEl}
@@ -532,5 +534,3 @@ function ChartBoard({ chart, school = '子平派', actionsEl = null }) {
     </div>
   )
 }
-
-
