@@ -13,6 +13,7 @@ export default function SecurityManagement({ token }) {
   const [data, setData] = useState({ overview: {}, blocks: [], events: [] })
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
+  const [activeDetail, setActiveDetail] = useState('events')
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -47,6 +48,20 @@ export default function SecurityManagement({ token }) {
     } catch (error) { setMessage(error.message || '解除失败') }
   }
 
+  const since = Date.now() - 24 * 60 * 60 * 1000
+  const riskEvents = data.events.filter(event => event.type === 'risk' && event.at >= since)
+  const autoBlocks = data.events.filter(event => event.type === 'auto_block' && event.at >= since)
+  const detail = activeDetail === 'blocks'
+    ? { title: '生效中的限制', count: data.blocks.length, items: data.blocks }
+    : activeDetail === 'autoBlocks'
+      ? { title: '24 小时自动封禁明细', count: autoBlocks.length, items: autoBlocks }
+      : { title: '24 小时风险事件明细', count: riskEvents.length, items: riskEvents }
+
+  const renderEvent = event => <article className="security-event" key={event.id}>
+    <div className="security-event-main"><b>{event.action}</b><span>{event.reason}</span><small>{fmt(event.at)} · <code>{event.fingerprint}</code></small></div>
+    <div className="security-event-actions"><em className={event.status >= 429 ? 'high' : ''}>{event.status}</em>{event.type === 'risk' && <button className="ask-btn ghost" onClick={() => block(event)}>封禁</button>}</div>
+  </article>
+
   return <section className="security-admin">
     <div className="security-head">
       <div><h2>安全风控</h2><p>来源以不可逆指纹显示；自动封禁只针对持续异常请求。</p></div>
@@ -54,28 +69,20 @@ export default function SecurityManagement({ token }) {
     </div>
     {message && <div className="ask-msg">{message}</div>}
     <div className="security-kpis">
-      <div><b>{data.overview.blocked || 0}</b><span>当前封禁</span></div>
-      <div><b>{data.overview.riskEvents24h || 0}</b><span>24 小时风险事件</span></div>
-      <div><b>{data.overview.autoBlocks24h || 0}</b><span>24 小时自动封禁</span></div>
+      <button type="button" className={activeDetail === 'blocks' ? 'is-active' : ''} onClick={() => setActiveDetail('blocks')} aria-pressed={activeDetail === 'blocks'}><b>{data.overview.blocked || 0}</b><span>当前封禁</span></button>
+      <button type="button" className={activeDetail === 'events' ? 'is-active' : ''} onClick={() => setActiveDetail('events')} aria-pressed={activeDetail === 'events'}><b>{data.overview.riskEvents24h || 0}</b><span>24 小时风险事件</span></button>
+      <button type="button" className={activeDetail === 'autoBlocks' ? 'is-active' : ''} onClick={() => setActiveDetail('autoBlocks')} aria-pressed={activeDetail === 'autoBlocks'}><b>{data.overview.autoBlocks24h || 0}</b><span>24 小时自动封禁</span></button>
     </div>
     <div className="security-grid">
       <section className="security-panel">
-        <div className="security-panel-head"><h3>生效中的限制</h3><span>{data.blocks.length}</span></div>
-        {!loading && !data.blocks.length && <p className="security-empty">暂无限制中的来源</p>}
-        {data.blocks.map(item => <article className="security-block" key={item.fingerprint}>
-          <div><code>{item.fingerprint}</code><p>{item.reason}</p><small>{item.manual ? '人工处置' : '自动保护'} · 剩余 {remaining(item.expiresAt)}</small></div>
-          <button className="ask-btn ghost" onClick={() => unblock(item.fingerprint)}>解除</button>
-        </article>)}
-      </section>
-      <section className="security-panel">
-        <div className="security-panel-head"><h3>风险事件</h3><span>最近 120 条</span></div>
-        {!loading && !data.events.length && <p className="security-empty">暂无异常记录</p>}
-        <div className="security-events">
-          {data.events.map(event => <article className="security-event" key={event.id}>
-            <div className="security-event-main"><b>{event.action}</b><span>{event.reason}</span><small>{fmt(event.at)} · <code>{event.fingerprint}</code></small></div>
-            <div className="security-event-actions"><em className={event.status >= 429 ? 'high' : ''}>{event.status}</em>{event.type === 'risk' && <button className="ask-btn ghost" onClick={() => block(event)}>封禁</button>}</div>
-          </article>)}
-        </div>
+        <div className="security-panel-head"><h3>{detail.title}</h3><span>{activeDetail === 'blocks' ? detail.count : `最近 24 小时 · ${detail.count} 条`}</span></div>
+        {!loading && !detail.items.length && <p className="security-empty">{activeDetail === 'blocks' ? '暂无限制中的来源' : '暂无异常记录'}</p>}
+        {activeDetail === 'blocks'
+          ? detail.items.map(item => <article className="security-block" key={item.fingerprint}>
+            <div><code>{item.fingerprint}</code><p>{item.reason}</p><small>{item.manual ? '人工处置' : '自动保护'} · 剩余 {remaining(item.expiresAt)}</small></div>
+            <button className="ask-btn ghost" onClick={() => unblock(item.fingerprint)}>解除</button>
+          </article>)
+          : <div className="security-events">{detail.items.map(renderEvent)}</div>}
       </section>
     </div>
   </section>

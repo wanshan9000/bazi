@@ -63,13 +63,12 @@ export const DEFAULT_CONFIG = {
   apiKey: '',
   baseUrl: 'https://api.minimaxi.com/v1',
   model: 'MiniMax-M2.7',
-  // ⚠ 必须与 src/data/skills.js 的 BUILTIN_SKILLS 全集对齐。此前漏了
-  // yixue-taishan / mangpai / wuyunliuqi / modern_huangli / qimen 五个 ——
+  // 必须与 src/data/skills.js 的 BUILTIN_SKILLS 全集对齐。
   // 服务端 dsh 是把 skills/ 下的 SKILL.md 全量加载的，legacy 却默认少五个技能，
   // 同一个问题在两条路径上得到的能力范围不一样。
   enabledSkills: [
     'bazi', 'bazi-router', 'yixue-taishan', 'mangpai', 'wuyunliuqi', 'liuyao', 'tarot',
-    'huangli', 'modern_huangli', 'ziwei', 'qimen', 'love', 'wealth',
+    'huangli', 'ziwei', 'qimen', 'love', 'wealth',
     'health', 'fengshui', 'name',
   ],
   useLLM: false

@@ -3,11 +3,10 @@
 
 import { buildLiuyaoPan } from './liuyao.js'
 import { drawCards, interpret as interpretTarot } from '../data/tarot.js'
-import { buildDaily } from './huangli.js'
 import { buildContext } from './chat.js'
 import { buildZiwei } from './ziwei.js'
 import { buildQimenFull } from './qimen.js'
-import { buildBaziFull, buildFusedHuangli } from './cantian.js'
+import { buildBaziFull, generateHuangli } from './cantian.js'
 import { analyzeName, recommendName } from './nameAnalysis.js'
 import { analyzeFengshui } from './fengshui.js'
 import { skillByKey } from '../data/skills.js'
@@ -43,20 +42,17 @@ function toolTarot() {
   return segs.join('\n')
 }
 
-// 黄历：融合黄历（真实黄历数据 + 现代幽默宜忌 + 结合八字开运建议）
-function toLocalDate(dateStr) {
-  const p = String(dateStr).split('-').map(Number)
-  return new Date(p[0], (p[1] || 1) - 1, p[2] || 1)
-}
 function toolHuangli(chart) {
   const today = new Date()
   const dateStr = chart && chart.date ? chart.date : `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`
-  const scenario = chart && chart.scenario
-  const d = buildDaily(toLocalDate(dateStr), chart)
-  const extra = {}
-  if (d.action) extra.action = d.action
-  if (d.tips) extra.tips = d.tips
-  return buildFusedHuangli(dateStr, scenario, extra)
+  return generateHuangli({
+    chart,
+    date: dateStr,
+    scenario: chart && chart.scenario,
+    mode: chart && chart.mode,
+    tone: chart && chart.tone,
+    format: 'markdown',
+  })
 }
 
 // 紫微斗数：真实排盘（供 LLM 解读）
@@ -177,14 +173,6 @@ function toolBazi(chart) {
   return segs.join('\n')
 }
 
-// 现代幽默黄历：融合真实黄历数据 + 幽默宜忌（娱乐向，无八字维度）
-function toolModernHuangli(chart) {
-  const today = new Date()
-  const dateStr = chart && chart.date ? chart.date : `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`
-  const scenario = chart && chart.scenario
-  return buildFusedHuangli(dateStr, scenario)
-}
-
 // 五运六气：按出生年干支排中运/司天在泉/主气/客运 + 属相六大体质（健康养生用）
 // 算法实现在共享模块 wuyunliuqi.js，与 baziReport 健康养生章节共用
 function toolWuyunliuqi(chart) {
@@ -196,7 +184,6 @@ export function runSkillTool(skillKey, chart) {
     case 'liuyao': return toolLiuyao(chart)
     case 'tarot': return toolTarot()
     case 'huangli': return toolHuangli(chart)
-    case 'modern_huangli': return toolModernHuangli(chart)
     case 'bazi': return toolBazi(chart)
     case 'ziwei': return toolZiwei(chart)
     case 'qimen': return toolQimen(chart)
@@ -237,8 +224,7 @@ export function runToolByName(name, args, chart) {
   if (args && typeof args === 'object') {
     // 只合并该工具确实声明过的字段，避免模型乱传的键污染命盘对象
     const ALLOWED = {
-      huangli: ['date', 'scenario'],
-      modern_huangli: ['date', 'scenario'],
+      huangli: ['date', 'scenario', 'mode', 'tone'],
       liuyao: ['question'],
       qimen: ['date'],
       name: ['name', 'surname'],
@@ -248,9 +234,7 @@ export function runToolByName(name, args, chart) {
       if (args[key] !== undefined) merged[key] = args[key]
     }
   }
-  if (name === 'huangli' || name === 'modern_huangli') {
-    return name === 'huangli' ? toolHuangli(merged) : toolModernHuangli(merged)
-  }
+  if (name === 'huangli') return toolHuangli(merged)
   return runSkillTool(name, merged)
 }
 
@@ -312,27 +296,14 @@ export const TOOL_SCHEMAS = [
     type: 'function',
     function: {
       name: 'huangli',
-      description: '获取今日黄历：真实老黄历数据（宜忌、冲煞、彭祖百忌、方位、农历干支）+ 现代幽默宜忌（打工人/程序员/学生党沙雕版）并融合用户八字开运建议。问今日黄历、宜啥忌啥、出行、吉日时调用。可指定日期与场景。',
+      description: '统一黄历生成器：先返回传统黄历数据（宜忌、冲煞、彭祖百忌、方位、农历干支），再按 mode 决定是否融合八字和身份场景；tone 可选实用或幽默表达。场景解读不覆盖传统宜忌。',
       parameters: {
         type: 'object',
         properties: {
           date: { type: 'string', description: '日期 YYYY-MM-DD，缺省今天' },
-          scenario: { type: 'string', description: '场景：打工人/程序员/学生党，缺省打工人' }
-        },
-        additionalProperties: false
-      }
-    }
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'modern_huangli',
-      description: '生成现代幽默风格黄历（打工人/程序员/学生党沙雕宜忌，兼含真实农历干支与老黄历宜忌，娱乐向）。用户想"今天宜啥忌啥"、要轻松好玩的黄历、幽默运势时调用。可指定日期与场景。',
-      parameters: {
-        type: 'object',
-        properties: {
-          date: { type: 'string', description: '日期 YYYY-MM-DD，缺省今天' },
-          scenario: { type: 'string', description: '场景：打工人/程序员/学生党，缺省打工人' }
+          scenario: { type: 'string', description: '场景：打工人/学生党/自由族/享受族（退休人士），缺省按生辰推断或打工人' },
+          mode: { type: 'string', enum: ['standard', 'personalized'], description: 'standard 只看传统黄历；personalized 有生辰时结合八字与身份场景，缺省自动判断' },
+          tone: { type: 'string', enum: ['practical', 'humorous'], description: 'practical 实用生活解读；humorous 幽默表达，缺省 practical' }
         },
         additionalProperties: false
       }

@@ -46,7 +46,17 @@ test('称骨：女命拿到女命断语，summary.gender 存归一值', () => {
   assert.equal(m.summary.gender, '男')
   const love = r => r.lines.find(l => l.key === '感情')
   assert.notEqual(love(f).text, love(m).text, '男女感情断语必须不同')
-  assert.notEqual(love(f).plain, love(m).plain)
+  // 总评白话仅描述骨重命格，不再重复男女命通用规则；性别差异由经典断语与感情项承载。
+  assert.equal(f.classic.plain, m.classic.plain)
+})
+
+test('称骨：白话提示不重复经典解读中的男女命通用规则', () => {
+  const m = weighBones(BIRTH, '男').classic
+  const f = weighBones(BIRTH, '女').classic
+  assert.match(m.text, /男命常规断法/)
+  assert.doesNotMatch(m.plain, /男命常规断法/)
+  assert.match(f.text, /女命常规断法/)
+  assert.doesNotMatch(f.plain, /女命常规断法/)
 })
 
 test('称骨：传 female / male 与传 女 / 男 结果一致', () => {

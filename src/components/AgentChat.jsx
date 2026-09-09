@@ -26,7 +26,7 @@ import ReportView from './ReportView.jsx'
 import { renderMarkdown } from '../utils/markdown.jsx'
 import { loadQuota, addAgentTokens, tokensToCredits, isAgentOverQuota, AGENT_QUOTA_TOKENS } from '../engine/freeQuota.js'
 import { consumeCredit } from '../data/users.js'
-import { ThinkBlock, ToolCallsBlock, FeedbackBar, CopyButton, renderAiText, timeNow, fmtSessionTime, QUICK } from './agent/ChatParts.jsx'
+import { ThinkBlock, ToolCallsBlock, FeedbackBar, CopyButton, renderAiText, timeNow, fmtSessionTime, QUICK, isNearScrollBottom } from './agent/ChatParts.jsx'
 
 // 报告类型 → 技能 key（反馈→进化信号关联）。子平→易学-泰山、盲派→盲派；合婚归姻缘、择日归黄历
 const REPORT_SKILL = {
@@ -681,6 +681,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
   const [showCollection, setShowCollection] = useState(false)
   const refreshCollection = () => setCollection(listCollection())
   const scrollRef = useRef(null)
+  const followScrollRef = useRef(true)
   const booted = useRef(false)
   // 当前会话标记：优先从 sessionStorage 恢复（刷新/切视图后继续算同一会话，只有新建会话才重置）
   const _cur = typeof window !== 'undefined' ? loadCurrentSession() : null
@@ -757,7 +758,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
 
   useEffect(() => {
     const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (el && followScrollRef.current) el.scrollTop = el.scrollHeight
   }, [messages, typing])
 
   // 模型切换菜单：点击其他区域自动关闭
@@ -1091,6 +1092,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
   const send = async (text) => {
     const q = (text || input).trim()
     if (!q || typing) return
+    followScrollRef.current = true
     setInput('')
     setMessages(prev => [...prev, { id: Date.now(), role: 'user', text: q, time: timeNow() }])
 
@@ -1768,7 +1770,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
         )}
       </div>
 
-      <div className="chat-scroll" ref={scrollRef}>
+      <div className="chat-scroll" ref={scrollRef} onScroll={event => { followScrollRef.current = isNearScrollBottom(event.currentTarget) }}>
         {messages.map(m => (
           <div key={m.id} className={`msg ${m.role}`}>
             <div className="avatar">{m.role === 'ai' ? '三' : m.role === 'tool' ? '🔧' : '我'}</div>

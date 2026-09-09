@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { PLANS, AVATARS, updateProfile, changePassword, changePlan, logout } from '../data/users.js'
+import { useRef, useState } from 'react'
+import { PLANS, AVATARS, updateProfile, changePassword, logout } from '../data/users.js'
 import { planByKey, getMonthlyCredits, getMonthlyProgress, nextPlanKey } from '../engine/membership.js'
 
 const PLAN_STYLE = {
@@ -13,17 +13,51 @@ const PLAN_STYLE = {
   supreme: { label: '超级尊者', cls: 'pr-supreme' }
 }
 
+const IMAGE_AVATAR_RE = /^data:image\/(?:png|jpeg|webp);base64,/i
+const MAX_AVATAR_SOURCE_BYTES = 8 * 1024 * 1024
+
+function isImageAvatar(avatar) {
+  return IMAGE_AVATAR_RE.test(String(avatar || ''))
+}
+
+function compressAvatar(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const image = new Image()
+    image.onload = () => {
+      URL.revokeObjectURL(url)
+      const side = Math.min(image.naturalWidth, image.naturalHeight)
+      if (!side) return reject(new Error('无法读取图片尺寸'))
+      const canvas = document.createElement('canvas')
+      canvas.width = 160
+      canvas.height = 160
+      const context = canvas.getContext('2d')
+      if (!context) return reject(new Error('图片处理暂不可用'))
+      context.drawImage(image, (image.naturalWidth - side) / 2, (image.naturalHeight - side) / 2, side, side, 0, 0, 160, 160)
+      resolve(canvas.toDataURL('image/webp', 0.84))
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('图片读取失败，请换一张再试'))
+    }
+    image.src = url
+  })
+}
+
 // onSubscribe 由 App 传入（openSubscribe），此前漏在解构里，而第 55/168/174 行直接引用它，
 // 严格模式下就是 ReferenceError：个人中心的「升级 / 续费」按钮一点就崩。
 export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, onBack, onLogout, onUpdate, onSubscribe }) {
   const [editing, setEditing] = useState(false)
   const [nickname, setNickname] = useState(user.nickname)
   const [avatarOpen, setAvatarOpen] = useState(false)
+  const [avatarSaved, setAvatarSaved] = useState(false)
+  const [avatarBusy, setAvatarBusy] = useState(false)
   const [oldPwd, setOldPwd] = useState('')
   const [newPwd, setNewPwd] = useState('')
   const [confirm, setConfirm] = useState('')
   const [msg, setMsg] = useState('')
   const [msgType, setMsgType] = useState('ok')
+  const avatarInputRef = useRef(null)
 
   const days = Math.max(1, Math.ceil((Date.now() - user.createdAt) / 86400000))
   // 必须走 planByKey：PLANS 里没有 free，用 find 会静默回落到 PLANS[0]（凡境），
@@ -52,26 +86,39 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
     flash('昵称已更新')
   }
 
-  const pickAvatar = async (a) => {
-    const res = await updateProfile(user.id, { avatar: a })
-    setAvatarOpen(false)
+  const saveAvatar = async (avatar) => {
+    const res = await updateProfile(user.id, { avatar })
     if (!res.ok) return flash(res.msg, 'err')
+    setAvatarOpen(false)
     onUpdate(res.user)
-    flash('头像已更新')
+    setAvatarSaved(true)
+  }
+
+  const pickAvatar = async (avatar) => {
+    if (avatarBusy) return
+    setAvatarBusy(true)
+    try { await saveAvatar(avatar) } finally { setAvatarBusy(false) }
+  }
+
+  const uploadAvatar = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) return flash('请选择 PNG、JPG 或 WebP 图片', 'err')
+    if (file.size > MAX_AVATAR_SOURCE_BYTES) return flash('图片请控制在 8MB 以内', 'err')
+    setAvatarBusy(true)
+    try {
+      await saveAvatar(await compressAvatar(file))
+    } catch (error) {
+      flash(error.message || '头像上传失败，请重试', 'err')
+    } finally {
+      setAvatarBusy(false)
+    }
   }
 
   const upgrade = (key) => {
     if (key === user.plan) return
-    // 走订阅 Modal（确认即 changePlan，自动重置积分与到期）
-    if (onSubscribe) { onSubscribe(key); return }
-    // 兜底（无 Modal 时）：走服务端的切档接口。
-    // ⚠ 这里此前调的是 updateProfile({ plan })，而服务端根本不接受用 PUT 改档位
-    //   （那等于把「改本地存储即可提权」原样搬到服务端），必须走 /auth/plan。
-    changePlan(user.id, key).then(res => {
-      if (!res.ok) return flash(res.msg, 'err')
-      onUpdate(res.user)
-      flash(`已切换至${planByKey(key).name}`)
-    })
+    onSubscribe && onSubscribe(key)
   }
 
   const savePwd = async () => {
@@ -104,11 +151,25 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
 
       {msg && <p className={`auth-msg ${msgType === 'err' ? 'auth-msg-err' : ''}`}>{msg}</p>}
 
+      {avatarSaved && (
+        <div className="pr-avatar-confirm-mask" onClick={() => setAvatarSaved(false)}>
+          <section className="pr-avatar-confirm" role="dialog" aria-modal="true" aria-labelledby="avatar-confirm-title" onClick={e => e.stopPropagation()}>
+            <button className="pr-avatar-confirm-close" onClick={() => setAvatarSaved(false)} aria-label="关闭">×</button>
+            <div className="pr-avatar-confirm-icon" aria-hidden="true">✓</div>
+            <h2 id="avatar-confirm-title">头像已更新</h2>
+            <p>新的头像已经保存到你的个人资料。</p>
+            <button className="pr-avatar-confirm-action" onClick={() => setAvatarSaved(false)}>知道了</button>
+          </section>
+        </div>
+      )}
+
       <div className="profile-wrap">
         {/* 用户信息卡 */}
         <div className="profile-card pr-id-card">
           <div className="pr-id-avatar" onClick={() => setAvatarOpen(v => !v)} title="点击更换头像">
-            <span className="pr-id-glyph">{user.avatar}</span>
+            <span className={`pr-id-glyph ${isImageAvatar(user.avatar) ? 'pr-id-photo' : ''}`}>
+              {isImageAvatar(user.avatar) ? <img src={user.avatar} alt="" /> : user.avatar}
+            </span>
             <span className="pr-id-edit">✎</span>
           </div>
           <div className="pr-id-info">
@@ -127,7 +188,10 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
             <p className="pr-join">加入第 {days} 天 · {new Date(user.createdAt).toLocaleDateString('zh-CN')} 加入</p>
           </div>
           <div className="pr-badge">
-            <span className={`pr-badge-tag ${(PLAN_STYLE[user.plan] || PLAN_STYLE.free).cls}`}>{(PLAN_STYLE[user.plan] || PLAN_STYLE.free).label}</span>
+            <div className="pr-badge-row">
+              <span className={`pr-badge-tag ${(PLAN_STYLE[user.plan] || PLAN_STYLE.free).cls}`}>{(PLAN_STYLE[user.plan] || PLAN_STYLE.free).label}</span>
+              <button className="pr-logout-btn" onClick={doLogout} title="退出登录" aria-label="退出登录">↪</button>
+            </div>
             <span className="pr-badge-meta">{plan.tag}会员</span>
           </div>
         </div>
@@ -136,8 +200,13 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
         {avatarOpen && (
           <div className="pr-avatar-picker">
             {AVATARS.map(a => (
-              <button key={a} className={`pr-avatar-opt ${a === user.avatar ? 'active' : ''}`} onClick={() => pickAvatar(a)}>{a}</button>
+              <button key={a} className={`pr-avatar-opt ${a === user.avatar ? 'active' : ''}`} onClick={() => pickAvatar(a)} disabled={avatarBusy}>{a}</button>
             ))}
+            <input ref={avatarInputRef} className="pr-avatar-file" type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadAvatar} />
+            <button className="pr-avatar-upload" onClick={() => avatarInputRef.current?.click()} disabled={avatarBusy}>
+              <span aria-hidden="true">＋</span>
+              <b>{avatarBusy ? '处理中' : '上传图片'}</b>
+            </button>
           </div>
         )}
 
@@ -199,7 +268,7 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
             </button>
             <button
               className="pr-cr-action secondary"
-              onClick={() => onSubscribe && onSubscribe(plan.key)}
+              onClick={() => onSubscribe && onSubscribe(null, { selectPlan: true })}
             >
               续费当前会员
             </button>
@@ -256,18 +325,6 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
               </div>
             </div>
 
-            <div className="pr-set">
-              <div className="pr-set-row pr-set-danger">
-                <div className="pr-set-label">
-                  <span className="pr-set-icon">🚪</span>
-                  <div className="pr-set-copy">
-                    <b>账户会话</b>
-                    <p>退出后，本地命盘记录仍会保留</p>
-                    <button className="pr-set-btn pr-set-btn-danger" onClick={doLogout}>退出登录</button>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 

@@ -16,6 +16,7 @@ import { planByKey, FEATURE_COSTS, nextResetAt, FREE_PLAN, SUPER_PLAN, isPlanExp
 const scrypt = promisify(crypto.scrypt)
 
 const MONTH_MS = 30 * 86400000
+const MAX_CUSTOM_AVATAR_BYTES = 96 * 1024
 
 /* ---- 口令散列：scrypt ----
  * 参数取 Node 默认档（N=16384, r=8, p=1），单次约 50~100ms，足以让离线爆破不划算，
@@ -171,6 +172,17 @@ export function createAccountStore(file) {
 
   const AVATARS = ['🐻', '🌸', '🌟', '🦋', '🍑', '🌙', '🪷', '☁️', '🍀', '🦊']
 
+  function isCustomAvatar(value) {
+    const match = String(value || '').match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/)
+    if (!match) return false
+    const [, mime, encoded] = match
+    const bytes = Buffer.from(encoded, 'base64')
+    if (!bytes.length || bytes.length > MAX_CUSTOM_AVATAR_BYTES) return false
+    if (mime === 'png') return bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    if (mime === 'jpeg') return bytes[0] === 0xff && bytes[1] === 0xd8
+    return bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP'
+  }
+
   async function create({ account, password, nickname, avatar, wechatOpenid, plan = 'free' }) {
     const db = load()
     const now = Date.now()
@@ -239,9 +251,10 @@ export function createAccountStore(file) {
       u.nickname = nickname
     }
     if (patch.avatar !== undefined) {
-      // 头像只能从白名单里选。这里此前是任意字符串直存 —— 前端会把它原样渲染，
-      // 长度也没有上限，等于给了一个「往别人看得到的地方塞任意内容」的口子。
-      if (!AVATARS.includes(patch.avatar)) return { ok: false, msg: '头像不在可选范围内' }
+      // 自定义头像仅接收小尺寸的 PNG / JPEG / WebP data URL，拒绝 SVG 与任意内容。
+      if (!AVATARS.includes(patch.avatar) && !isCustomAvatar(patch.avatar)) {
+        return { ok: false, msg: '头像格式或大小不符合要求' }
+      }
       u.avatar = patch.avatar
     }
     save()

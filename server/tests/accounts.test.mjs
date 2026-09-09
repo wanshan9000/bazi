@@ -146,11 +146,14 @@ test('账号大小写不敏感，避免 Alice / alice 变成两个账号', async
   assert.ok(store.byAccount('JUDY'))
 })
 
-test('头像只接受白名单内的值', async () => {
+test('头像接受白名单或受限的图片 data URL', async () => {
   const { store } = mkStore()
   const u = await store.create({ account: 'kate', password: 'secret123', nickname: '小明' })
   assert.equal(store.update(u.id, { avatar: '<img src=x onerror=alert(1)>' }).ok, false)
   assert.equal(store.update(u.id, { avatar: store.AVATARS[2] }).ok, true)
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlVyX8AAAAASUVORK5CYII='
+  assert.equal(store.update(u.id, { avatar: png }).ok, true)
+  assert.equal(store.update(u.id, { avatar: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=' }).ok, false)
 })
 
 test('落盘后重新打开仍在（不是只活在内存里）', async () => {

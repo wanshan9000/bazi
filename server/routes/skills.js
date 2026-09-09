@@ -23,7 +23,7 @@ const router = Router()
 
 // 内置技能 key 白名单：禁止被管理端导入覆盖（内置技能由代码维护，含精心审核的 sys）
 const BUILTIN_KEYS = new Set([
-  'bazi', 'bazi-router', 'yixue-taishan', 'mangpai', 'wuyunliuqi', 'liuyao', 'tarot', 'huangli', 'modern_huangli',
+  'bazi', 'bazi-router', 'yixue-taishan', 'mangpai', 'wuyunliuqi', 'liuyao', 'tarot', 'huangli',
   'ziwei', 'qimen', 'love', 'wealth', 'health', 'fengshui', 'name',
 ])
 

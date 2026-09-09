@@ -8,7 +8,7 @@
 
 const TOOL_NAME_CN = {
   bazi: '八字排盘', ziwei: '紫微排盘', liuyao: '六爻起卦', qimen: '奇门排盘', huangli: '黄历查询',
-  modern_huangli: '幽默黄历', tarot: '塔罗抽牌', name: '姓名分析', fengshui: '风水分析', wuyunliuqi: '五运六气',
+  tarot: '塔罗抽牌', name: '姓名分析', fengshui: '风水分析', wuyunliuqi: '五运六气',
   report: '测算报告', skill: '加载技能',
 }
 

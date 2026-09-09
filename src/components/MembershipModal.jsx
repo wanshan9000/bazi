@@ -1,136 +1,135 @@
-/* ============ 订阅 / 升级 Modal ============
- *
- * 由 App.jsx 在全局维护 subscribeModal 状态。
- * 触发方式：
- *   - Landing 定价卡「从凡者开始 / 跃升玄者 / 登临天者」按钮
- *   - Profile 升级按钮
- *   - ReportLock 等扣减积分不足时的「升级」入口
- *
- * 行为：
- *   - 未登录 → 提示先注册/登录（由 onRequireLogin 接管，回到原来逻辑）
- *   - 已登录 → 展示档位详情 + 模拟支付确认 → changePlan
- *
- * 这是演示项目：点击「确认支付」直接调用 users.js#changePlan 切换档位并重置积分。
- */
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import QRCode from 'qrcode'
 import { PLANS, planByKey } from '../engine/membership.js'
-import { changePlan } from '../data/users.js'
+
+function previewPaymentPayload(user, plan) {
+  return `GENKI-PAYMENT-PREVIEW|user=${user.id}|plan=${plan.key}|amount=${plan.price}|period=month`
+}
 
 export default function MembershipModal({
   open,
   planKey,
   user,
   onClose,
-  onSuccess,
   onRequireLogin,
+  showPlanPicker = false,
 }) {
-  const plan = planKey ? planByKey(planKey) : null
-  const currentPlan = user ? planByKey(user.plan) : null
-  const isCurrent = !!(plan && user && user.plan === plan.key)
-  const isDowngrade = !!(user && plan && currentPlan && (
-    (currentPlan.key === 'oracle' && plan.key !== 'oracle') ||
-    (currentPlan.key === 'heaven' && plan.key === 'earth')
-  ))
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState('')
+  const [selectedKey, setSelectedKey] = useState(planKey || 'earth')
+  const [step, setStep] = useState(showPlanPicker ? 'plans' : 'checkout')
+  const [qr, setQr] = useState('')
+  const plan = planByKey(selectedKey)
 
   useEffect(() => {
     if (!open) return
-    setErr('')
-    setBusy(false)
-    const onKey = (e) => { if (e.key === 'Escape') onClose && onClose() }
+    setSelectedKey(planKey || 'earth')
+    setStep(showPlanPicker ? 'plans' : 'checkout')
+    const onKey = event => { if (event.key === 'Escape') onClose && onClose() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open, planKey, showPlanPicker, onClose])
 
-  if (!open) return null
-  if (!plan) return null
+  useEffect(() => {
+    let active = true
+    if (!open || step !== 'checkout' || !user || !plan) {
+      setQr('')
+      return undefined
+    }
+    QRCode.toDataURL(previewPaymentPayload(user, plan), {
+      width: 220,
+      margin: 1,
+      color: { dark: '#442c35', light: '#fffdfb' },
+    }).then(value => {
+      if (active) setQr(value)
+    }).catch(() => {
+      if (active) setQr('')
+    })
+    return () => { active = false }
+  }, [open, step, user, plan])
 
-  const handleConfirm = async () => {
+  if (!open || !plan) return null
+
+  const choosePlan = key => {
     if (!user) {
       onRequireLogin && onRequireLogin('subscribe')
       return
     }
-    // 同档位 = 续费，不是「什么都不做」。此前这里直接关窗，导致 planExpiresAt
-    // 永远无法延长，个人中心写着「到期前可手动续费」却根本没有能续上的入口。
-    setBusy(true)
-    setErr('')
-    // 模拟支付：直接调用 changePlan（演示项目）
-    const res = await changePlan(user.id, plan.key)
-    setBusy(false)
-    if (!res.ok) {
-      setErr(res.msg || '订阅失败，请稍后再试')
-      return
-    }
-    onSuccess && onSuccess(res.user, res.plan)
-    onClose && onClose()
+    setSelectedKey(key)
+    setStep('checkout')
   }
+
+  const picker = (
+    <>
+      <div className="mm-head mm-picker-head">
+        <div>
+          <p className="mm-kicker">MEMBERSHIP RENEWAL</p>
+          <h3 className="mm-title">选择续费会员</h3>
+          <p className="mm-sub">选择后进入扫码支付页</p>
+        </div>
+      </div>
+      <div className="mm-plan-grid">
+        {PLANS.map(item => {
+          const active = item.key === user?.plan
+          return (
+            <button key={item.key} className={`mm-plan-option ${item.featured ? 'featured' : ''}`} onClick={() => choosePlan(item.key)}>
+              {item.hot && <span className="mm-plan-hot">推荐</span>}
+              <span className="mm-plan-icon" aria-hidden="true">{item.icon}</span>
+              <strong>{item.name}</strong>
+              <span>{item.tag}</span>
+              <b>¥{item.price}<small>/月</small></b>
+              <em>{active ? '当前会员 · 续费' : `选择${item.name}`}</em>
+            </button>
+          )
+        })}
+      </div>
+      <button className="mm-text-btn" onClick={onClose}>稍后再说</button>
+    </>
+  )
+
+  const checkout = (
+    <>
+      <div className="mm-head">
+        {showPlanPicker && <button className="mm-back" onClick={() => setStep('plans')} aria-label="返回会员选择">‹</button>}
+        <span className="mm-icon" aria-hidden="true">{plan.icon}</span>
+        <div>
+          <p className="mm-kicker">SCAN TO PAY</p>
+          <h3 className="mm-title">续费 {plan.name}</h3>
+          <p className="mm-sub">{plan.en} · {plan.tag}</p>
+        </div>
+      </div>
+      {!user ? (
+        <div className="mm-login-state">
+          <b>登录后创建支付订单</b>
+          <p>支付结果将由服务端确认，会员权益不会在付款前提前开通。</p>
+          <button className="mm-btn primary" onClick={() => onRequireLogin && onRequireLogin('subscribe')}>注册 / 登录</button>
+        </div>
+      ) : (
+        <>
+          <div className="mm-payment-summary">
+            <span>{plan.name}会员 · 30 天</span>
+            <b>¥{plan.price}</b>
+          </div>
+          <div className="mm-qr-wrap">
+            {qr ? <img src={qr} alt="支付二维码预览" /> : <span>二维码生成中</span>}
+          </div>
+          <p className="mm-payment-status"><span aria-hidden="true">●</span> 支付服务准备中</p>
+          <p className="mm-payment-note">当前为支付页面预览。支付通道接入后，此处将显示服务端创建的真实支付订单二维码，并在回调确认后自动续费。</p>
+        </>
+      )}
+      <div className="mm-actions">
+        <button className="mm-btn ghost" onClick={showPlanPicker ? () => setStep('plans') : onClose}>{showPlanPicker ? '返回选择' : '关闭'}</button>
+        {user && <button className="mm-btn primary" disabled>等待支付通道接入</button>}
+      </div>
+    </>
+  )
 
   return createPortal(
     <div className="mm-mask" onClick={onClose}>
-      <div className="mm-card rise" onClick={e => e.stopPropagation()} role="dialog" aria-label="订阅会员">
+      <section className={`mm-card ${step === 'plans' ? 'mm-card-picker' : ''}`} onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="会员续费">
         <button className="mm-close" onClick={onClose} aria-label="关闭">×</button>
-
-        <div className="mm-head">
-          <span className="mm-icon" aria-hidden="true">{plan.icon}</span>
-          <div>
-            <h3 className="mm-title">{plan.name} · 会员</h3>
-            <p className="mm-sub">{plan.en} · {plan.tag}</p>
-          </div>
-        </div>
-
-        <div className="mm-price">
-          <span className="num">¥{plan.price}</span>
-          <span className="unit">{plan.unit || '/月'}</span>
-        </div>
-
-        <p className="mm-desc">{plan.desc}</p>
-
-        <div className="mm-credits">
-          <span className="mm-credits-num">{plan.credits}</span>
-          <span className="mm-credits-lbl">积分 / 月 · 完整命书 · AI 对话按需消耗</span>
-        </div>
-
-        <ul className="mm-perks">
-          {plan.perks.map(p => <li key={p}>✓ {p}</li>)}
-        </ul>
-
-        {!user && (
-          <p className="mm-tip">订阅属于会员权益 · 请先注册/登录；支付开通后将由服务端确认会员状态</p>
-        )}
-        {user && isCurrent && (
-          <p className="mm-tip">续费「{plan.name}」：有效期在当前到期时间之上顺延 30 天，积分用量即刻清零。</p>
-        )}
-        {user && !isCurrent && (
-          <p className="mm-tip">
-            {isDowngrade
-              // 文案要与 changePlan 的实际行为一致：它是立即切档并清零积分用量，
-              // 并没有「下一个周期才生效」这回事。
-              ? `降级至「${plan.name}」立即生效：额度调整为 ${plan.credits} 积分，本周期已用量清零。`
-              : `升级至「${plan.name}」立即生效：积分用量清零并续期 30 天。`}
-          </p>
-        )}
-
-        {err && <p className="mm-err">{err}</p>}
-
-        <div className="mm-actions">
-          <button className="mm-btn ghost" onClick={onClose}>稍后再说</button>
-          <button
-            className={`mm-btn ${plan.featured ? 'primary' : ''}`}
-            onClick={handleConfirm}
-            disabled={busy}
-          >
-            {busy ? '处理中…'
-              : !user ? '注册 / 登录'
-              : isCurrent ? '续费 30 天（模拟支付）'
-              : '确认订阅（模拟支付）'}
-          </button>
-        </div>
-
-        <p className="mm-foot">本页面为演示实现 · 点击确认即代表同意《会员服务协议》（占位）</p>
-      </div>
+        {step === 'plans' ? picker : checkout}
+      </section>
     </div>,
-    document.body
+    document.body,
   )
 }

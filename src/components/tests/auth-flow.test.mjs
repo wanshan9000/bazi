@@ -94,53 +94,41 @@ test('登录请求不把口令写进 URL', async () => {
   r.unmount()
 })
 
-test('订阅弹窗：确认后调服务端切档接口，成功才回调', async () => {
-  const calls = stubFetch({
-    '/api/auth/plan': { body: { ok: true, user: { ...USER, plan: 'heaven' }, plan: { key: 'heaven', name: '玄境' }, renewed: false } },
-  })
+test('订阅弹窗：支付预览不应直接调用切档接口', async () => {
+  const calls = stubFetch({})
   localStorage.setItem('genki-token', 'jwt-abc')
-  let succeeded = null
   const r = render(MembershipModal, {
     open: true, planKey: 'heaven', user: USER,
-    onClose: () => {}, onSuccess: u => { succeeded = u }, onRequireLogin: () => {},
+    onClose: () => {}, onRequireLogin: () => {},
   })
-  const confirm = r.findByText('确认') || r.findByText('订阅') || r.$('.mm-confirm')
-  assert.ok(confirm, `找不到确认按钮：${r.text().slice(0, 200)}`)
-  r.click(confirm)
   await flush()
-
-  const planCall = calls.find(c => c.path.includes('/api/auth/plan'))
-  assert.ok(planCall, '切档必须走服务端接口，不能只改本地存储')
-  assert.equal(planCall.body.plan, 'heaven')
-  assert.ok(succeeded, '成功后应把新用户对象交出去')
-  assert.equal(succeeded.plan, 'heaven')
+  assert.ok(r.text().includes('支付服务准备中'), `没有显示支付页：${r.text().slice(0, 200)}`)
+  assert.equal(calls.filter(c => c.path.includes('/api/auth/plan')).length, 0)
   r.unmount()
 })
 
-test('订阅弹窗：服务端拒绝时不回调，并显示原因', async () => {
-  stubFetch({ '/api/auth/plan': { status: 400, body: { ok: false, msg: '档位不存在' } } })
+test('订阅弹窗：续费入口先展示会员选择，选档后进入扫码支付页', async () => {
+  stubFetch({})
   localStorage.setItem('genki-token', 'jwt-abc')
-  let succeeded = null
   const r = render(MembershipModal, {
-    open: true, planKey: 'heaven', user: USER,
-    onClose: () => {}, onSuccess: u => { succeeded = u }, onRequireLogin: () => {},
+    open: true, planKey: 'earth', user: USER, showPlanPicker: true,
+    onClose: () => {}, onRequireLogin: () => {},
   })
-  const confirm = r.findByText('确认') || r.findByText('订阅') || r.$('.mm-confirm')
-  r.click(confirm)
+  const option = r.findByText('玄者', '.mm-plan-option')
+  assert.ok(option, `找不到会员选择：${r.text().slice(0, 200)}`)
+  r.click(option)
   await flush()
-  assert.equal(succeeded, null, '服务端拒绝时不得当作订阅成功')
-  assert.ok(r.text().includes('档位不存在'), `没有显示失败原因：${r.text().slice(0, 200)}`)
+  assert.ok(r.text().includes('续费 玄者'), `选择后没有进入支付页：${r.text().slice(0, 200)}`)
   r.unmount()
 })
 
 test('未登录时点订阅走登录引导，不发切档请求', async () => {
-  const calls = stubFetch({ '/api/auth/plan': { body: { ok: true } } })
+  const calls = stubFetch({})
   let asked = null
   const r = render(MembershipModal, {
     open: true, planKey: 'heaven', user: null,
-    onClose: () => {}, onSuccess: () => {}, onRequireLogin: v => { asked = v || 'subscribe' },
+    onClose: () => {}, onRequireLogin: v => { asked = v || 'subscribe' },
   })
-  // 未登录时主按钮的文案是「注册 / 登录」，不是「确认订阅」
   const confirm = r.findByText('注册 / 登录')
   assert.ok(confirm, `找不到主按钮：${r.text().slice(0, 200)}`)
   r.click(confirm)

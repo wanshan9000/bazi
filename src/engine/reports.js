@@ -1451,6 +1451,8 @@ export function buildHuangliReport(chart, date = new Date(), scenario) {
           items: [
             { k: '日期', v: `${d.date} ${d.week}` },
             { k: '干支', v: `${d.yearGanzhi} ${d.dayGanzhi}` },
+            { k: '月令', v: `${d.monthGanzhi}（节气定月）` },
+            { k: '建除值日', v: `${d.jianchu}日` },
             { k: '日五行', v: d.dayWx },
             { k: '农历', v: d.lunar },
             { k: '节气', v: d.term || '-' },
@@ -1461,6 +1463,16 @@ export function buildHuangliReport(chart, date = new Date(), scenario) {
       {
         key: 'yiji', title: '宜忌', kind: 'chips',
         data: { items: [...d.yi.map(v => ({ label: '宜', value: v })), ...d.ji.map(v => ({ label: '忌', value: v }))] },
+      },
+      {
+        key: 'method', title: '黄历使用说明', kind: 'kv',
+        data: {
+          items: [
+            { k: '月令建除', v: `今日${d.monthGanzhi}${d.jianchu}日。建除以节气月令起算，是择日时判断用事的基础。` },
+            { k: '日常宜忌', v: '适合用于日常安排参考；嫁娶、入宅、开业等大事需另看用途适配与冲忌。' },
+            { k: chart ? '个性化层' : '个性化黄历', v: chart ? '已结合你的命局五行给出关系、行动与开运提示；个人喜忌只作排序参考，不覆盖冲忌。' : '当前为通用黄历。输入八字后，可获得结合命局五行的行动与开运提示。' },
+          ],
+        },
       },
       {
         key: 'theme', title: '今日主题', kind: 'kv',
@@ -1509,7 +1521,7 @@ export function buildHuangliReport(chart, date = new Date(), scenario) {
     return makeReport('huangli', {
       sub: `${d.date} ${d.week}｜${d.yearGanzhi} ${d.dayGanzhi}｜${d.lunar}`,
       hero: { chars: [d.yearGanzhi.replace('年', ''), d.dayGanzhi.replace('日', '')], main: d.relation === '顺' ? `今日运势：<b>顺</b> · ${d.theme}` : d.relation === '慎' ? `今日运势：<b>慎</b> · ${d.theme}` : `今日运势：平 · ${d.theme}` },
-      meta: { date: d.date, dayGanzhi: d.dayGanzhi, relation: d.relation },
+      meta: { date: d.date, lunar: d.lunar, dayGanzhi: d.dayGanzhi, term: d.term, jianchu: d.jianchu, relation: d.relation },
       sections,
       advice,
     })

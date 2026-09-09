@@ -19,7 +19,7 @@ if (!Object.getOwnPropertyDescriptor(globalThis, 'localStorage')?.value) {
 if (typeof globalThis.window === 'undefined') globalThis.window = globalThis
 
 export { buildChart } from '../../../../src/engine/bazi.js'
-export { buildBaziFull, buildFusedHuangli } from '../../../../src/engine/cantian.js'
+export { buildBaziFull, generateHuangli } from '../../../../src/engine/cantian.js'
 export { buildZiwei } from '../../../../src/engine/ziwei.js'
 export { buildLiuyaoPan } from '../../../../src/engine/liuyao.js'
 export { buildQimenFull } from '../../../../src/engine/qimen.js'

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { renderMarkdown } from '../../utils/markdown.jsx'
 
+export function isNearScrollBottom(element, threshold = 32) {
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold
+}
+
 // ── 反馈按钮（👍有用 / 👎不对）→ 技能进化信号源。仅用于测算报告 / 测算论断 ──
 export function FeedbackBar({ msgId, fb, on, report }) {
   return (
@@ -46,36 +50,41 @@ export function CopyButton({ text, title = '复制结果' }) {
 }
 
 // ── AI 思考块：回复中的 <think>…</think> 默认收起为一行（点击展开看推演过程） ────
-// 思考过程与结果正文分别输出：流式中自动展开以便用户实时看到推演；流式结束后默认收起，
-// 结果正文渲染在思考块下方，二者清晰分离。展开后窗口固定高度、内部滚动、字体小细。
+// 思考过程与结果正文分别输出：流式中自动展开以便用户实时看到推演；结论到达时自动收起，
+// 用户仍可按需展开查看完整推演。结果正文渲染在思考块下方，二者清晰分离。
 export function ThinkBlock({ content, streaming = false }) {
-  // 流式中默认展开（让用户看到思考过程），完成后默认收起（让用户聚焦结果正文）
+  // 流式中默认展开；结束时收起，让结论成为视觉焦点。
   const [open, setOpen] = useState(streaming)
+  const [elapsed, setElapsed] = useState(0)
   const bodyRef = useRef(null)
-  const lastStreamingRef = useRef(streaming)
-  // 监听 streaming 由 true → false：流式一结束立即收起——避免"思考块一直开着"
-  // useState 初值只在首次渲染生效，父组件 streaming 变化不会自动更新内部 open 状态
+  const startedAtRef = useRef(streaming ? Date.now() : null)
+  const wasStreamingRef = useRef(streaming)
   useEffect(() => {
-    if (!streaming) setOpen(false)
-    lastStreamingRef.current = streaming
+    if (!streaming) {
+      if (startedAtRef.current) setElapsed(Math.max(1, Math.ceil((Date.now() - startedAtRef.current) / 1000)))
+      return undefined
+    }
+    if (!startedAtRef.current) startedAtRef.current = Date.now()
+    const updateElapsed = () => setElapsed(Math.max(1, Math.ceil((Date.now() - startedAtRef.current) / 1000)))
+    updateElapsed()
+    const timer = setInterval(updateElapsed, 1000)
+    return () => clearInterval(timer)
   }, [streaming])
-  // 兜底：content 不再变化 + 非流式 → 立即收起（防止某些边缘情况下 useEffect 没触发）
-  useEffect(() => {
-    if (streaming) return
-    const t = setTimeout(() => setOpen(false), 250)
-    return () => clearTimeout(t)
-  }, [content, streaming])
   useEffect(() => {
     if (open && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
   }, [content, open])
+  useEffect(() => {
+    if (!streaming && wasStreamingRef.current) setOpen(false)
+    wasStreamingRef.current = streaming
+  }, [streaming])
+  const label = streaming ? `思考中 · ${Math.max(1, elapsed)} 秒` : elapsed ? `已思考 ${elapsed} 秒` : '思考过程'
   return (
     <div className={`think-block ${open ? 'open' : ''} ${streaming ? 'think-streaming' : ''}`}>
       <button className="think-toggle" onClick={() => setOpen(o => !o)} aria-expanded={open}>
-        <span className="think-toggle-left">
-          <span className="think-icon" aria-hidden="true">✦</span>
-          <span className="think-label">{streaming ? '深度思考中…' : '思考过程'}</span>
-        </span>
-        <span className="think-arrow">{open ? '收起' : '展开'}</span>
+        <span className="think-arrow" aria-hidden="true">›</span>
+        <span className="think-icon" aria-hidden="true">✦</span>
+        <span className="think-label">{label}</span>
+        {streaming && <span className="think-status" aria-label="正在思考" />}
       </button>
       {open && (
         <div className="think-body" ref={bodyRef}>
@@ -92,7 +101,7 @@ export function ThinkBlock({ content, streaming = false }) {
 // 同一件事两个样子。
 export const TOOL_NAME_CN = {
   bazi: '八字排盘', ziwei: '紫微排盘', liuyao: '六爻起卦', qimen: '奇门排盘', huangli: '黄历查询',
-  modern_huangli: '幽默黄历', tarot: '塔罗抽牌', name: '姓名分析', fengshui: '风水分析', wuyunliuqi: '五运六气',
+  tarot: '塔罗抽牌', name: '姓名分析', fengshui: '风水分析', wuyunliuqi: '五运六气',
   report: '测算报告', skill: '加载技能',
 }
 
@@ -104,9 +113,10 @@ export function ToolCallsBlock({ names }) {
   return (
     <div className={`tool-block ${open ? 'open' : ''}`}>
       <button className="tool-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className="tool-icon" aria-hidden="true">⚙</span>
+        <span className="tool-arrow" aria-hidden="true">›</span>
+        <span className="tool-icon" aria-hidden="true">⚒</span>
         <span className="tool-label">调用了 {list.length} 个工具</span>
-        <span className="tool-arrow">{open ? '˅' : '˄'}</span>
+        <span className="tool-status" aria-label="调用完成" />
       </button>
       {open && (
         <div className="tool-body">

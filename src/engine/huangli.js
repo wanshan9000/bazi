@@ -4,13 +4,126 @@
 import {
   DAY_RULES, ZHI_CHONG, GAN_THEME, WX_LIFE,
   lunarInfo, weekday, dayElement, solarTerm, zodiacOfYear,
-  dayPillar, yearPillar
+  dayPillar, yearPillar, monthPillar
 } from '../data/huangli.js'
-import { DI_ZHI, SHENGXIAO } from '../data/ganzhi.js'
+import { DI_ZHI, SHENGXIAO, TIAN_GAN } from '../data/ganzhi.js'
 
 // 五行相生相克关系
 const SHENG = { 木: '火', 火: '土', 土: '金', 金: '水', 水: '木' }
 const KE = { 木: '土', 土: '水', 水: '火', 火: '金', 金: '木' }
+
+// 建除十二神以节气月令的月支为起点：月支当日为「建」，地支顺行十二日一周。
+// 《协纪辨方书》的择日思想重在先辨月令、再审用事、后参人事；这里把它实现为
+// 可解释的三层规则，避免将零散神煞或个人喜忌当作一票否决的万能分数。
+export const JIANCHU_VALUES = ['建', '除', '满', '平', '定', '执', '破', '危', '成', '收', '开', '闭']
+
+export const SELECTION_PURPOSES = {
+  marry: {
+    name: '嫁娶',
+    favorableValues: ['定', '成', '开'],
+    avoidValues: ['破', '闭'],
+    aliases: ['嫁娶', '婚嫁', '结婚', '纳采', '订盟'],
+  },
+  move: {
+    name: '入宅',
+    favorableValues: ['定', '成', '开'],
+    avoidValues: ['破', '闭'],
+    aliases: ['入宅', '搬家', '移徙', '安床', '置产'],
+  },
+  business: {
+    name: '开业',
+    favorableValues: ['满', '成', '开'],
+    avoidValues: ['破', '闭'],
+    aliases: ['开市', '开业', '开张', '交易', '纳财', '签约'],
+  },
+}
+
+function dateLabel(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function selectionPurpose(purposeKey) {
+  return SELECTION_PURPOSES[purposeKey] || SELECTION_PURPOSES.marry
+}
+
+function chartBranches(chart) {
+  if (!chart) return []
+  const pillars = Array.isArray(chart.pillars) ? chart.pillars : []
+  const year = pillars.find(p => p.label === '年柱')?.zhi || chart.yearZhi
+  const day = pillars.find(p => p.label === '日柱')?.zhi || chart.dayZhi
+  return [
+    year && { zhi: year, label: '年支' },
+    day && { zhi: day, label: '日支' },
+  ].filter(Boolean)
+}
+
+// 返回当天在节气月令下的建除值日。纯日期也可使用，因而常规黄历与个人黄历共用。
+export function jianchuValue(date) {
+  const yp = yearPillar(date)
+  const mp = monthPillar(date, TIAN_GAN.indexOf(yp.gan))
+  const dp = dayPillar(date)
+  const index = (DI_ZHI.indexOf(dp.zhi) - DI_ZHI.indexOf(mp.zhi) + 12) % 12
+  return { name: JIANCHU_VALUES[index], index, monthPillar: mp, dayPillar: dp }
+}
+
+// 择日规则的优先级：冲忌/用途禁日为硬过滤；建除用事决定是否入选；
+// 个人五行只在已经通过前两层的候选中调整排序，不能把避开日重新抬为吉日。
+export function evaluateSelectionDay(date, chart, purposeKey = 'marry') {
+  const purpose = selectionPurpose(purposeKey)
+  const jianchu = jianchuValue(date)
+  const element = dayElement(date)
+  const hardReasons = []
+  const reasons = [`${jianchu.monthPillar.zhi}月${jianchu.name}日`]
+
+  for (const branch of chartBranches(chart)) {
+    if (ZHI_CHONG[jianchu.dayPillar.zhi] === branch.zhi) {
+      hardReasons.push(`日支${jianchu.dayPillar.zhi}冲命主${branch.label}${branch.zhi}`)
+    }
+  }
+  if (purpose.avoidValues.includes(jianchu.name)) {
+    hardReasons.push(`${jianchu.name}日不作${purpose.name}用事`)
+  }
+  const purposeFit = purpose.favorableValues.includes(jianchu.name)
+  if (purposeFit) reasons.push(`${jianchu.name}日与${purpose.name}用事相合`)
+  else reasons.push(`${jianchu.name}日不列为${purpose.name}首选`)
+
+  let personalScore = 0
+  const favorable = chart?.favorable || []
+  const avoid = chart?.avoid || []
+  const dayElements = [element.ganWx, element.zhiWx]
+  const favorableHits = dayElements.filter(wx => favorable.includes(wx))
+  const avoidHits = dayElements.filter(wx => avoid.includes(wx))
+  if (favorableHits.length) {
+    personalScore += favorableHits.length
+    reasons.push(`当日${favorableHits.join('、')}与命局喜用相合`)
+  }
+  if (avoidHits.length) {
+    personalScore -= avoidHits.length
+    reasons.push(`当日${avoidHits.join('、')}为命局需节制的五行`)
+  }
+
+  const hardBlocked = hardReasons.length > 0
+  const decision = hardBlocked ? 'avoid' : purposeFit ? 'recommend' : 'neutral'
+  // 建除适配为主要排序项；个人项最多贡献 2 分，且硬过滤不因分数改变。
+  const score = (purposeFit ? 10 : 0) + personalScore
+
+  return {
+    date: dateLabel(date),
+    purpose: purpose.name,
+    purposeKey,
+    monthPillar: jianchu.monthPillar,
+    dayPillar: jianchu.dayPillar,
+    jianchu: jianchu.name,
+    dayWx: `${element.ganWx}${element.zhiWx}`,
+    hardBlocked,
+    decision,
+    score,
+    reasons,
+    hardReasons,
+    purposeFit,
+    personalScore,
+  }
+}
 
 // 当日干支与该日主"生克关系"评分为顺/平/慎
 function dayRelation(chart, dayWx, dayZhiWx) {
@@ -53,6 +166,7 @@ function luckTips(chart) {
 export function buildDaily(date, chart) {
   const dp = dayPillar(date)
   const yp = yearPillar(date)
+  const jianchu = jianchuValue(date)
   const el = dayElement(date)
   const term = solarTerm(date)
   const lunar = lunarInfo(date)
@@ -80,10 +194,13 @@ export function buildDaily(date, chart) {
     date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
     week: `周${weekday(date)}`,
     yearGanzhi: `${yp.gan}${yp.zhi}年`,
+    monthGanzhi: `${jianchu.monthPillar.gan}${jianchu.monthPillar.zhi}月`,
     dayGanzhi: `${dp.gan}${dp.zhi}日`,
     dayWx: `${el.ganWx}${el.zhiWx}`,
     lunar: lunar.label,
     term: term.name,
+    monthZhi: jianchu.monthPillar.zhi,
+    jianchu: jianchu.name,
     zhi: dp.zhi,
     chong: `${chongZodiac}（冲${chongZodiac}，避西北动土）`,
     rules,
@@ -95,6 +212,13 @@ export function buildDaily(date, chart) {
     relation: rel,
     action: act,
     tips,
+    // 供黄历报告的所有个人化区块使用；传统黄历原始字段不受此对象改写。
+    bazi: chart ? {
+      dayMaster: chart.dayMaster,
+      dayMasterWx: chart.dayMasterWx,
+      favorable: chart.favorable || [],
+      avoid: chart.avoid || [],
+    } : null,
     life,
     isToday: isSameDay(date, new Date())
   }

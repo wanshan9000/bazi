@@ -134,7 +134,8 @@ function buildClassicReading(total, gender, rating) {
     title: `${formatBoneWeight(total)} · ${genderText}称骨`,
     rule: '常规称骨以农历出生年、月、日、时分别查骨重，四项相加得到总骨重，并分别按男女命作解读。',
     text: `此命总骨重为 ${formatBoneWeight(total)}。按常见称骨口径，属「${rating.tone}」之象：${rating.desc}${genderNote}`,
-    plain: `${rating.plain}${genderNote}`,
+    // 男女命的通用判断已在经典解读中说明；白话提示只保留命格补充，避免重复。
+    plain: rating.plain,
   }
 }
 

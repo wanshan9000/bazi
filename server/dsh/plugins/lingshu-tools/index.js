@@ -4,7 +4,7 @@ import { makeBaziTool } from './tools/bazi.js'
 import { makeZiweiTool } from './tools/ziwei.js'
 import { makeLiuyaoTool } from './tools/liuyao.js'
 import { makeQimenTool } from './tools/qimen.js'
-import { makeHuangliTool, makeModernHuangliTool } from './tools/huangli.js'
+import { makeHuangliTool } from './tools/huangli.js'
 import { makeTarotTool } from './tools/tarot.js'
 import { makeNameTool } from './tools/name.js'
 import { makeFengshuiTool } from './tools/fengshui.js'
@@ -21,7 +21,7 @@ async function loadEngines() {
 }
 
 export const TOOL_FACTORIES = [
-  makeBaziTool, makeZiweiTool, makeLiuyaoTool, makeQimenTool, makeHuangliTool, makeModernHuangliTool,
+  makeBaziTool, makeZiweiTool, makeLiuyaoTool, makeQimenTool, makeHuangliTool,
   makeTarotTool, makeNameTool, makeFengshuiTool, makeWuyunliuqiTool, makeReportTool,
 ]
 

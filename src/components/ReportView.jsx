@@ -266,7 +266,7 @@ const META_ORDER = {
   mangpai: [['baziString', '四柱'], ['solar', '出生'], ['gender', '性别'], ['shengxiao', '生肖'], ['dayMaster', '日主']],
   ziwei:   [['baziString', '命盘'], ['solar', '出生'], ['gender', '性别'], ['shengxiao', '生肖']],
   liuyao:  [['question', '所问'], ['n', '报数'], ['gua', '卦象']],
-  huangli: [['date', '日期'], ['lunar', '农历'], ['yiji', '宜忌']],
+  huangli: [['date', '日期'], ['lunar', '农历'], ['dayGanzhi', '日柱'], ['term', '节气'], ['jianchu', '建除']],
 }
 
 const ReportViewBody = forwardRef(function ReportViewBody({ report, lead, hideLead = false, readonly = false }, ref) {

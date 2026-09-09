@@ -15,7 +15,8 @@ import { getLunarMonths, getLunarDayCount, tryLunarToSolar } from '../utils/luna
 const IDENTITY_OPTIONS = [
   { key: 'worker', name: '打工人', emoji: '💼' },
   { key: 'student', name: '学生党', emoji: '📚' },
-  { key: 'free', name: '自由一族', emoji: '🌿' },
+  { key: 'free', name: '自由族', emoji: '🌿' },
+  { key: 'enjoy', name: '享受族（退休人士）', emoji: '🍵' },
 ]
 
 const LS_SUB = 'genki-huangli-sub'
@@ -36,7 +37,7 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
   const [pref, setPref] = useState(saved?.pref || { time: 'morning', notify: false, enabled: true, role: '', favZodiac: [] })
   const [subToken, setSubToken] = useState(saved?.subToken || '')
   const [serverOk, setServerOk] = useState(false)
-  const [showForm, setShowForm] = useState(!chart)
+  const [showForm, setShowForm] = useState(false)
   const [today, setToday] = useState(new Date())
   // 整页"当前查看日期"（默认今天），本周速览 / 30 天选择器 / 今日黄历卡片都以此同步
   const [viewDate, setViewDate] = useState(() => new Date(today))
@@ -74,12 +75,12 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
     try { localStorage.setItem(LS_SUB, JSON.stringify({ chart, pref, subToken })) } catch { /* ignore */ }
   }, [chart, pref, subToken])
 
-  const week = useMemo(() => chart ? buildWeek(today, chart) : [], [chart, today])
+  const week = useMemo(() => buildWeek(today, chart), [chart, today])
   const profile = chart ? chartProfile(chart) : null
 
-  // 根据订阅人的「年纪 + 身份」自动推断黄历场景
+  // 根据订阅人的「年纪 + 性别 + 身份」自动推断黄历场景
   const age = useMemo(() => (chart ? calcAge(chart.year, chart.month, chart.day) : 0), [chart])
-  const sceneKey = useMemo(() => inferScenario(age, pref.role), [age, pref.role])
+  const sceneKey = useMemo(() => inferScenario(age, pref.role, chart?.gender), [age, pref.role, chart?.gender])
 
   // 浏览器通知授权统一交给 SubscribeBar 内部处理（弹层内可一并开启）
   // 保留占位 prop，避免破坏父组件 onToggleNotify 接口
@@ -115,32 +116,34 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
             <span className="hl-hero-main">
               <span>黄历</span>
               {!showForm && (
-                <button className="title-chart-change" onClick={() => setShowForm(true)} title="更换生辰" aria-label="更换生辰">
+                <button className="title-chart-change" onClick={() => setShowForm(true)} title={chart ? '更换生辰' : '输入生辰'} aria-label={chart ? '更换生辰' : '输入生辰'}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M3 12a9 9 0 1 0 3-6.7" />
                     <path d="M3 3v5h5" />
                   </svg>
-                  <span>更换生辰</span>
+                  <span>{chart ? '更换生辰' : '输入生辰'}</span>
                 </button>
               )}
             </span>
           </div>
-          <div className="hl-hero-sub">查每日宜忌 · 配生辰开运 · 找到你的出厂设置</div>
+          <div className="hl-hero-sub">先读今日传统规则 · 再结合生辰看自己的安排</div>
         </div>
 
         {showForm ? (
           <BirthForm onDone={(c, role) => {
             setChart(c)
-            if (role) setPref(prev => ({ ...prev, role }))
+            // 空值代表“不手动指定”：清除旧选择，改由生辰年龄与性别自动判定场景。
+            setPref(prev => ({ ...prev, role }))
             setShowForm(false)
-          }} />
+          }} onCancel={() => setShowForm(false)} />
         ) : (
           <>
             {profile && <ProfileBar profile={profile} />}
+            {!chart && <PersonalizePrompt onStart={() => setShowForm(true)} />}
 
             {/* 今日融合黄历（订阅设置 + 融合卡片） */}
             <div className="card hl-report-card rise rise-4">
-              <div className="hl-report-head">
+              {chart && <div className="hl-report-head">
                 <SubscribeBar
                   pref={pref}
                   setPref={setPref}
@@ -154,7 +157,7 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
                   user={user}
                   onRequireLogin={onRequireLogin}
                 />
-              </div>
+              </div>}
               <FusedHuangliCard
                 chart={chart}
                 date={viewDate}
@@ -165,16 +168,16 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
               />
             </div>
 
-            <WeekStrip week={week} chart={chart} viewDate={viewDate} onSelectDate={setViewDate} />
+            <WeekStrip week={week} personalized={Boolean(chart)} viewDate={viewDate} onSelectDate={setViewDate} />
 
-            <MonthCurve chart={chart} today={today} />
+            {chart && <MonthCurve chart={chart} today={today} />}
 
             <div className="card" style={{ marginTop: 16, textAlign: 'center', padding: '16px' }}>
               <button className="btn ghost small" onClick={() => { setToday(new Date()); window.scrollTo(0, 0) }}>回到今天</button>
             </div>
 
             <p className="form-note" style={{ marginTop: 14, textAlign: 'center' }}>
-              订阅基于你的八字生成 · 每日提示仅供生活参考，命由己造
+              {chart ? '已结合你的命局与当天日气生成提示 · 用作安排参考，主动选择始终在你' : '当前展示传统黄历信息 · 输入生辰后，可获得更贴近你的节奏与安排提示'}
             </p>
           </>
         )}
@@ -184,7 +187,7 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
 }
 
 // ---- 生辰表单（与八字门一致） ----
-function BirthForm({ onDone }) {
+function BirthForm({ onDone, onCancel }) {
   const now = new Date()
   const [calendar, setCalendar] = useState('solar')
   const [year, setYear] = useState(1995)
@@ -233,10 +236,10 @@ function BirthForm({ onDone }) {
     <div className="card rise rise-3 huangli-entry-form">
       <div className="hl-form-head">
         <span className="hl-form-spark" aria-hidden="true">✦</span>
-        <span>用你的八字订制每日黄历</span>
+        <span>用你的八字看每日安排</span>
         <span className="hl-form-spark" aria-hidden="true">✦</span>
       </div>
-      <p className="hl-form-sub">填入出生信息，生成专属于你的每日开运提示</p>
+      <p className="hl-form-sub">填入出生信息，查看命局与当天日气的关系，以及更贴近生活的安排建议</p>
 
       <div className="field-pair">
         <div className="field">
@@ -249,10 +252,10 @@ function BirthForm({ onDone }) {
           </div>
         </div>
         <div className="field">
-          <label>你的身份</label>
+          <label>你的日常场景</label>
           <div className="select-wrap">
             <select value={role} onChange={e => setRole(e.target.value)}>
-              <option value="">不选（按年纪自动推断）</option>
+              <option value="">暂不选择（按生辰年龄与性别自动判断）</option>
               {IDENTITY_OPTIONS.map(o => (
                 <option key={o.key} value={o.key}>{o.emoji} {o.name}</option>
               ))}
@@ -325,10 +328,24 @@ function BirthForm({ onDone }) {
 
       <div className="form-actions">
         <button className="btn" style={{ width: '100%' }} onClick={submit}>
-          ✦ 生成我的专属黄历
+          ✦ 查看我的今日参考
         </button>
+        <button type="button" className="hl-form-cancel" onClick={onCancel}>先看今日传统黄历</button>
       </div>
     </div>
+  )
+}
+
+function PersonalizePrompt({ onStart }) {
+  return (
+    <aside className="hl-personalize-prompt rise rise-3">
+      <div className="hl-personalize-mark" aria-hidden="true">✦</div>
+      <div className="hl-personalize-copy">
+        <b>先从今天的传统信息开始</b>
+        <p>这里有每日宜忌、冲煞和日神方位。补充生辰后，页面会再给出命局与当天日气的关系，以及个人安排提示。</p>
+      </div>
+      <button type="button" className="btn small" onClick={onStart}>补充生辰</button>
+    </aside>
   )
 }
 
@@ -339,15 +356,15 @@ function ProfileBar({ profile }) {
       <div className="hl-profile-info">
         <div className="hl-profile-line">
           <span className="hl-profile-title">
-            {profile.dayMaster}日主 · <em>{profile.dayMasterWx}</em>命 · {profile.shengxiao}肖
+            命盘摘要 · {profile.dayMaster}日主 · <em>{profile.dayMasterWx}</em>命 · {profile.shengxiao}肖
           </span>
           <span className={`hl-profile-strength ${profile.strength === '旺' ? 'strong' : 'weak'}`}>
             {profile.strength === '旺' ? '身旺' : '身弱'}
           </span>
         </div>
         <div className="hl-profile-tags">
-          <span className="hl-tag good">喜神 {profile.favorable.join('·')}</span>
-          <span className="hl-tag bad">忌神 {profile.avoid.join('·')}</span>
+          <span className="hl-tag good">偏好五行 {profile.favorable.join('·')}</span>
+          <span className="hl-tag bad">留意五行 {profile.avoid.join('·')}</span>
           <span className="hl-tag wx">{profile.gender === '男' ? '乾造' : '坤造'}</span>
         </div>
       </div>
@@ -378,6 +395,7 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
   const smsMock = channels.sms === 'local(mock)'
   const wechatMock = channels.wechat === 'local(mock)'
   const fav = pref.favZodiac || []
+  const birthZodiac = chart?.shengxiao || ''
   const [tab, setTab] = useState(serverOk ? 'sms' : 'local') // sms | wechat | local
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
@@ -488,7 +506,7 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
       {!user && (
         <div className="hl-sub-login">
           <span className="hl-sub-login-ic" aria-hidden>🔒</span>
-          <span className="hl-sub-login-txt">订阅黄历是「凡者」会员权益 · 注册登录后即可开通每日宜忌推送（扫码识别一步注册 · 自动登录）</span>
+          <span className="hl-sub-login-txt">登录后可保存提醒设置，并按你选定的时段接收每日黄历</span>
           <button className="hl-sub-login-btn" onClick={() => onRequireLogin && onRequireLogin()}>注册 / 登录</button>
         </div>
       )}
@@ -497,13 +515,13 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
       <div className="hl-sub-head">
         <div className="hl-sub-head-l">
           <span className="hl-sub-ic">🔔</span>
-          <span className="hl-sub-title">每日提醒</span>
+          <span className="hl-sub-title">每日黄历提醒</span>
           <span className="hl-sub-tip">
             {!user
-              ? '会员权益 · 登录后开通'
+              ? '登录后可保存设置'
               : (serverOk
-                ? (subToken ? '已通过短信/微信订阅 · 按时段推送' : '短信 / 微信扫码订阅，按时段推送')
-                : '后端未连接 · 已用浏览器通知')}
+                ? (subToken ? '已开启 · 按所选时段推送' : '支持短信或微信扫码 · 按时段推送')
+                : '当前使用浏览器通知')}
           </span>
         </div>
         <button
@@ -521,8 +539,8 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
         <>
           <div className="hl-sub-ok">
             <span className="hl-sub-ok-ic">✅</span>
-            <span className="hl-sub-ok-txt">订阅已生效，每天按时段推送当日黄历</span>
-            <button className="hl-sub-ok-cancel" onClick={handleUnsubscribe}>取消</button>
+            <span className="hl-sub-ok-txt">提醒已开启，将在所选时段发送当日黄历</span>
+            <button className="hl-sub-ok-cancel" onClick={handleUnsubscribe}>关闭提醒</button>
           </div>
 
           {/* 时段三选 */}
@@ -541,17 +559,17 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
           {/* 未订阅：简短提示 + 触发弹层 */}
           <div className="hl-sub-prompt">
             <div className="hl-sub-prompt-txt">
-              <div className="hl-sub-prompt-h">开通每日提醒</div>
-              <div className="hl-sub-prompt-s">支持手机短信 / 微信扫码，按你选定时段准时推送</div>
+              <div className="hl-sub-prompt-h">把每日黄历送到你手边</div>
+              <div className="hl-sub-prompt-s">选择短信或微信扫码，并设定你方便查看的时段</div>
             </div>
             <button className="hl-sub-prompt-btn" onClick={() => { if (requireUser()) return; setShowModal(true) }}>
-              ✦ 选择提醒方式
+              ✦ 设置提醒
             </button>
           </div>
         </>
       ) : (
         <div className="hl-sub-local">
-          <div className="hl-sub-ok-txt">当前为浏览器通知模式（后端未连接）。</div>
+          <div className="hl-sub-ok-txt">当前使用浏览器通知；关闭页面或清理站点数据后，设置可能失效。</div>
           <div className="hl-sub-times-row" style={{ marginTop: 10 }}>
             {TIMES.map(t => (
               <button key={t.k} className={`hl-sub-time ${pref.time === t.k ? 'active' : ''}`} onClick={() => setPref(prev => ({ ...prev, time: t.k }))}>
@@ -568,19 +586,28 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
       <div className="hl-sub-fav">
         <div className="hl-sub-fav-head">
           <span className="hl-sub-ic">🐾</span>
-          <span className="hl-sub-title">关注生肖</span>
-          <span className="hl-sub-tip">多选 · 为你特别标注其每日运势</span>
+          <span className="hl-sub-title">标记关注生肖</span>
+          <span className="hl-sub-tip">{birthZodiac ? `已按生辰标记${birthZodiac} · 可继续多选关注` : '可多选 · 展开生肖参考时会优先标出'}</span>
         </div>
         <div className="hl-zodiac-grid">
-          {ZODIACS.map(z => (
-            <button
-              key={z}
-              className={`hl-zodiac-chip ${fav.includes(z) ? 'active' : ''}`}
-              onClick={() => toggleZodiac(z)}
-              aria-pressed={fav.includes(z)}
-              title={fav.includes(z) ? `取消关注${z}` : `关注${z}`}
-            >{z}</button>
-          ))}
+          {ZODIACS.map(z => {
+            const isBirthZodiac = z === birthZodiac
+            const isFollowed = fav.includes(z)
+            return (
+              <button
+                key={z}
+                data-zodiac={z}
+                className={`hl-zodiac-chip ${isFollowed ? 'active' : ''} ${isBirthZodiac ? 'mine' : ''}`}
+                onClick={() => toggleZodiac(z)}
+                aria-pressed={isFollowed || isBirthZodiac}
+                aria-label={isBirthZodiac ? `${z}，本命生肖${isFollowed ? '，已额外关注' : ''}` : `${isFollowed ? '取消关注' : '关注'}${z}`}
+                title={isBirthZodiac ? `${z}是你的本命生肖${isFollowed ? '；已额外关注' : '；点击可额外关注'}` : (isFollowed ? `取消关注${z}` : `关注${z}`)}
+              >
+                {z}
+                {isBirthZodiac && <span className="hl-zodiac-mine-mark" aria-hidden="true">我</span>}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -594,7 +621,7 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
         <div className="hl-modal-overlay" onClick={() => setShowModal(false)}>
           <div className="hl-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="hl-modal-title">
             <div className="hl-modal-head">
-              <div id="hl-modal-title" className="hl-modal-title">✦ 选择提醒方式</div>
+              <div id="hl-modal-title" className="hl-modal-title">✦ 设置每日提醒</div>
               <button className="hl-modal-close" onClick={() => setShowModal(false)} aria-label="关闭">×</button>
             </div>
 
@@ -635,7 +662,7 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
               </div>
             ) : (
               <div className="hl-sub-wechat">
-                <div className="hl-wechat-tip">使用微信「扫一扫」，扫码后确认订阅，即可每天收到当日黄历推送。</div>
+                <div className="hl-wechat-tip">使用微信“扫一扫”，确认后即可按所选时段接收当日黄历。</div>
                 <button className="hl-sub-btn wx" onClick={handleWechat} disabled={busy}>
                   {busy ? '处理中…' : '💬 打开微信扫码订阅'}
                 </button>
@@ -644,7 +671,7 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
             )}
 
             <div className="hl-modal-foot">
-              <button className="hl-modal-cancel" onClick={() => setShowModal(false)}>稍后再说</button>
+                <button className="hl-modal-cancel" onClick={() => setShowModal(false)}>暂不设置</button>
             </div>
           </div>
         </div>,
@@ -655,7 +682,7 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
 }
 
 // ---- 一周预览 ----
-function WeekStrip({ week, chart, viewDate, onSelectDate }) {
+function WeekStrip({ week, personalized, viewDate, onSelectDate }) {
   const fmt = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
   const selKey = viewDate ? fmt(viewDate) : null
   const parseDate = (s) => {
@@ -665,8 +692,8 @@ function WeekStrip({ week, chart, viewDate, onSelectDate }) {
   return (
     <div className="card hl-week rise rise-5">
       <div className="hl-sec-head">
-        <div className="hl-sec-title">✦ 本周速览</div>
-        <span className="hl-sec-sub">七日小运 · 择优而行</span>
+        <div className="hl-sec-title">✦ 接下来七天</div>
+        <span className="hl-sec-sub">{personalized ? '命局与日气的节奏参考' : '传统宜忌速览 · 点击查看当天'}</span>
       </div>
       <div className="hl-week-grid">
         {week.map(d => {
@@ -772,8 +799,8 @@ function MonthCurve({ chart, today }) {
   return (
     <div className="card hl-month rise rise-6">
       <div className="hl-sec-head">
-        <div className="hl-sec-title">✦ 月度运势曲线</div>
-        <span className="hl-sec-sub">{today.getFullYear()}年{today.getMonth() + 1}月 · 生克评分趋势</span>
+        <div className="hl-sec-title">✦ 本月节奏</div>
+        <span className="hl-sec-sub">{today.getFullYear()}年{today.getMonth() + 1}月 · 命局与日气关系的相对变化</span>
       </div>
 
       <div className="hl-month-chart">
@@ -833,10 +860,10 @@ function MonthCurve({ chart, today }) {
 
       {/* 图例 */}
       <div className="hl-month-legend">
-        <span className="hl-m-lg"><i style={{ background: 'var(--jade)' }} />顺 · 生扶</span>
-        <span className="hl-m-lg"><i style={{ background: 'var(--gold)' }} />平 · 平稳</span>
-        <span className="hl-m-lg"><i style={{ background: 'var(--cinnabar)' }} />慎 · 冲克</span>
-        <span className="hl-m-lg avg"><i />均线（5日）</span>
+        <span className="hl-m-lg"><i style={{ background: 'var(--jade)' }} />顺 · 较易借力</span>
+        <span className="hl-m-lg"><i style={{ background: 'var(--gold)' }} />平 · 保持节奏</span>
+        <span className="hl-m-lg"><i style={{ background: 'var(--cinnabar)' }} />慎 · 宜放慢确认</span>
+        <span className="hl-m-lg avg"><i />近 5 日趋势</span>
       </div>
     </div>
   )

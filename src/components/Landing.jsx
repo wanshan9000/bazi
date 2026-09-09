@@ -183,6 +183,9 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
               <button className="btn ghost" onClick={() => onGate('bazi')}>排八字</button>
               <button className="btn ghost" onClick={() => onGate('tarot')}>抽塔罗</button>
               <button className="btn ghost" onClick={() => onGate('huangli')}>看黄历</button>
+              <button className="btn ghost" onClick={() => onGate('huangli')}>择吉</button>
+              <button className="btn ghost" onClick={() => onGate('fengshui')}>座位风水</button>
+              <button className="btn ghost" onClick={() => onGate('ziwei')}>紫微</button>
             </div>
           </div>
         </div>

@@ -7,7 +7,7 @@ import { skillToMarkdown, writeSkills, skillDirName, readSkillDoc, SKILL_DOCS_DI
 import { syncAdminSkill, removeAdminSkill } from '../adminSkills.js'
 
 test('skill key 转 kebab-case 目录名', () => {
-  assert.equal(skillDirName('modern_huangli'), 'modern-huangli')
+  assert.equal(skillDirName('daily_huangli'), 'daily-huangli')
   assert.equal(skillDirName('yixue-taishan'), 'yixue-taishan')
 })
 

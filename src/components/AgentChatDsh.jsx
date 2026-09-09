@@ -7,7 +7,7 @@ import { refreshSession } from '../data/users.js'
 import { canAfford, nextPlanKey } from '../engine/membership.js'
 import { loadQuota, addAgentTokens, tokensToCredits, isAgentOverQuota } from '../engine/freeQuota.js'
 import { renderMarkdown } from '../utils/markdown.jsx'
-import { ThinkBlock, ToolCallsBlock, CopyButton, renderAiText, timeNow, fmtSessionTime, QUICK } from './agent/ChatParts.jsx'
+import { ThinkBlock, ToolCallsBlock, CopyButton, renderAiText, timeNow, fmtSessionTime, QUICK, isNearScrollBottom } from './agent/ChatParts.jsx'
 
 const api = createAgentApi()
 const ROUTE_KEY = 'genki-agent-route'
@@ -54,12 +54,16 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
   // 登录之后游客那道闸门就不适用了，清掉阻断状态，别让弹窗一直挂着
   useEffect(() => { if (user) setGuestBlocked('') }, [user])
   const scrollRef = useRef(null)
+  const followScrollRef = useRef(true)
   const abortRef = useRef(null)
   const booted = useRef(false)
 
   useEffect(() => { setAgentTokens(loadQuota().agentTokens || 0) }, [])
   useEffect(() => { api.listModels().then(m => setModels({ routes: m.routes || [], default: m.default })).catch(() => {}) }, [])
-  useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight }, [messages, typing])
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el && followScrollRef.current) el.scrollTop = el.scrollHeight
+  }, [messages, typing])
   useEffect(() => {
     if (!pickerOpen) return
     const close = () => setPickerOpen(false)
@@ -96,6 +100,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
   }, [])
 
   const patchLast = fn => setMessages(prev => prev.map((m, i) => i === prev.length - 1 && m.role === 'ai' && m.streaming ? fn(m) : m))
+  const handleChatScroll = event => { followScrollRef.current = isNearScrollBottom(event.currentTarget) }
 
   const send = async (text) => {
     const q = (text || input).trim()
@@ -108,6 +113,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
       setQuotaDismissed(false)
       return
     }
+    followScrollRef.current = true
     setInput('')
     setTyping(true)
     setMessages(prev => [...prev, { id: `u-${Date.now()}`, role: 'user', text: q, time: timeNow() }, { id: `a-${Date.now()}`, role: 'ai', text: '', reasoning: '', tools: [], streaming: true, time: timeNow() }])
@@ -345,7 +351,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
         )}
       </div>
 
-      <div className="chat-scroll" ref={scrollRef}>
+      <div className="chat-scroll" ref={scrollRef} onScroll={handleChatScroll}>
         {messages.map(m => (
           <div key={m.id} className={`msg ${m.role}`}>
             <div className="avatar">{m.role === 'ai' ? '三' : m.role === 'tool' ? '🔧' : '我'}</div>

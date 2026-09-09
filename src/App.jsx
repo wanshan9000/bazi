@@ -95,7 +95,9 @@ function TopBar({ view, onNav, user, onUser, credits }) {
                 <span className="cc-num">{credits === Infinity ? '∞' : credits}</span>
               </button>
               <button className="user-chip" onClick={() => onUser('profile')} title="我的元氣">
-                <span className="user-chip-avatar">{user.avatar}</span>
+                <span className={`user-chip-avatar ${/^data:image\/(?:png|jpeg|webp);base64,/i.test(String(user.avatar || '')) ? 'user-chip-avatar-image' : ''}`}>
+                  {/^data:image\/(?:png|jpeg|webp);base64,/i.test(String(user.avatar || '')) ? <img src={user.avatar} alt="" /> : user.avatar}
+                </span>
                 <span className="user-chip-name">{user.nickname}</span>
               </button>
             </>
@@ -176,7 +178,7 @@ export default function App() {
   const [sharedReport, setSharedReport] = useState(null)
   // 未登录排盘后的"登录回来继续"视图（注册/登录成功后自动返回）
   const [pendingView, setPendingView] = useState(null)
-  // 订阅 Modal 状态：null=关闭；否则为待开通/续费的档位 key
+  // 订阅 Modal 状态：待选档位 + 是否先进入续费方案选择。
   const [subscribeModal, setSubscribeModal] = useState(null)
 
   // 启动 / 切换账号时向服务端确认登录态并拉取权威状态
@@ -374,13 +376,9 @@ export default function App() {
   }
 
   // 打开订阅 Modal（来自 Landing 定价卡、Profile 升级、ReportLock 等入口）
-  const openSubscribe = (planKey) => {
-    setSubscribeModal(planKey || 'earth')
+  const openSubscribe = (planKey, { selectPlan = false } = {}) => {
+    setSubscribeModal({ planKey: planKey || 'earth', selectPlan })
   }
-  const handleSubscribeSuccess = (updatedUser) => {
-    if (updatedUser) setUser(updatedUser)
-  }
-
   const handleChart = (data) => {
     if (!data.year) {
       setView('bazi')
@@ -586,11 +584,11 @@ export default function App() {
         <Suspense fallback={null}>
           <MembershipModal
             open
-            planKey={subscribeModal}
+            planKey={subscribeModal.planKey}
             user={user}
             onClose={() => setSubscribeModal(null)}
-            onSuccess={handleSubscribeSuccess}
             onRequireLogin={() => requireLogin('subscribe')}
+            showPlanPicker={subscribeModal.selectPlan}
           />
         </Suspense>
       )}
