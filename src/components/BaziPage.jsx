@@ -271,16 +271,11 @@ function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, o
   )
   const school = tab === 'ziping' ? '子平派' : '盲派'
   const reportRef = useRef(null)
-  const handleMd = () => reportRef.current?.exportMd?.()
-  const handleCopy = () => reportRef.current?.copy?.()
   const handleShare = () => reportRef.current?.share?.()
 
-  // 复制/分享导出的是完整命书文本 → 登录后可用
+  // 分享完整命书仅限登录用户。
   const actionsEl = user ? (
     <div className="br-actions">
-      <button className="br-btn" onClick={handleCopy} data-tip="复制" title="复制报告" aria-label="复制报告">
-        <span className="br-btn-icon">⧉</span>
-      </button>
       <button className="br-btn" onClick={handleShare} data-tip="分享" title="分享报告" aria-label="分享报告">
         <span className="br-btn-icon">↗</span>
       </button>

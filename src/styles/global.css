@@ -5380,10 +5380,26 @@ select option { background: var(--paper-light); color: var(--ink); }
   box-shadow: var(--shadow);
   border-color: rgba(224, 92, 133, 0.5);
 }
-/* 塔罗分类筛选行（主分类大 chip） */
-.spread-cat-row { justify-content: center; margin-bottom: 8px; flex-wrap: nowrap; }
-.spread-cat-row .cat-chip .cl { font-size: 14px; }
-.spread-cat-row .cat-chip .ce { font-size: 15px; }
+/* 文库与塔罗分类：紧凑单行，超出阅读列时横向滑动查看。 */
+.articles-page .cat-row,
+.spread-cat-row {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.articles-page .cat-row .cat-chip,
+.spread-cat-row .cat-chip {
+  gap: 5px;
+  padding: 7px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.articles-page .cat-row .cat-chip .cl,
+.spread-cat-row .cat-chip .cl { white-space: nowrap; }
+.articles-page .cat-row .cat-chip .ce,
+.spread-cat-row .cat-chip .ce { font-size: 13px; }
+.spread-cat-row { margin-bottom: 8px; }
 
 /* 牌阵结果标题 */
 .spread-result-head {
@@ -6387,6 +6403,17 @@ select option { background: var(--paper-light); color: var(--ink); }
   .hero-agent-input button svg { width: 24px; height: 24px; }
   .hero-agent-suggestions { margin-bottom: 22px; }
   .hero-cta { gap: 8px; }
+}
+
+/* 721–760px 的窄网页宽度仍使用首页大标题，但整句必须保持一行。 */
+@media (min-width: 721px) and (max-width: 760px) {
+  .hero h1 {
+    font-size: 44px;
+    letter-spacing: 0.035em;
+    white-space: nowrap;
+    word-break: keep-all;
+  }
+  .hero h1 .hero-line { white-space: nowrap; }
 }
 @media (max-width: 420px) {
   .gates { gap: 8px; }
@@ -8158,7 +8185,63 @@ select option { background: var(--paper-light); color: var(--ink); }
 .cg-bone-value span { font-size: 14px; color: var(--ink-soft); margin-left: 2px; }
 .cg-bone-detail { font-size: 11.5px; color: var(--ink-faint); letter-spacing: 0.04em; }
 @media (max-width: 720px) { .cg-bone-grid { grid-template-columns: repeat(2, 1fr); } }
+.cg-classic-card {
+  padding: 18px 20px;
+  border: 1px solid rgba(224, 92, 133, 0.24);
+  background: linear-gradient(135deg, rgba(224, 92, 133, 0.075), var(--paper-light) 54%);
+}
+.cg-classic-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(224, 92, 133, 0.16);
+}
+.cg-classic-head span { color: var(--cinnabar-deep); font-family: var(--serif); font-size: 13px; font-weight: 800; letter-spacing: 0.14em; }
+.cg-classic-head b { color: var(--ink-soft); font-family: var(--serif); font-size: 14px; letter-spacing: 0.08em; }
+.cg-classic-rule { margin: 12px 0 0; color: var(--ink-faint); font-size: 11.5px; line-height: 1.7; }
+.cg-classic-text { margin: 12px 0 0; color: var(--ink-soft); font-family: var(--serif); font-size: 14px; line-height: 1.85; }
+.cg-classic-plain { margin: 9px 0 0; padding-left: 11px; border-left: 2px solid rgba(224, 92, 133, 0.45); color: #5a6474; font-size: 12.5px; line-height: 1.75; }
 .cg-line-list { display: grid; gap: 10px; }
+.cg-analysis-note {
+  max-width: 680px;
+  margin: -2px auto 12px;
+  color: var(--ink-faint);
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: center;
+}
+.cg-bazi-basis {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.cg-bazi-basis > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ink-line);
+  background: var(--paper-light);
+}
+.cg-bazi-basis span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink-faint);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+}
+.cg-bazi-basis b {
+  display: block;
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-family: var(--serif);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .cg-line {
   display: grid;
   grid-template-columns: 80px 1fr;
@@ -8172,6 +8255,14 @@ select option { background: var(--paper-light); color: var(--ink); }
 .cg-line-label { font-family: var(--serif); font-size: 14px; color: var(--cinnabar-deep); font-weight: 700; letter-spacing: 0.16em; }
 .cg-line-text { font-size: 13px; color: var(--ink-soft); line-height: 1.8; }
 .cg-foot { text-align: center; color: var(--ink-faint); font-size: 12px; margin: 30px 0 0; letter-spacing: 0.1em; }
+@media (max-width: 560px) {
+  .cg-classic-card { padding: 15px 14px; }
+  .cg-classic-head { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .cg-bazi-basis { grid-template-columns: 1fr; gap: 6px; }
+  .cg-bazi-basis > div { padding: 9px 11px; }
+  .cg-bazi-basis span { display: inline; margin-right: 8px; }
+  .cg-bazi-basis b { display: inline; overflow: visible; white-space: normal; }
+}
 
 /* ============ 姓名测算 ============ */
 .name-input { padding: 22px; border-radius: 16px; }
@@ -8847,12 +8938,13 @@ select option { background: var(--paper-light); color: var(--ink); }
 .br-palace-card.tone-star .br-palace-name { color: #7c5ca8; }
 .br-palace-card.tone-star .br-palace-tag { color: #7c5ca8; border-color: rgba(124, 92, 168, 0.32); background: rgba(124, 92, 168, 0.1); }
 .br-palace-card.tone-bad { border-color: rgba(164, 100, 95, 0.34); background: linear-gradient(160deg, rgba(164, 100, 95, 0.055), var(--paper-light)); }
-.br-palace-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
+.br-palace-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
 .br-palace-name { font-family: var(--serif); font-size: 13.5px; color: var(--br-accent); letter-spacing: 0.14em; }
 .br-palace-tag {
-  flex: none; font-size: 10px; padding: 2px 8px; border-radius: 999px;
+  flex: 0 1 auto; min-width: 0; max-width: calc(100% - 96px);
+  font-size: 10px; line-height: 1.45; padding: 2px 8px; border-radius: 999px;
   background: rgba(var(--br-accent-rgb), 0.1); border: 1px solid rgba(var(--br-accent-rgb), 0.22);
-  color: var(--br-accent); letter-spacing: 0.06em;
+  color: var(--br-accent); letter-spacing: 0.06em; white-space: normal; overflow-wrap: anywhere;
 }
 .br-palace-sub { font-size: 11px; color: var(--ink-faint); letter-spacing: 0.06em; margin-bottom: 4px; }
 .br-palace-desc { font-size: 12px; color: var(--ink-soft); line-height: 1.7; margin: 0; }
@@ -10096,6 +10188,11 @@ select option { background: var(--paper-light); color: var(--ink); }
   letter-spacing: 0.06em;
   margin-top: 6px;
 }
+.zw-head .chart-head .name,
+.zw-head .chart-head .sub {
+  width: min(300px, 100%);
+  margin-inline: auto;
+}
 .zw-head-btn {
   width: 32px;
   height: 32px;
@@ -10121,6 +10218,7 @@ select option { background: var(--paper-light); color: var(--ink); }
 }
 .zw-head-btn:active { transform: translateY(0); }
 .zw-head-btn:focus-visible { outline: 2px solid var(--cinnabar); outline-offset: 2px; }
+
 @media (max-width: 1023px) {
   .zw-head-actions { flex-direction: column; gap: 5px; }
   .zw-head-btn { width: 30px; height: 30px; font-size: 15px; }
@@ -10132,6 +10230,28 @@ select option { background: var(--paper-light); color: var(--ink); }
   .zw-head-actions { top: 12px; right: 12px; }
   .zw-head-btn { width: 28px; height: 28px; font-size: 14px; }
   .zw-head .chart-head { padding-right: 60px; margin-top: 0; text-align: left; }
+}
+
+/* 游客态没有右上角工具，报告标题与摘要以整张卡片为中心。 */
+.zw-head--plain .chart-head {
+  padding-right: 0;
+  text-align: center;
+}
+
+/* 紫微报告标题保留原有白色阅读底，但不使用边框或阴影把它做成独立卡片。 */
+.zw-report-head {
+  padding: 8px 0 16px;
+  background: var(--paper-light);
+  border: 0;
+  box-shadow: none;
+}
+.zw-report-head .chart-head {
+  padding-right: 0;
+  text-align: center;
+}
+.zw-report-head .chart-head .name,
+.zw-report-head .chart-head .sub {
+  width: min(300px, calc(100% - 44px));
 }
 
 /* —— 分享二维码弹窗 —— */
@@ -10363,11 +10483,102 @@ select option { background: var(--paper-light); color: var(--ink); }
 
 /* ============ 奇门遁甲 · 起盘台（米色国风，参考深紫卡结构） ============ */
 .qimen-page { max-width: 760px; margin: 0 auto; padding: 6px 0 40px; }
+/* 报告页与八字、紫微共用同一阅读列：手机留出呼吸边距，平板逐级放宽，网页端收在 820px。 */
+.qimen-report-page {
+  width: calc(100% - 28px);
+  max-width: 640px;
+}
+.qimen-report-page-title {
+  width: 100vw;
+  margin: 4px 0 18px calc(50% - 50vw);
+  padding: 8px 20px 18px;
+  text-align: center;
+  border-bottom: 1px dashed var(--ink-line);
+}
+.qimen-report-page-title h1 {
+  margin: 0;
+  color: var(--ink-strong);
+  font-family: var(--serif);
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: 0.12em;
+}
+.qimen-report-page-title p {
+  margin: 10px 0 0;
+  color: var(--ink-faint);
+  font-family: var(--serif);
+  font-size: 12px;
+  line-height: 1.7;
+  letter-spacing: 0.22em;
+  text-indent: 0.22em;
+}
+.qimen-hero { display: none; }
 
-.qimen-report-bar {
+/* iPad：起盘页保持舒适的阅读列，避免横屏时铺满整块屏幕。 */
+@media (min-width: 721px) {
+  .qimen-page {
+    width: calc(100% - 40px);
+    max-width: 860px;
+    padding: 10px 0 52px;
+  }
+  .qimen-page .bazi-report { padding: 24px 26px 30px; }
+  .qimen-page .br-nav { top: 12px; margin-top: 14px; }
+}
+/* 与全站 .container 的报告断点保持一致，避免奇门报告比其他报告更宽。 */
+@media (min-width: 721px) { .qimen-report-page { width: 100%; max-width: 700px; } }
+@media (min-width: 768px) { .qimen-report-page { max-width: 720px; } }
+@media (min-width: 800px) { .qimen-report-page { max-width: 760px; } }
+@media (min-width: 834px) { .qimen-report-page { max-width: 790px; } }
+@media (min-width: 1024px) { .qimen-report-page { max-width: 820px; } }
+@media (max-width: 560px) {
+  .qimen-report-page-title { margin-bottom: 12px; padding: 4px 16px 14px; }
+  .qimen-report-page-title h1 { font-size: 27px; }
+  .qimen-report-page-title p { margin-top: 7px; font-size: 11px; letter-spacing: 0.12em; text-indent: 0.12em; }
+}
+@media (min-width: 870px) {
+  .qimen-report-page-title { margin-top: 6px; margin-bottom: 28px; padding: 10px 24px 22px; }
+  .qimen-report-page-title h1 { font-size: 48px; }
+  .qimen-report-page-title p { margin-top: 14px; font-size: 16px; letter-spacing: 0.28em; text-indent: 0.28em; }
+}
+
+/* 奇门报告仅有一个右上角分享操作，标题和局势摘要始终按整张卡片居中。 */
+.qimen-report-head .chart-head {
+  padding-right: 0;
+  text-align: center;
+}
+.qimen-report-head .chart-head .name,
+.qimen-report-head .chart-head .sub {
+  width: min(300px, calc(100% - 44px));
+  text-align: center;
+}
+.qimen-report-head .chart-head .name {
   display: flex;
-  justify-content: flex-start;
-  margin: 0 0 14px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.qimen-report-recast {
+  flex: none;
+  padding: 4px 7px;
+  border: 1px solid rgba(224, 92, 133, 0.35);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cinnabar-deep);
+  font-family: var(--serif);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.qimen-report-recast:hover { background: var(--cinnabar-soft); }
+.qimen-report-recast:focus-visible { outline: 2px solid var(--cinnabar); outline-offset: 2px; }
+
+/* iPad 横屏与网页端只保留顶部导航，避免两组导航同时占用阅读空间。 */
+@media (min-width: 870px) {
+  .bottom-nav { display: none; }
 }
 
 .qimen-loading {
@@ -10411,6 +10622,16 @@ select option { background: var(--paper-light); color: var(--ink); }
   color: var(--cinnabar-deep);
   letter-spacing: 0.22em;
   padding-left: 14px;
+}
+.qb-title-spark { display: none; }
+.qb-sub {
+  display: none;
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.65;
+  letter-spacing: 0.05em;
 }
 .qb-icon {
   display: inline-flex; align-items: center; justify-content: center;
@@ -10534,6 +10755,93 @@ select option { background: var(--paper-light); color: var(--ink); }
 .qb-launch:active:not(:disabled) { transform: translateY(0) scale(0.98); }
 .qb-launch:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .qb-launch-icon { font-size: 17px; line-height: 1; transform: translateY(-1px); }
+
+/* 奇门网页端沿用黄历排盘的双层标题与居中表单卡。 */
+@media (min-width: 870px) {
+  .qimen-page { padding: 6px 0 72px; }
+  .qimen-hero {
+    display: block;
+    margin: 6px 0 22px;
+    padding: 6px 0 18px;
+    text-align: center;
+    border-bottom: 1px dashed var(--ink-line);
+  }
+  .qimen-hero-title {
+    margin: 0;
+    color: var(--ink-strong);
+    font-family: var(--serif);
+    font-size: 34px;
+    font-weight: 800;
+    line-height: 1.35;
+    letter-spacing: 0.12em;
+  }
+  .qimen-hero-sub {
+    margin: 10px 0 0;
+    color: var(--ink-faint);
+    font-family: var(--serif);
+    font-size: 12.5px;
+    letter-spacing: 0.32em;
+    text-indent: 0.32em;
+  }
+  .qimen-board {
+    padding: 22px;
+    border-radius: 18px;
+  }
+  .qimen-board::before { display: none; }
+  .qimen-entry-form .qb-header {
+    position: relative;
+    margin: 0 0 8px;
+    padding: 28px 8px 25px;
+    text-align: center;
+  }
+  .qimen-entry-form .qb-header::before,
+  .qimen-entry-form .qb-header::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    width: clamp(80px, 15vw, 132px);
+    height: 2px;
+    transform: translateX(-50%);
+    background: linear-gradient(90deg, transparent 0%, rgba(224, 92, 133, 0.55) 50%, transparent 100%);
+  }
+  .qimen-entry-form .qb-header::before { top: 0; }
+  .qimen-entry-form .qb-header::after { bottom: 0; }
+  .qimen-entry-form .qb-title {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    padding: 0;
+    color: transparent;
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1.35;
+    letter-spacing: 0.06em;
+    background: linear-gradient(135deg, var(--cinnabar-deep) 0%, var(--cinnabar) 55%, #d9486f 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+  .qimen-entry-form .qb-title-spark { display: inline-block; font-size: 0.72em; line-height: 1; }
+  .qimen-entry-form .qb-sub {
+    display: block;
+    margin: 8px 0 0;
+    text-align: center;
+    font-size: 14.5px;
+    line-height: 1.7;
+  }
+  .qimen-entry-form .quota-hint { margin: 0 0 14px; }
+  .qimen-entry-form .qb-now {
+    width: auto;
+    min-height: 40px;
+    margin: 0 auto 20px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+  }
+  .qimen-entry-form .qb-form { gap: 16px; }
+  .qimen-entry-form .qb-col { gap: 7px; }
+  .qimen-entry-form .qb-launch { margin-top: 2px; }
+}
 
 @media (max-width: 540px) {
   .qimen-board { padding: 22px 18px; }
@@ -12698,15 +13006,14 @@ select option { background: var(--paper-light); color: var(--ink); }
   .topnav { justify-self: center; }
   .topbar-user { justify-self: end; margin-left: 0; padding-left: 0; }
 
-  /* 文库分类总宽会超过桌面阅读列。此前强制单行居中，
-     溢出的首尾项目会同时被裁掉，导致“全部”不可见。 */
+  /* 文库分类总宽会超过桌面阅读列，维持单行并允许横向浏览。 */
   .articles-page .cat-row {
-    flex-wrap: wrap;
-    justify-content: center;
-    overflow-x: visible;
-    row-gap: 8px;
-    padding-left: 0;
-    padding-right: 0;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-left: 2px;
+    padding-right: 2px;
   }
 }
 
@@ -13086,24 +13393,70 @@ select option { background: var(--paper-light); color: var(--ink); }
   .ziwei-entry-form .zwb-launch { min-height: 42px; margin-top: 0; padding: 9px 12px; font-size: 14px; }
   .ziwei-entry-form .zwb-note { display: none; }
 
-  .qimen-entry-form { display: flex; flex-direction: column; }
-  .qimen-entry-form .qb-header { margin-bottom: 6px; }
-  .qimen-entry-form .qb-title { padding-left: 0; font-size: 17px; letter-spacing: 0.14em; }
+  .qimen-entry-form {
+    display: flex;
+    flex-direction: column;
+    width: min(680px, calc(100% - 32px));
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .qimen-entry-form .qimen-hero { display: none; }
+  .qimen-entry-form .qb-header {
+    margin: 0 0 10px;
+    padding: 20px 0 18px;
+    text-align: center;
+  }
+  .qimen-entry-form .qb-header::before,
+  .qimen-entry-form .qb-header::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    width: clamp(80px, 15vw, 132px);
+    height: 2px;
+    transform: translateX(-50%);
+    background: linear-gradient(90deg, transparent 0%, rgba(224, 92, 133, 0.55) 50%, transparent 100%);
+  }
+  .qimen-entry-form .qb-header::before { top: 0; }
+  .qimen-entry-form .qb-header::after { bottom: 0; }
+  .qimen-entry-form .qb-title {
+    display: block;
+    padding-left: 0;
+    color: var(--cinnabar-deep);
+    font-size: 20px;
+    line-height: 1.35;
+    letter-spacing: 0.06em;
+  }
+  .qimen-entry-form .qb-title-spark { display: none; }
+  .qimen-entry-form .qb-sub { display: block; }
   .qimen-entry-form .qb-icon { display: none; }
-  .qimen-entry-form .quota-hint { margin: 0 0 7px; font-size: 11px; line-height: 1.45; }
-  .qimen-entry-form .qb-now { min-height: 36px; margin-bottom: 10px; padding: 7px 10px; font-size: 12px; }
-  .qimen-entry-form .qb-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .qimen-entry-form .quota-hint { margin: 0 0 8px; font-size: 11px; line-height: 1.45; text-align: center; }
+  .qimen-entry-form .qb-now {
+    align-self: center;
+    width: auto;
+    min-height: 36px;
+    margin: 0 0 12px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+  }
+  .qimen-entry-form .qb-now-icon { font-size: 13px; }
+  .qimen-entry-form .qb-form {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 10px;
+  }
   .qimen-entry-form .qb-row { min-width: 0; gap: 0; }
-  .qimen-entry-form .qb-row:nth-of-type(3),
-  .qimen-entry-form .qb-error,
-  .qimen-entry-form .qb-launch { grid-column: 1 / -1; }
   .qimen-entry-form .qb-col { gap: 5px; }
   .qimen-entry-form .qb-label { padding-left: 0; font-size: 11px; letter-spacing: 0.12em; }
   .qimen-entry-form .qb-grid { gap: 7px; }
   .qimen-entry-form .qb-input,
   .qimen-entry-form .qb-select { min-height: 38px; padding: 8px 9px; font-size: 13px; }
-  .qimen-entry-form .qb-textarea { min-height: 54px; padding: 8px 9px; font-size: 13px; line-height: 1.45; }
-  .qimen-entry-form .qb-launch { min-height: 42px; margin-top: 0; padding: 9px 12px; font-size: 14px; }
+  .qimen-entry-form .qb-textarea { min-height: 56px; padding: 8px 9px; font-size: 13px; line-height: 1.45; }
+  .qimen-entry-form .qb-launch { min-height: 42px; margin-top: 4px; padding: 9px 12px; font-size: 14px; }
 }
 
 /* 平板竖屏仍沿用手机的紧凑阅读节奏；只把剩余空间留给底部主操作。 */
@@ -13123,6 +13476,16 @@ select option { background: var(--paper-light); color: var(--ink); }
     height: auto;
   }
 
+  /* 平板表单保留更从容的卡片内侧白边；字段仍在可视区内排布。 */
+  .bazi-entry-form,
+  .huangli-entry-form,
+  .ziwei-entry-form,
+  .chenggu-entry-form,
+  .qimen-entry-form .qimen-board {
+    padding-left: clamp(22px, 3.6vw, 30px);
+    padding-right: clamp(22px, 3.6vw, 30px);
+  }
+
   /* 平板一屏表单不让主按钮贴近卡片底缘，留出稳定的收尾呼吸空间。 */
   .bazi-entry-form .form-actions,
   .huangli-entry-form .form-actions { margin-bottom: 32px; }
@@ -13137,6 +13500,18 @@ select option { background: var(--paper-light); color: var(--ink); }
   .bazi-entry-form .form-head::before,
   .bazi-entry-form .form-head::after { display: block; }
   .bazi-entry-form .form-sub { margin: 0 0 26px; font-size: 14.5px; line-height: 1.7; }
+
+  /* 称骨沿用八字的完整标题层级，字段保留时辰与性别并列以控制卡内高度。 */
+  .chenggu-entry-form .form-head {
+    margin: 28px 0 8px;
+    padding: 28px 8px 25px;
+    font-size: 26px;
+    line-height: 1.35;
+  }
+  .chenggu-entry-form .form-head::before,
+  .chenggu-entry-form .form-head::after { display: block; }
+  .chenggu-entry-form .form-sub { margin: 0 0 26px; font-size: 14.5px; line-height: 1.7; }
+  .chenggu-entry-form .form-actions { margin-bottom: 32px; }
 
   .huangli-entry-form .hl-form-head { margin-top: 28px; }
 
@@ -13157,6 +13532,20 @@ select option { background: var(--paper-light); color: var(--ink); }
   .ziwei-entry-form .zwb-split { gap: 12px; }
   .ziwei-entry-form .zwb-col { gap: 6px; }
   .ziwei-entry-form .zwb-launch { margin-top: auto; margin-bottom: 32px; }
+
+  /* 奇门与八字采用同一套完整标题区；时间字段按自然阅读顺序纵向展开。 */
+  .qimen-entry-form .qb-header { margin: 28px 0 18px; padding: 28px 8px 25px; }
+  .qimen-entry-form .qb-title { font-size: 26px; }
+  .qimen-entry-form .qb-sub { font-size: 14.5px; line-height: 1.7; }
+  .qimen-entry-form .quota-hint { margin-bottom: 10px; font-size: 12px; }
+  .qimen-entry-form .qb-now { margin-bottom: 18px; padding: 8px 14px; font-size: 13px; }
+  .qimen-entry-form .qb-form { gap: 12px; }
+  .qimen-entry-form .qb-col { gap: 6px; }
+  .qimen-entry-form .qb-label { font-size: 12px; }
+  .qimen-entry-form .qb-input,
+  .qimen-entry-form .qb-select { min-height: 42px; padding: 9px 10px; font-size: 14px; }
+  .qimen-entry-form .qb-textarea { min-height: 70px; padding: 10px; font-size: 14px; }
+  .qimen-entry-form .qb-launch { margin-top: auto; margin-bottom: 32px; }
 }
 
 /* 矮屏优先保证全部字段可操作，由紧凑间距接管。 */
@@ -13167,6 +13556,93 @@ select option { background: var(--paper-light); color: var(--ink); }
   .ziwei-entry-form .zwb-form { justify-content: flex-start; }
   .chenggu-entry-form,
   .qimen-entry-form .qb-form { align-content: start; }
+}
+
+/* 极矮屏 / 横屏排盘：去除仅用于引导的标题层，把完整高度留给可操作字段。
+   页面和底栏固定，较长表单在白卡内部滚动，避免首屏只看到装饰标题。 */
+@media (max-width: 869px) and (max-height: 401px) {
+  .bazi-page:has(.bazi-entry-form),
+  .ziwei-page:has(.ziwei-entry-form),
+  .chenggu-page:has(.chenggu-entry-form),
+  .qimen-entry-form,
+  .hl-page:has(.huangli-entry-form) {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .bazi-page:has(.bazi-entry-form) { padding-top: 8px; padding-bottom: 8px; }
+
+  .bazi-entry-form.rise,
+  .ziwei-entry-form.rise,
+  .chenggu-entry-form.rise,
+  .huangli-entry-form.rise {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+
+  .bazi-entry-form .form-head,
+  .bazi-entry-form .form-sub,
+  .chenggu-entry-form .form-head,
+  .chenggu-entry-form .form-sub,
+  .huangli-entry-form .hl-form-head,
+  .huangli-entry-form .hl-form-sub,
+  .ziwei-entry-form .zwb-header,
+  .qimen-entry-form .qb-header,
+  .qimen-entry-form .quota-hint {
+    display: none;
+  }
+
+  .bazi-entry-form,
+  .chenggu-entry-form,
+  .huangli-entry-form,
+  .ziwei-entry-form,
+  .qimen-entry-form .qimen-board {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    scroll-padding: 10px 0 14px;
+  }
+  .bazi-entry-form .field,
+  .chenggu-entry-form .field,
+  .huangli-entry-form .field { margin-bottom: 7px; }
+  .bazi-entry-form .field label,
+  .chenggu-entry-form .field label,
+  .huangli-entry-form .field label { margin-bottom: 3px; }
+  .bazi-entry-form .field-pair,
+  .huangli-entry-form .field-pair { margin-bottom: 7px; }
+  .bazi-entry-form .form-actions,
+  .chenggu-entry-form .form-actions,
+  .huangli-entry-form .form-actions { margin-top: 7px; }
+
+  .ziwei-entry-form .zwb-form { gap: 8px; }
+  .ziwei-entry-form .zwb-row,
+  .ziwei-entry-form .zwb-split { gap: 8px; }
+  .ziwei-entry-form .zwb-col { gap: 4px; }
+  .ziwei-entry-form .zwb-launch { min-height: 38px; }
+
+  .qimen-entry-form .qb-now {
+    min-height: 32px;
+    margin: 0 0 8px;
+    padding: 5px 10px;
+    font-size: 11.5px;
+  }
+  .qimen-entry-form .qb-form { justify-content: flex-start; gap: 8px; }
+  .qimen-entry-form .qb-textarea { min-height: 48px; }
+  .qimen-entry-form .qb-launch { min-height: 38px; }
+}
+
+/* 横屏拥有充足宽度，奇门的两组时间字段并列展示，减少卡内滚动距离。 */
+@media (max-width: 869px) and (max-height: 401px) and (orientation: landscape) {
+  .qimen-entry-form .qb-form {
+    display: grid;
+    flex: 0 0 auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 8px 10px;
+  }
+  .qimen-entry-form .qb-row:nth-of-type(3),
+  .qimen-entry-form .qb-error,
+  .qimen-entry-form .qb-launch { grid-column: 1 / -1; }
+  .qimen-entry-form .qb-textarea { min-height: 44px; }
 }
 
 /* 手机端增加白底卡的呼吸空间，字段不贴近边缘。 */
@@ -13188,6 +13664,10 @@ select option { background: var(--paper-light); color: var(--ink); }
     display: block;
     width: 62px;
   }
+
+  .qimen-entry-form .qb-header { padding: 21px 0 19px; }
+  .qimen-entry-form .qb-header::before,
+  .qimen-entry-form .qb-header::after { width: 62px; }
 
   /* 紫微标题上下使用同规格星紫横线。 */
   .ziwei-entry-form .zwb-header::before {
@@ -13215,6 +13695,29 @@ select option { background: var(--paper-light); color: var(--ink); }
   .ziwei-entry-form .zwb-launch,
   .qimen-entry-form .qb-launch { margin-bottom: 24px; }
 
+  /* 常规手机高度给次级时间操作留出一段呼吸空间，不贴近会员信息。 */
+  .qimen-entry-form .qb-now { margin-top: 10px; }
+
+}
+
+/* 排盘入口在平板与网页端使用更从容的卡片内侧留白；手机继续沿用紧凑规格。 */
+@media (min-width: 561px) and (max-width: 869px) {
+  .bazi-entry-form,
+  .huangli-entry-form,
+  .ziwei-entry-form,
+  .chenggu-entry-form,
+  .qimen-entry-form .qimen-board {
+    padding-left: clamp(36px, 5.4vw, 48px);
+    padding-right: clamp(36px, 5.4vw, 48px);
+  }
+}
+
+@media (min-width: 870px) {
+  .bazi-entry-form,
+  .huangli-entry-form,
+  .chenggu-entry-form { padding: 32px 40px 36px; }
+  .ziwei-entry-form { padding: 34px 42px 38px; }
+  .qimen-entry-form .qimen-board { padding: 34px 42px 38px; }
 }
 
 /* 管理后台 · 安全风控 */

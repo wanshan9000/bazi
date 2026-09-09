@@ -32,11 +32,20 @@ export default function ChengguPage({ onBack }) {
       <div className="container">
         <div className="page-head rise">
           <button className="back-btn" onClick={onBack}>‹ 返回</button>
-          {result && !editing && (
-            <button className="change-chart-btn" onClick={handleReset}>更换生辰</button>
-          )}
         </div>
-        <h1 className="page-title rise rise-1">称骨论命 ⚖︎</h1>
+        <h1 className="page-title bazi-page-title rise rise-1">
+          <span>称骨论命</span>
+          {result && !editing && (
+            <button
+              className="title-chart-change"
+              onClick={handleReset}
+              title="更换生辰"
+              aria-label="更换生辰"
+            >
+              <span>更换生辰</span>
+            </button>
+          )}
+        </h1>
         <p className="page-sub rise rise-2">袁天罡称骨算命法 · 量骨重，鉴命格</p>
 
         {editing || !result ? (
@@ -72,8 +81,27 @@ export default function ChengguPage({ onBack }) {
               </div>
             </section>
 
+            <section className="cg-classic">
+              <h3 className="cg-h3">称骨常规解读</h3>
+              <div className="cg-classic-card">
+                <div className="cg-classic-head">
+                  <span>称骨歌诀</span>
+                  <b>{result.classic.title}</b>
+                </div>
+                <p className="cg-classic-rule">{result.classic.rule}</p>
+                <p className="cg-classic-text">{result.classic.text}</p>
+                <p className="cg-classic-plain">{result.classic.plain}</p>
+              </div>
+            </section>
+
             <section className="cg-lines">
-              <h3 className="cg-h3">五行解读</h3>
+              <h3 className="cg-h3">称骨与八字解读</h3>
+              <p className="cg-analysis-note">称骨以 {result.summary.total} 两与{result.summary.gender === '女' ? '女' : '男'}命定主断；下列五行提示结合你的实际四柱动态生成。</p>
+              <div className="cg-bazi-basis" aria-label="八字解读依据">
+                <div><span>四柱</span><b>{result.bazi.pillars.join(' · ')}</b></div>
+                <div><span>日主</span><b>{result.bazi.dayMaster} · {result.bazi.strength}</b></div>
+                <div><span>调和倾向</span><b>{result.bazi.favorable.join('、')}</b></div>
+              </div>
               <div className="cg-line-list">
                 {result.lines.map((l) => (
                   <div key={l.key} className="cg-line">

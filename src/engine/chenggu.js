@@ -1,5 +1,6 @@
 // 袁天罡称骨算命法
 import { normalizeGender } from './gender.js'
+import { buildChart } from './bazi.js'
 // 核心算法：根据出生年、月、日、时的干支查询骨重数（两），累加后评定命格。
 // 说明：传统称骨表以「两」为单位，1 两 = 10 钱。此处采用广泛流传的版本，权作参考。
 
@@ -45,14 +46,14 @@ function solarToLunar(date) {
   let y = '', m = '', d = '', leap = false
   for (const p of parts) {
     const v = p.value
-    if (p.type === 'year') {
+    if (p.type === 'relatedYear' || p.type === 'year') {
       y = v.replace(/[^0-9]/g, '').slice(0, 4)
       if (v.includes('闰')) leap = true
     }
     if (p.type === 'month') m = v.replace(/[^0-9]/g, '')
     if (p.type === 'day') d = v.replace(/[^0-9]/g, '')
   }
-  return { year: +y, month: +m, day: +d, leap }
+  return { year: +(y || date.getFullYear()), month: +m, day: +d, leap }
 }
 
 // 中文数字转阿拉伯
@@ -117,6 +118,86 @@ function rate(total) {
   return RATING[RATING.length - 1]
 }
 
+function formatBoneWeight(total) {
+  const liang = Math.floor(total)
+  const qian = Math.round((total - liang) * 10)
+  const cn = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九']
+  return qian === 0 ? `${cn[liang]}两` : `${cn[liang]}两${cn[qian]}钱`
+}
+
+function buildClassicReading(total, gender, rating) {
+  const genderText = gender === '女' ? '女命' : '男命'
+  const genderNote = gender === '女'
+    ? '女命常规断法会兼看自身立身、情缘与家庭经营，以自立和关系中的互相尊重为要。'
+    : '男命常规断法会兼看立业、责任与家运，以稳住根基、踏实经营为要。'
+  return {
+    title: `${formatBoneWeight(total)} · ${genderText}称骨`,
+    rule: '常规称骨以农历出生年、月、日、时分别查骨重，四项相加得到总骨重，并分别按男女命作解读。',
+    text: `此命总骨重为 ${formatBoneWeight(total)}。按常见称骨口径，属「${rating.tone}」之象：${rating.desc}${genderNote}`,
+    plain: `${rating.plain}${genderNote}`,
+  }
+}
+
+function buildDynamicLines({ total, rating, gender, chart }) {
+  const pillars = chart.pillars.map(p => `${p.gan}${p.zhi}`).join(' ')
+  const dominant = chart.wuxingRank[0]
+  const weakest = chart.wuxingRank[chart.wuxingRank.length - 1]
+  const favorable = chart.favorable.join('、')
+  const avoid = chart.avoid.join('、')
+  const strength = chart.strength.strong ? '偏旺' : chart.strength.weak ? '偏弱' : '较为平衡'
+  const boneTone = `${total} 两「${rating.tone}」`
+  const genderText = gender === '女' ? '坤造' : '乾造'
+
+  return [
+    {
+      key: '性格',
+      label: '性格',
+      text: `称骨主断为${boneTone}；八字为 ${pillars}，${chart.dayMaster}${chart.dayMasterWx}日主${strength}，${dominant}气较显。`,
+      plain: chart.strength.strong
+        ? `你的底色是有主见、行动感强。把劲用在长期目标上，留意给别人和自己都留一点余地。`
+        : chart.strength.weak
+          ? `你对环境与关系的感受更细腻。先稳住自己的节奏和边界，再把能力慢慢放大。`
+          : `你能在坚持和配合之间找到分寸。选定方向后持续投入，比频繁改变更容易积累成果。`,
+    },
+    {
+      key: '事业',
+      label: '事业',
+      text: `称骨的${rating.tone}命格给出整体行事基调；八字调和倾向为${favorable}，宜把优势落在可持续的学习、作品与协作上。`,
+      plain: chart.strength.strong
+        ? `工作上适合主动承担、输出和统筹，但不要只靠冲劲。用清晰流程和可复用的技能承接机会，走得更稳。`
+        : chart.strength.weak
+          ? `事业上先选能提供支持、反馈和成长空间的平台。把基础能力练扎实，再逐步承担更大的目标。`
+          : `你适合在稳定节奏中扩展边界。先做好一项核心能力，再用项目和人脉放大它。`,
+    },
+    {
+      key: '财运',
+      label: '财运',
+      text: `骨重呈现的是人生基调；财务取向需以八字调和为准，当前宜向${favorable}靠拢，并留意${avoid}过度时带来的消耗。`,
+      plain: chart.strength.strong
+        ? `收入增长更适合来自能力变现和长期项目。预算先行、分散风险，别让一时兴起决定大额支出。`
+        : chart.strength.weak
+          ? `先建立稳定现金流和储蓄缓冲，再谈扩张。熟悉的领域、可靠的合作与持续积累，比追逐快钱更合适。`
+          : `收支保持清楚，优先投入能提升专业能力和长期回报的事情。稳步积累，比短期冒进更有利。`,
+    },
+    {
+      key: '感情',
+      label: '感情',
+      text: `${genderText}以${chart.dayMaster}${chart.dayMasterWx}为日主，称骨的${rating.tone}只作缘分节奏参考；关系是否长久仍要看彼此的沟通、边界与现实选择。`,
+      plain: chart.strength.strong
+        ? `感情里你更容易主导节奏。把“我觉得”多留一点空间给对方表达，关系会更轻松。`
+        : chart.strength.weak
+          ? `你需要的是稳定回应和被尊重的感受。先确认自己的需求，不必为了维系关系而委屈自己。`
+          : `你重视相处的平衡感。保持坦诚沟通、把期待说清楚，比猜测更能建立安全感。`,
+    },
+    {
+      key: '身心',
+      label: '身心',
+      text: `五行呈现${dominant}偏显、${weakest}相对不足；这是八字平衡提示，不构成健康诊断。`,
+      plain: `日常可用${favorable}的节奏来调和：规律作息、适量运动、稳定饮食，并在压力累积时主动休息。若有持续不适，请及时咨询医生。`,
+    },
+  ]
+}
+
 // 称骨算命核心：输入公历生日 + 性别，返回完整结果
 // 支持传入 Date 或 { year, month, day, hour } 对象（内部统一转 Date，避免无效时间崩溃）
 export function weighBones(dateObj, gender = '男') {
@@ -174,37 +255,15 @@ export function weighBones(dateObj, gender = '男') {
 
   const total = +(yearBone + monthBone + dayBone + hourBone).toFixed(1)
   const rating = rate(total)
-
-  // 性格、事业、感情、财运、健康 五维解读（文言结论 + 大白话）
-  const lines = [
-    { key: '性格', label: '性格', text: rating.tone === '奇特' || rating.tone === '隆昌'
-      ? '主见极强，有领袖之质，独行而能聚人。须戒过刚。'
-      : rating.tone === '显达'
-      ? '外圆内方，沉稳有度，能纳百川亦不失底线。'
-      : rating.tone === '顺达'
-      ? '温柔敦厚，待人以诚，关键时刻能下决断。'
-      : rating.tone === '中和'
-      ? '均衡中庸，宜向一技之长深耕，借专业以立足。'
-      : '质朴勤勉，不善变通，需修「心宽」二字以化戾气。',
-      plain: '你有主见、能拿主意，是个敢想敢干的人；要注意别太犟、别太冲，多听听别人的意见。' },
-    { key: '事业', label: '事业', text: total >= 3.0
-      ? '中年得志机率高，宜入主流行业深耕技术与资源，35 岁后启动第二曲线。'
-      : total >= 2.0
-      ? '事业有起有伏，宜守攻兼备、择主而事，30 岁后渐入佳境。'
-      : '早年多磨，宜以一技傍身，择稳为上，戒急躁与多变。',
-      plain: total >= 3.0 ? '你的事业属于"后半程发力"，年轻别急着到处跳，35 岁以后机会和积累会集中兑现。' : total >= 2.0 ? '工作有高有低，30 岁前多打磨本事，之后会越来越好；选对平台跟对人很重要。' : '早年辛苦些，先练就一门看家本领、求个稳当，别这山望着那山高，急反而容易吃亏。' },
-    { key: '财运', label: '财运', text: total >= 2.5
-      ? '正财稳、偏财有，遇贵人引路可得意外之喜。忌贪，宜稳健理财。'
-      : '财来财去，留心散财风险，宜记账、设止损、慎入陌生领域。',
-      plain: total >= 2.5 ? '你有稳定收入，也常有额外进账，遇到合适的人指点还有惊喜；关键别贪，钱要管住、稳着花。' : '钱来得快去得也快，容易大手大脚；养成记账的习惯、设好花钱上限，别碰不懂的行当，才能攒得住。' },
-    { key: '感情', label: '感情', text: g === '女'
-      ? total >= 2.5 ? '贤淑有福，多得良人相伴，宜惜缘修心。' : '情路多波，须自立自强，良缘多现于中年后。'
-      : total >= 2.5 ? '稳重可靠，宜择贤内助持家，婚姻可为事业助力。' : '婚姻晚来亦佳，宜自修品性，宁缺毋滥。',
-      plain: g === '女'
-        ? total >= 2.5 ? '你是有福之人，身边不缺合适的人，遇到了就好好珍惜，别太挑剔。' : '感情路上有点波折，先把日子过好、把自己立起来，对的人通常在中晚年才出现。'
-        : total >= 2.5 ? '你踏实靠得住，找个贤内助能把家撑起来，另一半也会是你的好帮手。' : '晚点结婚反而更好，先把人品修好，宁缺毋滥，别将就。' },
-    { key: '健康', label: '健康', text: '筋骨、肠胃、颈椎为三处当守之处。30 岁后每年体检，早睡胜药补。', plain: '重点留意腰腿、肠胃和颈椎这三样；过了 30 岁每年做次体检，早睡早起比吃啥补品都管用。' }
-  ]
+  const classic = buildClassicReading(total, g, rating)
+  const chart = buildChart(
+    lunarDate.getFullYear(),
+    lunarDate.getMonth() + 1,
+    lunarDate.getDate(),
+    lunarDate.getHours(),
+    g,
+  )
+  const lines = buildDynamicLines({ total, rating, gender: g, chart })
 
   return {
     summary: {
@@ -225,6 +284,15 @@ export function weighBones(dateObj, gender = '男') {
       { name: '时骨', value: hourBone, detail: `${shiChen}时，时骨 ${hourBone} 两` }
     ],
     verdict: rating,
+    classic,
+    bazi: {
+      pillars: chart.pillars.map(p => `${p.gan}${p.zhi}`),
+      dayMaster: `${chart.dayMaster}${chart.dayMasterWx}`,
+      strength: chart.strength.strong ? '偏旺' : chart.strength.weak ? '偏弱' : '较为平衡',
+      favorable: chart.favorable,
+      dominant: chart.wuxingRank[0],
+      weakest: chart.wuxingRank[chart.wuxingRank.length - 1],
+    },
     lines
   }
 }

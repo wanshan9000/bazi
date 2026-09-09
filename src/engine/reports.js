@@ -455,12 +455,11 @@ export function buildZiweiReport(chart, targetDate) {
     let decadalRows = []
     try {
       const decList = a.decadalList()
-      decadalRows = decList.map((d, i) => [
+      decadalRows = decList.map((d) => [
         d.palaceName || '-',
         `${d.heavenlyStem}${d.earthlyBranch}`,
-        (d.ageRange || []).join('-'),
-        (d.yearRange || []).join('-'),
-        d.mutagen && d.mutagen.length ? d.mutagen.join('、') : '',
+        `${(d.ageRange || []).join('-')}岁 · ${(d.yearRange || []).join('-')}年`,
+        d.mutagen && d.mutagen.length ? [...new Set(d.mutagen)].join('、') : '',
       ])
     } catch (e) { /* ignore */ }
 
@@ -602,16 +601,15 @@ export function buildZiweiReport(chart, targetDate) {
     if (decadalRows.length) {
       sections.push({
         key: 'decadal', title: '大限十年运程', kind: 'table',
-        data: { headers: ['大限宫', '干支', '虚岁', '年份', '四化'], rows: decadalRows },
-        note: (() => {
-          const first = decadalRows[0]
-          const keyRows = decadalRows.filter(r => r[4])
-          const keyTxt = keyRows.length ? keyRows.map(r => `${r[0]}限（${r[2]}岁，${r[4]}）`).join('、') : ''
-          return {
-            term: `大限十年一运、从命宫流转；${qiyun ? qiyun.text : ''}${keyTxt ? `。带四化之大限：${keyTxt}，为人生关键窗口` : ''}。`,
-            plain: `你的大运每十年换一个宫：${first ? `第一大限在 ${first[0]}（${first[2]}岁起）` : ''}${keyTxt ? `；其中 ${keyTxt} 这几段大运带四化，是人生的"转折窗口"，那几年发生的事要格外上心、顺势而为` : '；各限平稳，贵在坚持、以守为进'}。`,
-          }
-        })(),
+        data: {
+          headers: ['大限宫', '干支', '虚岁 / 年份', '本限四化'],
+          rows: decadalRows,
+          current: Number.isInteger(dec?.index) ? dec.index : undefined,
+        },
+        note: {
+          term: `大限十年一运、从命宫流转；${qiyun ? qiyun.text : ''}。表中仅保留每限的时间、宫位与四化，当前大限以高亮标识。`,
+          plain: '把这张表当作人生的十年时间轴即可：先看高亮的当前大限，再看下一限作准备；当前十年的具体主星、四化与流年影响，已在下一节「大限与流年」集中说明。',
+        },
       })
     }
     if (dec && yr) {

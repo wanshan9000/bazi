@@ -383,8 +383,6 @@ const ZW_FREE_SECTIONS = ['info', 'gege', 'starOverview', 'quickPalaces', 'palac
 function ZiweiBoard({ chart, user, paid, reason, onRequireLogin, onUpgrade }) {
   const star = WX_STAR[chart.dayMasterWx]
   const reportRef = useRef(null)
-  const handleMd = () => reportRef.current?.exportMd?.()
-  const handleCopy = () => reportRef.current?.copy?.()
   const handleShare = () => reportRef.current?.share?.()
 
   // 完整报告生成后：登录用户看全部；游客只读「盘面/宫位/星曜」免费章节，详批章节显示解锁引导
@@ -401,17 +399,12 @@ function ZiweiBoard({ chart, user, paid, reason, onRequireLogin, onUpgrade }) {
 
   return (
     <div className="rise">
-      <div className="card chart-card zw-head">
-        <div className="zw-head-actions">
-          {user ? (
-            <>
-              <button className="zw-head-btn" onClick={handleCopy} title="复制报告文本" aria-label="复制报告文本">⧉</button>
-              <button className="zw-head-btn" onClick={handleShare} title="分享到社交" aria-label="分享到社交">↗</button>
-            </>
-          ) : (
-            <button className="zw-head-btn" onClick={() => onRequireLogin && onRequireLogin('ziwei')} title="登录后复制完整报告">⧉ 解锁复制</button>
-          )}
-        </div>
+      <div className={`zw-head zw-report-head${user ? '' : ' zw-head--plain'}`}>
+        {user && (
+          <div className="zw-head-actions">
+            <button className="zw-head-btn" onClick={handleShare} title="分享到社交" aria-label="分享到社交">↗</button>
+          </div>
+        )}
         <div className="chart-head">
           <div className="name" style={{ fontSize: 19 }}>{chart.dayMaster}日主 · 紫微完整报告</div>
           <div className="sub">命主星曜：{star.lord} · {chart.shengxiao}肖 {chart.gender === '男' ? '乾造' : '坤造'}</div>

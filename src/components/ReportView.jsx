@@ -1034,7 +1034,7 @@ const ReportViewBody = forwardRef(function ReportViewBody({ report, lead, hideLe
                       <span className="br-id-pillar-label">
                         {p.label}
                         {p.label === '日柱' ? <i className="br-id-pillar-tag">日主</i> : null}
-                        {report.type === 'ziwei' && p.label === '年柱' && s.data.zodiac ? <i className="br-id-pillar-tag">生肖 {s.data.zodiac}</i> : null}
+                        {report.type === 'ziwei' && p.label === '年柱' && s.data.zodiac ? <i className="br-id-pillar-tag">{s.data.zodiac}</i> : null}
                       </span>
                       <b className="br-id-pillar-gan">{p.gan}</b>
                       <b className="br-id-pillar-zhi">{p.zhi}</b>

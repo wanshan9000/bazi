@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { castQimen } from '../engine/qimen';
 import { buildQimenReport } from '../engine/reports';
 import ReportView from './ReportView';
@@ -46,6 +46,7 @@ function nowParts() {
 }
 
 export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChange }) {
+  const reportRef = useRef(null);
   const initial = useMemo(() => {
     const n = nowParts();
     return {
@@ -158,10 +159,16 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleReportShare = () => reportRef.current?.share?.();
+
   // 阶段一：排盘页
   if (stage === 'form') {
     return (
       <section className="qimen-page qimen-entry-form">
+        <header className="qimen-hero">
+          <h1 className="qimen-hero-title">奇门遁甲</h1>
+          <p className="qimen-hero-sub">问事起局 · 洞察时机 · 找到你的行动方向</p>
+        </header>
         {user && insufficient ? (
           <div className="qimen-board" style={{ padding: '24px' }}>
             <UpgradePrompt
@@ -190,9 +197,11 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
         <div className="qimen-board">
           <header className="qb-header">
             <h2 className="qb-title">
-              <span className="qb-icon" aria-hidden>≡</span>
-              <span>起盘时间</span>
+              <span className="qb-title-spark" aria-hidden>✦</span>
+              <span>起奇门遁甲局</span>
+              <span className="qb-title-spark" aria-hidden>✦</span>
             </h2>
+            <p className="qb-sub">填写起局时间，查看当下机缘与行动方向</p>
           </header>
           {!user && (
             <p className="quota-hint">
@@ -293,14 +302,29 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
 
   // 阶段二：报告页
   return (
-    <section className="qimen-page">
+    <section className="qimen-page qimen-report-page">
       <div id="qimen-report-anchor" />
-      <div className="qimen-report-bar">
-        <button type="button" className="btn ghost small" onClick={backToForm}>
-          ← 重新排盘
-        </button>
+      <header className="qimen-report-page-title">
+        <h1>奇门遁甲</h1>
+        <p>问事起局 · 洞察时机 · 找到你的行动方向</p>
+      </header>
+      <div className="rise">
+        <div className="card chart-card zw-head qimen-report-head">
+          <div className="zw-head-actions">
+            <button className="zw-head-btn" onClick={handleReportShare} title="分享到社交" aria-label="分享到社交">↗</button>
+          </div>
+          <div className="chart-head">
+            <div className="name" style={{ fontSize: 19 }}>
+              <span>奇门遁甲 · 用事报告</span>
+              <button type="button" className="qimen-report-recast" onClick={backToForm}>重新排盘</button>
+            </div>
+            <div className="sub">
+              {report?.meta?.juLabel || '奇门起局'} · {report?.meta?.shiChen || '时家奇门'} · 宜取 {report?.meta?.goodPos || '吉'} 方
+            </div>
+          </div>
+        </div>
+        {report && <div style={{ marginTop: 16 }}><ReportView ref={reportRef} report={report} hideLead /></div>}
       </div>
-      {report && <ReportView report={report} />}
     </section>
   );
 }
