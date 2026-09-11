@@ -40,3 +40,25 @@ test('原生八字页的盲派报告与子平一致移除重复外框', () => {
   assert.match(css, /\.bz-unified \.bazi-report\.br-mangpai\s*\{[\s\S]*?border:\s*0;/)
   assert.match(css, /\.bz-unified \.bazi-report\.br-mangpai::before\s*\{[^}]*display:\s*none;/)
 })
+
+test('四柱命盘以完整面板和克制色带呈现，不使用虚线或发光分段', () => {
+  const pillars = cssBlock('\\.pillars')
+  const separator = cssBlock('\\.pillar \\+ \\.pillar')
+  const accent = cssBlock('\\.pillar::before')
+
+  assert.match(pillars, /border-radius:\s*18px;/)
+  assert.match(pillars, /overflow:\s*hidden;/)
+  assert.match(separator, /border-left:\s*1px solid rgba\(120, 110, 90, 0\.1\);/)
+  assert.match(accent, /height:\s*4px;/)
+  assert.match(accent, /background:\s*var\(--pc, var\(--ink-strong\)\);/)
+  assert.match(accent, /box-shadow:\s*none;/)
+})
+
+test('日柱仅以轻量底色与细分隔强调，不再形成厚重框线', () => {
+  const day = cssBlock('\\.pillar\\.day')
+  const dayAccent = cssBlock('\\.pillar\\.day::before')
+
+  assert.match(day, /background:\s*linear-gradient\(180deg, rgba\(107, 100, 128, 0\.09\), rgba\(107, 100, 128, 0\.025\)\);/)
+  assert.match(dayAccent, /box-shadow:\s*none;/)
+  assert.match(css, /\.pillar\.day\s*\{\s*box-shadow:\s*none;/)
+})
