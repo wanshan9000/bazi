@@ -3,10 +3,10 @@ import { Router } from 'express'
 import crypto from 'crypto'
 import { deleteArticle, findArticle, listArticles, upsertArticle } from '../store.js'
 import { requireAdmin } from '../adminAuth.js'
-import { ARTICLES as LEGACY_ARTICLES } from '../../src/data/articles.js'
+import { ARTICLES as LEGACY_ARTICLES, CATEGORIES } from '../../src/data/articles.js'
 
 const router = Router()
-const CATEGORY_KEYS = new Set(['intro', 'deep', 'flow', 'ziwei', 'divination', 'fengshui', 'name'])
+const CATEGORY_KEYS = new Set(CATEGORIES.map(category => category.key).filter(key => key !== 'all'))
 const STATUS = new Set(['draft', 'published'])
 const ID_RE = /^[a-z][a-z0-9-]{1,80}$/
 
