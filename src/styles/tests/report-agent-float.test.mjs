@@ -14,3 +14,11 @@ test('报告咨询入口恢复为报告尾部的双按钮，而非固定悬浮',
   assert.doesNotMatch(css, /\.report-agent-float[\s\S]*?position:\s*fixed;/)
   assert.doesNotMatch(css, /\.report-agent-float\s+\.report-agent-home\s*\{\s*display:\s*none;/)
 })
+
+test('报告页尾操作去除外层卡片，只保留双按钮与留白', () => {
+  assert.match(css, /\.report-agent-footer-zone\s*\{[^}]*background:\s*transparent;/)
+  assert.match(css, /\.report-agent-footer\s*\{[^}]*padding:\s*0;/)
+  assert.match(css, /\.report-agent-footer\s*\{[^}]*border:\s*0;/)
+  assert.match(css, /\.report-agent-footer\s*\{[^}]*background:\s*transparent;/)
+  assert.match(css, /\.report-agent-footer\s*\{[^}]*box-shadow:\s*none;/)
+})
