@@ -44,21 +44,49 @@ test('入库的 skill-docs 正文不含 Hermes 环境残留与具体命例', () 
   }
 })
 
+test('五运六气技能同时覆盖日常健康养护，未提供生辰时不虚构命盘', () => {
+  const doc = readSkillDoc('wuyunliuqi')
+  assert.match(doc, /只问睡眠、疲劳、饮食、作息/)
+  assert.match(doc, /不虚构命盘/)
+})
+
 test('writeSkills 生成内置技能目录', async () => {
   const { BUILTIN_SKILLS } = await import('../plugins/lingshu-tools/dist/engines.mjs')
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-'))
   const n = writeSkills(dir, BUILTIN_SKILLS)
   assert.ok(n >= 10)
   assert.ok(fs.existsSync(path.join(dir, 'mangpai', 'SKILL.md')))
+  const zipingBytes = fs.statSync(path.join(dir, 'yixue-taishan', 'SKILL.md')).size
+  assert.ok(zipingBytes < 5000, `子平生成 Skill 过大会拖慢注入，实际 ${zipingBytes} bytes`)
 })
 
-test('盲派 skill 先排盘大运，完整分析必须由缘主明确请求', () => {
+test('盲派 skill 先校盘大运，并在同一轮回答缘主的具体问题', () => {
   const doc = readSkillDoc('mangpai')
-  assert.match(doc, /两阶段交付协议/)
-  assert.match(doc, /第一轮：只交付排盘和大运/)
+  assert.match(doc, /校盘优先.*同轮答问/)
+  assert.match(doc, /先完成排盘与大运校验/)
+  assert.match(doc, /同一轮继续回答缘主这次的具体问题/)
+  assert.match(doc, /不得要求缘主先确认后再回答/)
   assert.match(doc, /后续普通问答：只答当前问题/)
   assert.match(doc, /完整报告：仅明确请求时触发/)
   assert.match(doc, /正印.*偏印.*正财.*偏财.*正官.*七杀/)
+})
+
+test('盲派运行 skill 保持可执行的短上下文，不把教学手册整篇注入首轮', () => {
+  const doc = readSkillDoc('mangpai')
+  assert.ok(doc.length < 9000, `盲派运行指令过长会拖慢首字，实际 ${doc.length} 字`)
+  assert.match(doc, /合.*冲.*穿.*刑/)
+  assert.match(doc, /根基/)
+  assert.match(doc, /大运/)
+})
+
+test('子平运行 skill 与盲派一样保持短上下文，避免完整报告首轮被教学材料拖慢', () => {
+  const doc = readSkillDoc('yixue-taishan')
+  assert.ok(doc.length < 1600, `子平运行指令过长会拖慢首字，实际 ${doc.length} 字`)
+  assert.match(doc, /月令/)
+  assert.match(doc, /格局/)
+  assert.match(doc, /用神/)
+  assert.match(doc, /调候/)
+  assert.match(doc, /当前大运/)
 })
 
 test('八字流派路由 skill 负责默认流派、术语确认与双派分章', () => {
@@ -67,6 +95,20 @@ test('八字流派路由 skill 负责默认流派、术语确认与双派分章'
   assert.match(doc, /你是想按子平派做报告吗/)
   assert.match(doc, /## 子平派分析/)
   assert.match(doc, /## 盲派分析/)
+})
+
+test('八字报告技能统一要求短章节、独立标题且不使用 Markdown 表格', () => {
+  const router = readSkillDoc('bazi-router')
+  const mangpai = readSkillDoc('mangpai')
+  const ziping = readSkillDoc('yixue-taishan')
+
+  for (const doc of [router, mangpai, ziping]) {
+    assert.match(doc, /标题必须独占一行/)
+    assert.match(doc, /不得使用 Markdown 表格/)
+    assert.match(doc, /不得(?:使用|输出).*think/i)
+  }
+  assert.match(mangpai, /最多六个小节/)
+  assert.match(ziping, /最多六个小节/)
 })
 
 test('管理后台技能同步到 _admin', () => {

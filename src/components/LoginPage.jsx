@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { login, loginBySms, registerByWechat, sendAuthSmsCode } from '../data/users.js'
 import { api } from '../api/client.js'
-import { loadQuota, tokensToCredits, isAgentOverQuota } from '../engine/freeQuota.js'
 
 export default function LoginPage({ onBack, onSwitch, onSuccess }) {
   const [method, setMethod] = useState('sms')
@@ -13,11 +12,6 @@ export default function LoginPage({ onBack, onSwitch, onSuccess }) {
   const [smsNote, setSmsNote] = useState('')
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
-  const [agentTokens, setAgentTokens] = useState(0)
-
-  useEffect(() => {
-    setAgentTokens(loadQuota().agentTokens || 0)
-  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -67,9 +61,6 @@ export default function LoginPage({ onBack, onSwitch, onSuccess }) {
     } finally { setLoading(false) }
   }
 
-  const credits = tokensToCredits(agentTokens)
-  const over = isAgentOverQuota(agentTokens)
-
   return (
     <section className="auth-page">
       <button className="page-back auth-back" onClick={onBack} aria-label="返回首页">
@@ -80,23 +71,20 @@ export default function LoginPage({ onBack, onSwitch, onSuccess }) {
       </button>
 
       <div className="auth-wrap">
-        {/* 游客体验额度 */}
-        {agentTokens > 0 && (
-          <aside className={`agent-credit-hint auth-credit-hint auth-wish-panel ${over ? 'over' : ''}`}>
-            <div className="auth-wish-stars" aria-hidden="true"><i>✦</i><i>✧</i><i>✦</i></div>
-            <div className="auth-wish-seal" aria-hidden="true"><span>愿</span></div>
-            <p className="auth-wish-eyebrow">TODAY'S LITTLE WISH</p>
-            <h2 className="auth-wish-title">把心愿，<em>交给今天</em></h2>
-            <p className="auth-wish-copy">愿你认真期待的事，都在自己的节奏里慢慢靠近。</p>
-            <div className="auth-wish-note"><span aria-hidden="true">✦</span> 今天也请温柔地相信自己</div>
-            <div className="auth-credit-balance">
-              <span>{over ? '体验额度已用尽' : '今日可用元氣'}</span>
-              <strong>{credits.toFixed(1)}<small>/ 100</small></strong>
-            </div>
-            <p className="auth-credit-copy">登录后，命盘、对话与订阅记录都会安稳地留在这里。</p>
-            {!over && <div className="auth-credit-tags" aria-label="登录后可保留的信息"><span>命盘留存</span><span>会话同步</span><span>心愿不丢失</span></div>}
-          </aside>
-        )}
+        <aside className="agent-credit-hint auth-credit-hint auth-wish-panel">
+          <div className="auth-wish-stars" aria-hidden="true"><i>✦</i><i>✧</i><i>✦</i></div>
+          <div className="auth-wish-seal" aria-hidden="true"><span>愿</span></div>
+          <p className="auth-wish-eyebrow">YOUR GENKI ACCOUNT</p>
+          <h2 className="auth-wish-title">把好奇，<em>留给自己</em></h2>
+          <p className="auth-wish-copy">登录后，命盘、报告与咨询记录都会安稳地留在这里。</p>
+          <div className="auth-wish-note"><span aria-hidden="true">✦</span> 注册即可开始一段自己的探索</div>
+          <div className="auth-credit-balance">
+            <span>注册赠 20 点永久积分</span>
+            <strong>20<small>点</small></strong>
+          </div>
+          <p className="auth-credit-copy">可用于 4 次标准解读，或开启 4 个元气 Agent 咨询主题；每个主题含 8 次具体问题解读。</p>
+          <div className="auth-credit-tags" aria-label="注册后可用权益"><span>命盘留存</span><span>报告同步</span><span>咨询元气 Agent</span></div>
+        </aside>
 
         <div className="auth-card">
           <div className="auth-seal" aria-hidden="true">

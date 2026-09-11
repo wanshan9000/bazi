@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { sharedAccounts } from '../accounts.js'
 import { requireAdmin } from '../adminAuth.js'
 import { createComplaint, createRefund, listComplaints, listRefunds, updateComplaint, updateRefund } from '../store.js'
-import { planByKey } from '../../src/engine/membership.js'
+import { getCreditBalance, planByKey } from '../../src/engine/membership.js'
 
 const router = Router()
 const PLAN_KEYS = new Set(['free', 'earth', 'heaven', 'oracle'])
@@ -11,6 +11,7 @@ const COMPLAINT_STATUS = new Set(['open', 'processing', 'resolved', 'closed'])
 
 function memberSummary(user) {
   const plan = planByKey(user.plan)
+  const balance = getCreditBalance(user)
   return {
     id: user.id,
     account: user.account,
@@ -21,8 +22,12 @@ function memberSummary(user) {
     role: user.role,
     status: user.status || 'active',
     isSuperAdmin: user.isSuperAdmin,
-    creditsUsed: user.creditsUsed || 0,
+    // 保留旧字段兼容管理端的历史响应；新界面用三个明确的钱包字段展示。
+    creditsUsed: user.monthlyCreditsUsed ?? user.creditsUsed ?? 0,
     creditsTotal: plan.credits,
+    monthlyCredits: balance.monthly,
+    permanentCredits: balance.permanent,
+    totalCredits: balance.total,
     planExpiresAt: user.planExpiresAt || 0,
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt || 0,
@@ -68,7 +73,7 @@ router.post('/admin/refunds', requireAdmin, (req, res) => {
   const reason = String(req.body?.reason || '').trim().slice(0, 500)
   const member = sharedAccounts().get(memberId)
   if (!member) return res.status(404).json({ ok: false, msg: '会员不存在' })
-  if (member.isSuperAdmin) return res.status(400).json({ ok: false, msg: '超级尊者不支持退款处理' })
+  if (member.isSuperAdmin) return res.status(400).json({ ok: false, msg: '尊者不支持退款处理' })
   const item = createRefund({ memberId, reason: reason || '管理员登记退款', planAtRequest: member.plan, note: '', handledAt: 0 })
   res.status(201).json({ ok: true, msg: '退款申请已登记，等待处理', data: recordSummary(item, sharedAccounts()) })
 })

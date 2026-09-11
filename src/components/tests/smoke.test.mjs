@@ -36,7 +36,7 @@ const noop = () => {}
 
 /** [模块路径, props, 期望出现在页面上的一段文字] */
 const CASES = [
-  ['../UpgradePrompt.jsx', { featureName: '八字命书', cost: 8, remaining: 3, planLabel: '凡境', onUpgrade: noop, onClose: noop }, '积分不足'],
+  ['../UpgradePrompt.jsx', { featureName: '八字命书', cost: 8, remaining: 3, planLabel: '凡境', onUpgrade: noop, onClose: noop }, '可用点数不足'],
   ['../ReportLock.jsx', { user: null, onRequireLogin: noop, backView: 'qimen', icon: '◈', eyebrow: '奇门遁甲', title: '免费次数已用完', desc: '注册后继续', note: '备注' }, '免费次数已用完'],
   ['../ShichenPicker.jsx', { value: 8, onChange: noop }, null],
   ['../StarField.jsx', {}, null],
@@ -44,7 +44,7 @@ const CASES = [
   ['../ChartView.jsx', { chart }, '日主'],
   ['../BaziPage.jsx', { chart, user: null, onBack: noop, onChart: noop, onRequireLogin: noop, onUpgrade: noop, onUserChange: noop }, null],
   ['../ZiweiPage.jsx', { chart, onBack: noop, onChart: noop, user: null, onRequireLogin: noop, onUpgrade: noop, onUserChange: noop }, null],
-  ['../QimenPage.jsx', { user: null, onRequireLogin: noop, onUpgrade: noop, onUserChange: noop }, '起盘'],
+  ['../QimenPage.jsx', { user: null, onRequireLogin: noop, onUpgrade: noop, onUserChange: noop }, '登录后查看奇门完整解读'],
   ['../TarotPage.jsx', { onBack: noop, onStart: noop, history: [], user: null, onRequireLogin: noop, onUpgrade: noop, onUserChange: noop }, null],
   ['../ChengguPage.jsx', { onBack: noop }, null],
   ['../HoroscopePage.jsx', { onBack: noop }, null],
@@ -108,7 +108,7 @@ for (const mod of ['../BaziPage.jsx', '../ZiweiPage.jsx', '../ChartView.jsx', '.
 
 // 会员到期后 plan 会变成 free。它不在 PLANS 里，个人中心却一定会渲染到它 ——
 // 漏一处映射就是过期用户一进个人中心整页白屏。
-test('冒烟：ProfilePage 在会员已过期（free 档）时不崩且显示为游客', async () => {
+test('冒烟：ProfilePage 在会员已过期（free 档）时不崩且显示为客者', async () => {
   const { default: ProfilePage } = await import('../ProfilePage.jsx')
   const expired = { ...user, plan: 'free', planExpiresAt: 0, creditsUsed: 0 }
   let r
@@ -124,12 +124,12 @@ test('冒烟：ProfilePage 在会员已过期（free 档）时不崩且显示为
   // 只盯当前档位的徽章：页面下方本来就会列出三个可购买档位，那里出现付费档是对的
   const badge = r.$('.pr-badge-tag')
   assert.ok(badge, '找不到档位徽章')
-  assert.equal(badge.textContent.trim(), '游客', '过期账号不该显示成付费档')
+  assert.equal(badge.textContent.trim(), '客者', '过期账号不该显示成付费档')
   r.unmount()
 })
 
-// 过期用户的下一档应该是玄者，不是最贵的天者。
-test('冒烟：ProfilePage 给 free 用户推荐玄者', async () => {
+// 未订阅用户先从凡者开始，不跳过基础档。
+test('冒烟：ProfilePage 给 free 用户推荐凡者', async () => {
   const { default: ProfilePage } = await import('../ProfilePage.jsx')
   let asked = null
   const r = render(ProfilePage, {
@@ -141,6 +141,6 @@ test('冒烟：ProfilePage 给 free 用户推荐玄者', async () => {
   const btn = r.findByText('升级至')
   assert.ok(btn, `找不到升级按钮：${r.text().slice(0, 200)}`)
   r.click(btn)
-  assert.equal(asked, 'heaven')
+  assert.equal(asked, 'earth')
   r.unmount()
 })

@@ -28,6 +28,7 @@ export { drawCards, interpret as interpretTarot } from '../../../../src/data/tar
 export { analyzeName, recommendName } from '../../../../src/engine/nameAnalysis.js'
 export { analyzeFengshui } from '../../../../src/engine/fengshui.js'
 export { buildWuyunliuqi } from '../../../../src/engine/wuyunliuqi.js'
+export { generateChenggu } from '../../../../src/engine/chenggu.js'
 export { buildReport } from '../../../../src/engine/reports.js'
 export { schemaToMarkdown } from '../../../../src/engine/reportSchema.js'
 export { buildMangpaiContext } from '../../../../src/engine/mangpaiContext.js'

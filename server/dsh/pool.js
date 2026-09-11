@@ -21,12 +21,40 @@ import { normalize, isIdle, isInboxReceipt } from './events.js'
 import { DSH_HOME, PROFILE_DIR, SKILLS_DIR, ENGINES_FILE, PERSONA_FILE } from './setup.mjs'
 
 export const ROUTES = {
-  'deepseek-flash': { provider: 'deepseek-official', model: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
-  'deepseek-pro': { provider: 'deepseek-official', model: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
-  'minimax': { provider: 'minimax', model: 'MiniMax-M2.7', label: 'MiniMax M2.7' },
+  // 首轮咨询优先给足“看懂一张命盘”的篇幅，而不是沿用 8192 的长文预算。
+  // 深度模型仍可手动选择，保留略高上限给多轮论证与复杂问题。
+  'deepseek-flash': { provider: 'deepseek-official', model: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', hint: '推荐 · 快速', maxTokens: 3072 },
+  'deepseek-pro': { provider: 'deepseek-official', model: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', hint: '深度模式 · 较慢', maxTokens: 4096 },
+  'minimax': { provider: 'minimax', model: 'MiniMax-M2.7', label: 'MiniMax M2.7', hint: '深度模式 · 较慢', maxTokens: 3072 },
 }
-export const DEFAULT_ROUTE = process.env.AGENT_DEFAULT_ROUTE || 'deepseek-flash'
-const MAX_TOKENS = 8192
+
+const ROUTE_CREDENTIALS = {
+  'deepseek-flash': 'DEEPSEEK_API_KEY',
+  'deepseek-pro': 'DEEPSEEK_API_KEY',
+  minimax: 'MINIMAX_API_KEY',
+}
+
+function hasCredential(env, key) {
+  return Boolean(String(env?.[key] || '').trim())
+}
+
+// 路由名存在不代表当前服务真能调它：把没有密钥的模型仍返回给前端，会让用户在
+// “快速”与“深度”之间选到一个必然失败的选项。可用性必须由服务端配置决定。
+export function availableRoutes(env = process.env) {
+  return Object.entries(ROUTES).filter(([key]) => hasCredential(env, ROUTE_CREDENTIALS[key]))
+}
+
+export function isRouteAvailable(routeKey, env = process.env) {
+  return availableRoutes(env).some(([key]) => key === routeKey)
+}
+
+export function resolveDefaultRoute(env = process.env) {
+  const requested = env.AGENT_DEFAULT_ROUTE || 'deepseek-flash'
+  if (isRouteAvailable(requested, env)) return requested
+  return availableRoutes(env)[0]?.[0] || requested
+}
+
+export const DEFAULT_ROUTE = resolveDefaultRoute()
 // ⚠ 这是**静默超时**，不是整轮上限：只要子进程还在往外吐通知（文本增量、工具调用），
 // 计时就会重置。原先是一个覆盖整轮的硬上限 120s —— 生成一份长报告本来就可能超过
 // 两分钟，被判超时后前端报错，子进程却还在继续烧 token 把这一轮跑完。
@@ -71,6 +99,13 @@ export class DshPool {
 
   isBusy(sessionId) { return this.busy.has(sessionId) }
 
+  // 在服务启动后后台预热默认模型：首次咨询不必同时等待 node 子进程、插件和模型
+  // profile 初始化。失败只说明该路由暂不可用，真正请求仍会返回明确错误。
+  async warm(routeKey = DEFAULT_ROUTE) {
+    await this.client(routeKey)
+    return routeKey
+  }
+
   async client(routeKey) {
     const route = ROUTES[routeKey]
     if (!route) { const e = new Error(`UNKNOWN_ROUTE: 未知模型路由 ${routeKey}`); e.code = 'UNKNOWN_ROUTE'; throw e }
@@ -79,7 +114,7 @@ export class DshPool {
       const client = this.createClient(routeKey)
       const ready = (async () => {
         await client.start()
-        await client.initialize({ cwd: PROFILE_DIR, provider: route.provider, model: route.model, maxTokens: MAX_TOKENS })
+        await client.initialize({ cwd: PROFILE_DIR, provider: route.provider, model: route.model, maxTokens: route.maxTokens })
         return client
       })()
       entry = { client, ready }
@@ -143,6 +178,15 @@ export class DshPool {
     let inflight = null // 正在等待的 sub.next()：超时时要交给 drainToIdle，不能丢
     // 静默超时：每收到一条通知就重置计时。只要子进程还在输出，这一轮就不算卡住。
     let rejectDeadline = null
+    const startedAt = performance.now()
+    let firstEventMs = null
+    let initializeMs = null
+    let promptAcceptedMs = null
+    let firstReasoningMs = null
+    let firstToolCallMs = null
+    let firstToolResultMs = null
+    let firstTextMs = null
+    const elapsedMs = () => Math.max(0, Math.round(performance.now() - startedAt))
     const armDeadline = () => {
       clearTimeout(timer)
       timer = setTimeout(() => {
@@ -164,9 +208,11 @@ export class DshPool {
       // 启动握手与 prompt 也要受整轮 deadline 约束：否则子进程卡在这两步时
       // 这一轮会永远挂着（deadline 的拒绝要到进入下面的 race 才会被消费）。
       const client = await Promise.race([this.client(routeKey), deadline])
+      initializeMs = elapsedMs()
       sub = client.subscribeSessionTree(sessionId)
       this.openSubs.add(sub)
       messageId = await Promise.race([client.prompt(sessionId, [{ type: 'text', text }]), deadline])
+      promptAcceptedMs = elapsedMs()
       // 客户端没有返回 messageId 时无从校验收据，只能退化为"立即开始收事件"。
       received = !messageId
       let finalText = ''
@@ -193,11 +239,30 @@ export class DshPool {
         if (isIdle(n, sessionId)) break
         const e = normalize(n)
         if (!e) continue
+        if (firstEventMs === null) firstEventMs = elapsedMs()
+        if (e.type === 'reasoning' && e.delta && firstReasoningMs === null) firstReasoningMs = elapsedMs()
+        if (e.type === 'tool_call' && firstToolCallMs === null) firstToolCallMs = elapsedMs()
+        if (e.type === 'tool_result' && firstToolResultMs === null) firstToolResultMs = elapsedMs()
+        if (e.type === 'text' && e.delta && firstTextMs === null) firstTextMs = elapsedMs()
         if (e.type === 'message') { finalText = e.text || finalText; if (e.usage) usage = e.usage }
         if (e.type === 'title') title = e.title
         onEvent(e)
       }
-      return { finalText, usage, title }
+      return {
+        finalText,
+        usage,
+        title,
+        timing: {
+          initializeMs,
+          promptAcceptedMs,
+          firstEventMs,
+          firstReasoningMs,
+          firstToolCallMs,
+          firstToolResultMs,
+          firstTextMs,
+          totalMs: elapsedMs(),
+        },
+      }
     } catch (err) {
       // 只有传输真的断了（子进程死亡）才丢弃常驻客户端；超时不代表子进程坏了，
       // 丢掉它反而会打断其它会话，改由 drainToIdle 在后台等这一轮自然结束。

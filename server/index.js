@@ -4,7 +4,7 @@ import cors from 'cors'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { config, smsConfigured, wechatConfigured } from './config.js'
+import { config, smsConfigured, wechatConfigured, wechatTemplateConfigured } from './config.js'
 import { startScheduler } from './scheduler.js'
 import subscribeRouter from './routes/subscribe.js'
 import shareRouter from './routes/share.js'
@@ -13,7 +13,10 @@ import articlesRouter from './routes/articles.js'
 import membershipsRouter from './routes/memberships.js'
 import securityRouter from './routes/security.js'
 import agentRouter from './routes/agent.js'
+import { createReportsRouter } from './routes/reports.js'
 import { createAuthRouter } from './routes/auth.js'
+import { sharedAccounts } from './accounts.js'
+import { sharedReportArchive } from './reportArchive.js'
 import { sharedPool } from './dsh/pool.js'
 import { sharedStore } from './dsh/agentStore.js'
 import { startBackups } from './backup.js'
@@ -53,7 +56,7 @@ app.get('/api/health', (_req, res) => {
   res.status(agentReady ? 200 : 503).json({
     ok: agentReady,
     sms: smsConfigured() ? 'configured' : 'local(mock)',
-    wechat: wechatConfigured() ? 'configured' : 'local(mock)',
+    wechat: wechatTemplateConfigured() ? 'official-template-ready' : 'configuration-required',
     agent: agentReady ? 'ready' : 'unavailable',
     agentDetail: agentReady ? undefined : {
       modelKey: modelKey ? 'ok' : 'missing',            // 缺 DEEPSEEK_API_KEY / MINIMAX_API_KEY
@@ -68,9 +71,11 @@ app.get('/api/health', (_req, res) => {
 app.use('/api', sharedSecurityGuard().middleware)
 app.use('/api', ipRateLimit({ windowMs: 60 * 1000, max: config.security.apiIpPerMinute }))
 
-// 账号与鉴权。注销时连坐清掉该用户的 AI 会话与消息（隐私合规）。
+// 账号与鉴权。注销时连坐清掉报告档案与 AI 会话/消息（隐私合规）。
+const agentStore = sharedStore()
+const reportArchives = sharedReportArchive({ sessions: agentStore })
 app.use('/api', createAuthRouter({
-  onRemoveUser: uid => sharedStore().deleteAllSessions(uid),
+  onRemoveUser: uid => reportArchives.deleteAllReports(uid) + agentStore.deleteAllSessions(uid),
 }))
 app.use('/api', subscribeRouter)
 app.use('/api', shareRouter)
@@ -78,6 +83,7 @@ app.use('/api', skillsRouter)
 app.use('/api', articlesRouter)
 app.use('/api', membershipsRouter)
 app.use('/api', securityRouter)
+app.use('/api', createReportsRouter({ accounts: sharedAccounts(), archives: reportArchives, sessions: agentStore }))
 app.use('/api', agentRouter())
 
 // 兜底错误处理。
@@ -102,11 +108,15 @@ app.listen(config.port, config.host, () => {
   console.log(`  http://${config.host}:${config.port}`)
   console.log('--------------------------------------------------')
   console.log(`  短信通道: ${smsConfigured() ? config.sms.provider.toUpperCase() : '本地降级(mock)'}`)
-  console.log(`  微信通道: ${wechatConfigured() ? '已配置' : '本地降级(mock)'}`)
+  console.log(`  微信登录: ${wechatConfigured() ? '已配置' : '未配置'}`)
+  console.log(`  公众号模板提醒: ${wechatTemplateConfigured() ? '已配置' : '待配置（二维码 / 模板 / 回调）'}`)
   console.log('==================================================\n')
 
   startScheduler()
   startBackups()
+  // 不阻塞 HTTP 监听。默认模型先完成子进程/profile 初始化，用户的第一句不会把这段
+  // 固定成本误感知成“思考很慢”。真正的模型请求仍在首轮到来时执行。
+  sharedPool().warm().catch(err => console.warn('[agent] 默认模型预热失败，将在首个请求时重试：', err?.code || err?.message || err))
 })
 
 // 退出时回收 dsh 子进程

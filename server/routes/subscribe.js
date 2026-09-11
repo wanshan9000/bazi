@@ -1,26 +1,123 @@
 // 订阅相关 API 路由
-import { Router } from 'express'
+import { Router, text } from 'express'
 import crypto from 'crypto'
-import { config, smsConfigured } from '../config.js'
+import { config, smsConfigured, wechatTemplateConfigured } from '../config.js'
 import {
   createVerify, verifyCode, lastSendAt,
-  findByPhone, findByOpenid, findByToken,
+  findByPhone, findByOpenid, findByUserId, findByToken,
   upsertSubscriber, updateSubscriber, deleteSubscriber, listSubscribers,
 } from '../store.js'
 import { sendVerifySms } from '../sms.js'
-import { qrAuthUrl, exchangeCode, mockOpenid } from '../wechat.js'
+import { createOfficialFollowQr, qrAuthUrl, exchangeCode, mockOpenid } from '../wechat.js'
 import { chartFromSubscriber, buildPushContent } from '../huangli.js'
 import { requireAdmin } from '../adminAuth.js'
 import { createWindowLimiter } from '../rateLimit.js'
+import { requireAuth } from './auth.js'
+import { sharedAccounts } from '../accounts.js'
+import { canUseHuangliReminder } from '../../src/engine/membership.js'
 
 const router = Router()
 const smsIpLimiter = createWindowLimiter({ windowMs: 60 * 60 * 1000, max: config.security.smsIpPerHour })
 const smsVerifyIpLimiter = createWindowLimiter({ windowMs: 60 * 60 * 1000, max: config.security.smsVerifyIpPerHour })
 const subscriptionIpLimiter = createWindowLimiter({ windowMs: 60 * 60 * 1000, max: config.security.subscriptionIpPerHour })
+const requireAccount = requireAuth(sharedAccounts())
+function requireReminderMember(req, res, next) {
+  requireAccount(req, res, () => {
+    if (!canUseHuangliReminder(req.account)) {
+      return res.status(403).json({ ok: false, msg: '每日黄历提醒为凡者及以上会员权益' })
+    }
+    next()
+  })
+}
 // ⚠ 验证码不能用 Math.random：它不是密码学安全的，输出可预测。
 // 短信验证码是账号绑定的唯一凭据，必须走 CSPRNG。
 const genCode = () => String(crypto.randomInt(100000, 1000000))
 const genToken = () => crypto.randomBytes(24).toString('hex')
+const OFFICIAL_TICKET_TTL_MS = 10 * 60 * 1000
+const officialBindingTickets = new Map() // scene -> { userId, birth, time, favZodiac, expiresAt, token? }
+
+function cleanOfficialTickets() {
+  const now = Date.now()
+  for (const [scene, ticket] of officialBindingTickets) {
+    if (ticket.expiresAt < now) officialBindingTickets.delete(scene)
+  }
+}
+
+function validOfficialSignature(query) {
+  const { signature, timestamp, nonce } = query
+  if (!signature || !timestamp || !nonce || !config.wechat.webhookToken) return false
+  const expected = crypto.createHash('sha1')
+    .update([config.wechat.webhookToken, String(timestamp), String(nonce)].sort().join(''))
+    .digest('hex')
+  const given = String(signature)
+  return given.length === expected.length && crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected))
+}
+
+function xmlValue(xml, tag) {
+  const cdata = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`).exec(xml)
+  if (cdata) return cdata[1]
+  const plain = new RegExp(`<${tag}>([^<]*)<\\/${tag}>`).exec(xml)
+  return plain ? plain[1].trim() : ''
+}
+
+// 登录用户创建一次性公众号关注码。微信扫此码关注后会把 scene 通过事件回调带回，
+// 这样绑定的是公众号 openid，而不是开放平台网页登录的 openid。
+router.post('/wechat/official/qrcode', requireReminderMember, async (req, res) => {
+  if (!wechatTemplateConfigured()) return res.status(503).json({ ok: false, msg: '公众号模板消息通道尚未完成配置' })
+  const normalized = normalizeSubscription(req.body || {})
+  if (!normalized) return res.status(400).json({ ok: false, msg: '出生信息格式不正确' })
+  cleanOfficialTickets()
+  const scene = `genki_${crypto.randomBytes(12).toString('hex')}`
+  try {
+    const qr = await createOfficialFollowQr(scene)
+    officialBindingTickets.set(scene, {
+      userId: req.uid,
+      ...normalized,
+      expiresAt: Date.now() + Math.min(OFFICIAL_TICKET_TTL_MS, qr.expiresIn * 1000),
+    })
+    res.json({ ok: true, ready: true, qrUrl: qr.qrUrl, expiresIn: qr.expiresIn })
+  } catch (error) {
+    console.error('[wechat/official/qrcode] 创建关注码失败', error)
+    res.status(502).json({ ok: false, msg: '公众号关注二维码暂不可用，请稍后重试' })
+  }
+})
+
+// 公众号后台「服务器配置」应填写：https://你的域名/api/wechat/official/callback。
+// GET 用于微信验签；POST 接收 subscribe / SCAN 事件并完成账号与公众号 openid 的绑定。
+router.get('/wechat/official/callback', (req, res) => {
+  if (!validOfficialSignature(req.query)) return res.status(401).send('invalid signature')
+  res.type('text/plain').send(String(req.query.echostr || ''))
+})
+router.post('/wechat/official/callback', text({ type: ['text/xml', 'application/xml', '*/xml'], limit: '64kb' }), (req, res) => {
+  if (!validOfficialSignature(req.query)) return res.status(401).send('invalid signature')
+  const xml = typeof req.body === 'string' ? req.body : ''
+  const event = xmlValue(xml, 'Event').toLowerCase()
+  const rawScene = xmlValue(xml, 'EventKey')
+  const openid = xmlValue(xml, 'FromUserName')
+  const scene = rawScene.replace(/^qrscene_/, '')
+  const ticket = officialBindingTickets.get(scene)
+
+  if ((event === 'subscribe' || event === 'scan') && openid && ticket && ticket.expiresAt >= Date.now()) {
+    const previous = findByOpenid(openid) || findByUserId(ticket.userId, 'wechat')
+    const sub = upsertSubscriber({
+      channel: 'wechat',
+      openid,
+      userId: ticket.userId,
+      birth: ticket.birth,
+      time: ticket.time,
+      favZodiac: ticket.favZodiac,
+      enabled: true,
+      token: previous?.token || freshToken(),
+    })
+    ticket.token = sub.token
+  }
+  res.type('text/plain').send('success')
+})
+
+router.get('/wechat/official/bind-status', requireReminderMember, (req, res) => {
+  const sub = findByUserId(req.uid, 'wechat')
+  res.json({ ok: true, bound: Boolean(sub?.enabled), token: sub?.token || null })
+})
 
 /**
  * 「本地降级」能力是否允许在当前环境暴露。
@@ -98,7 +195,7 @@ router.post('/sms/send-code', async (req, res) => {
 })
 
 // ---- 2. 短信验证码订阅（首次创建） ----
-router.post('/sms/subscribe', async (req, res) => {
+router.post('/sms/subscribe', requireReminderMember, async (req, res) => {
   const { phone, code, birth, time, favZodiac = [] } = req.body
   if (!take(subscriptionIpLimiter, `subscribe:${req.ip}`, res, '该网络订阅操作过于频繁，请稍后再试')) return
   if (!take(smsVerifyIpLimiter, `verify:${req.ip}`, res, '验证码校验过于频繁，请稍后再试')) return
@@ -120,6 +217,7 @@ router.post('/sms/subscribe', async (req, res) => {
 
   const sub = upsertSubscriber({
     channel: 'sms',
+    userId: req.uid,
     phone,
     birth: normalized.birth,
     time: normalized.time,
@@ -258,10 +356,11 @@ router.post('/sms/recover', (req, res) => {
 })
 
 // ---- 7. 更新订阅偏好（时段/关注生肖/开/关） ----
-router.post('/update', (req, res) => {
+router.post('/update', requireReminderMember, (req, res) => {
   const { token, time, favZodiac, enabled } = req.body
   const sub = findByToken(token)
   if (!sub) return res.status(404).json({ ok: false, msg: '未找到订阅' })
+  if (sub.userId && sub.userId !== req.uid) return res.status(403).json({ ok: false, msg: '无权修改该订阅' })
   const patch = {}
   if (time) {
     if (!['morning', 'noon', 'evening'].includes(time)) return res.status(400).json({ ok: false, msg: '推送时段不正确' })
@@ -277,8 +376,11 @@ router.post('/update', (req, res) => {
 })
 
 // ---- 8. 取消订阅 ----
-router.post('/unsubscribe', (req, res) => {
+router.post('/unsubscribe', requireAccount, (req, res) => {
   const { token } = req.body
+  const sub = findByToken(token)
+  if (!sub) return res.status(404).json({ ok: false, msg: '未找到订阅' })
+  if (sub.userId && sub.userId !== req.uid) return res.status(403).json({ ok: false, msg: '无权取消该订阅' })
   const ok = deleteSubscriber(s => s.token === token)
   res.json({ ok, msg: ok ? '已取消订阅' : '未找到订阅' })
 })

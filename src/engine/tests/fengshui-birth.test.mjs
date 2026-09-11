@@ -40,3 +40,37 @@ test('旧写法确实退化成固定命盘：1990-01-01 男', () => {
   assert.notDeepEqual([real.favorable, real.avoid], [fake.favorable, fake.avoid],
     '真实命盘的结论不应与那套写死的 1990-01-01 男相同')
 })
+
+test('书桌座位：背靠实墙、前方开阔且取喜用方向，应优于门冲横梁位', () => {
+  const birthInfo = birthInfoOf(buildChart(1990, 5, 6, 8, '男'))
+  const favorableDir = { 木: '东', 火: '南', 土: '东北', 金: '西', 水: '北' }[buildChart(1990, 5, 6, 8, '男').favorable[0]]
+  const favorable = analyzeFengshui({
+    layout: {
+      ...LAYOUT,
+      deskDir: favorableDir,
+      seatBack: 'wall',
+      seatFront: 'open',
+      seatLeft: 'solid',
+      seatRight: 'open',
+      seatHazard: 'none',
+    },
+    birthInfo,
+  })
+  const hostile = analyzeFengshui({
+    layout: {
+      ...LAYOUT,
+      deskDir: '西',
+      seatBack: 'window',
+      seatFront: 'door',
+      seatLeft: 'window',
+      seatRight: 'tall',
+      seatHazard: 'beam',
+    },
+    birthInfo,
+  })
+
+  assert.ok(favorable.desk.score > hostile.desk.score, '坐位的形势与朝向应真实改变评分')
+  assert.equal(favorable.desk.verdict, '宜用')
+  assert.equal(hostile.desk.verdict, '宜调整')
+  assert.match(hostile.desk.tips.join(''), /横梁|门冲|背后/)
+})

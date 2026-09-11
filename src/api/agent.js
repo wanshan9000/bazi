@@ -80,11 +80,15 @@ export function createAgentApi() {
     claimGuestSessions: () => json('/api/agent/sessions/claim', { method: 'POST', body: JSON.stringify({ from: guestUid() }) }),
     loadMessages: id => json(`/api/agent/sessions/${id}/messages`, {}),
     deleteSession: id => json(`/api/agent/sessions/${id}`, { method: 'DELETE' }),
-    async streamChat({ sessionId, text, chart, route, onEvent, signal }) {
+    huangliInsight: async ({ date, chart, scenario }) => json('/api/agent/huangli-insight', {
+      method: 'POST',
+      body: JSON.stringify({ date, chart, scenario }),
+    }),
+    async streamChat({ sessionId, text, chart, route, renew = false, onEvent, signal }) {
       const res = await fetch(`${BASE}/api/agent/chat`, {
         method: 'POST', signal,
         headers: { 'Content-Type': 'application/json', ...uidHeader() },
-        body: JSON.stringify({ sessionId, text, chart, route }),
+        body: JSON.stringify({ sessionId, text, chart, route, renew }),
       })
       if (!res.ok || !res.body) {
         const body = await res.json().catch(() => ({}))

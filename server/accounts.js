@@ -11,12 +11,14 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { promisify } from 'node:util'
 import { config } from './config.js'
-import { planByKey, FEATURE_COSTS, nextResetAt, FREE_PLAN, SUPER_PLAN, isPlanExpired, isSuperAdmin } from '../src/engine/membership.js'
+import { getCreditBalance, planByKey, FEATURE_COSTS, nextResetAt, FREE_PLAN, SUPER_PLAN, isPlanExpired, isSuperAdmin } from '../src/engine/membership.js'
 
 const scrypt = promisify(crypto.scrypt)
 
 const MONTH_MS = 30 * 86400000
 const MAX_CUSTOM_AVATAR_BYTES = 96 * 1024
+const WELCOME_CREDITS = 20
+const WELCOME_CREDIT_POLICY_VERSION = 2
 
 /* ---- 口令散列：scrypt ----
  * 参数取 Node 默认档（N=16384, r=8, p=1），单次约 50~100ms，足以让离线爆破不划算，
@@ -108,16 +110,42 @@ export function createAccountStore(file) {
    */
   function refresh(u, now = Date.now()) {
     let changed = false
+    // 旧账号只有 creditsUsed。迁移时保留这份“已经用掉的月度积分”。
+    if (!Number.isFinite(u.monthlyCreditsUsed)) {
+      u.monthlyCreditsUsed = Math.max(0, Number(u.creditsUsed || 0))
+      changed = true
+    }
+    if (!Number.isFinite(u.permanentCredits)) {
+      u.permanentCredits = WELCOME_CREDITS
+      u.welcomeCreditPolicyVersion = WELCOME_CREDIT_POLICY_VERSION
+      changed = true
+    } else if (Number(u.welcomeCreditPolicyVersion || 0) < WELCOME_CREDIT_POLICY_VERSION) {
+      // 从 10 点欢迎积分升级到 20 点：已注册账号只补发这新增的 10 点一次，
+      // 不覆盖他们已消费或购买得到的永久点数。
+      u.permanentCredits += WELCOME_CREDITS - 10
+      u.welcomeCreditPolicyVersion = WELCOME_CREDIT_POLICY_VERSION
+      changed = true
+    }
+    if (!Array.isArray(u.creditCharges)) {
+      u.creditCharges = []
+      changed = true
+    }
+    if (u.creditsUsed !== u.monthlyCreditsUsed) {
+      u.creditsUsed = u.monthlyCreditsUsed
+      changed = true
+    }
     // 到期降级：付费档过期后落到 free 档。之前 planExpiresAt 写了但没人读，
     // 于是会员「永不过期」——买一次天机境用到天荒地老。
     if (isPlanExpired(u, now)) {
       u.plan = FREE_PLAN.key
       u.planExpiresAt = 0
+      u.monthlyCreditsUsed = 0
       u.creditsUsed = 0
       u.planCreditsResetAt = now + MONTH_MS
       changed = true
     }
     if ((u.planCreditsResetAt || 0) <= now) {
+      u.monthlyCreditsUsed = 0
       u.creditsUsed = 0
       u.planCreditsResetAt = now + MONTH_MS
       changed = true
@@ -127,6 +155,7 @@ export function createAccountStore(file) {
 
   function publicUser(u) {
     if (!u) return null
+    const balance = getCreditBalance(u)
     return {
       id: u.id,
       nickname: u.nickname,
@@ -138,7 +167,12 @@ export function createAccountStore(file) {
       isSuperAdmin: isSuperAdmin(u),
       createdAt: u.createdAt,
       lastLoginAt: u.lastLoginAt,
-      creditsUsed: u.creditsUsed || 0,
+      // creditsUsed 保留给旧页面；新页面使用双钱包字段。
+      creditsUsed: u.monthlyCreditsUsed ?? u.creditsUsed ?? 0,
+      monthlyCreditsUsed: u.monthlyCreditsUsed ?? u.creditsUsed ?? 0,
+      permanentCredits: u.permanentCredits ?? 0,
+      monthlyCredits: balance.monthly,
+      totalCredits: balance.total,
       planCreditsResetAt: u.planCreditsResetAt || 0,
       planExpiresAt: u.planExpiresAt || 0,
       wechatBound: Boolean(u.wechatOpenid),
@@ -196,6 +230,10 @@ export function createAccountStore(file) {
       status: 'active',
       plan,
       creditsUsed: 0,
+      monthlyCreditsUsed: 0,
+      permanentCredits: WELCOME_CREDITS,
+      welcomeCreditPolicyVersion: WELCOME_CREDIT_POLICY_VERSION,
+      creditCharges: [],
       planCreditsResetAt: nextResetAt(now),
       // 游客档不设到期；付费权益只能在真实支付完成后由服务端开通。
       planExpiresAt: plan === FREE_PLAN.key ? 0 : nextResetAt(now),
@@ -228,11 +266,11 @@ export function createAccountStore(file) {
     return Boolean(u) && (u.status || 'active') === 'active'
   }
 
-  /** 仅管理端可调用的账号状态变更；超级尊者不可被此入口停用。 */
+  /** 仅管理端可调用的账号状态变更；尊者不可被此入口停用。 */
   function setStatus(id, status, reason = '') {
     const u = get(id)
     if (!u) return { ok: false, msg: '用户不存在' }
-    if (isSuperAdmin(u)) return { ok: false, msg: '超级尊者状态不可通过后台修改' }
+    if (isSuperAdmin(u)) return { ok: false, msg: '尊者状态不可通过后台修改' }
     if (!['active', 'suspended'].includes(status)) return { ok: false, msg: '账号状态无效' }
     u.status = status
     u.statusReason = status === 'suspended' ? String(reason || '').trim().slice(0, 200) : ''
@@ -275,7 +313,7 @@ export function createAccountStore(file) {
   function changePlan(id, newKey) {
     const u = get(id)
     if (!u) return { ok: false, msg: '用户不存在' }
-    if (isSuperAdmin(u)) return { ok: false, msg: '超级尊者权限不可通过会员切换修改' }
+    if (isSuperAdmin(u)) return { ok: false, msg: '尊者权限不可通过会员切换修改' }
     // free 是过期落点，不是商品，不能通过购买接口切进去
     if (newKey === FREE_PLAN.key || newKey === SUPER_PLAN.key) return { ok: false, msg: '档位不存在' }
     const plan = planByKey(newKey)
@@ -283,6 +321,7 @@ export function createAccountStore(file) {
     const now = Date.now()
     const samePlan = u.plan === plan.key
     u.plan = plan.key
+    u.monthlyCreditsUsed = 0
     u.creditsUsed = 0
     u.planCreditsResetAt = nextResetAt(now)
     // 续费在原到期时间上顺延，否则提前续费等于白送掉剩余天数；换档从当下重新起算。
@@ -293,25 +332,27 @@ export function createAccountStore(file) {
 
   /**
    * 后台订阅调整。与用户侧 changePlan 分开，允许管理员取消到 free，
-   * 但仍禁止通过 HTTP 修改超级尊者的维护权限。
+   * 但仍禁止通过 HTTP 修改尊者的维护权限。
    */
   function adminSetPlan(id, newKey) {
     const u = get(id)
     if (!u) return { ok: false, msg: '会员不存在' }
-    if (isSuperAdmin(u)) return { ok: false, msg: '超级尊者权限不可通过会员管理修改' }
+    if (isSuperAdmin(u)) return { ok: false, msg: '尊者权限不可通过会员管理修改' }
     const now = Date.now()
     if (newKey === FREE_PLAN.key) {
       u.plan = FREE_PLAN.key
+      u.monthlyCreditsUsed = 0
       u.creditsUsed = 0
       u.planCreditsResetAt = now + MONTH_MS
       u.planExpiresAt = 0
       save()
       return { ok: true, user: publicUser(u), plan: FREE_PLAN }
     }
-    if (newKey === SUPER_PLAN.key) return { ok: false, msg: '超级尊者只能由受控维护入口授予' }
+    if (newKey === SUPER_PLAN.key) return { ok: false, msg: '尊者只能由受控维护入口授予' }
     const plan = planByKey(newKey)
     if (!plan || plan.key !== newKey) return { ok: false, msg: '档位不存在' }
     u.plan = plan.key
+    u.monthlyCreditsUsed = 0
     u.creditsUsed = 0
     u.planCreditsResetAt = nextResetAt(now)
     u.planExpiresAt = nextResetAt(now)
@@ -325,27 +366,49 @@ export function createAccountStore(file) {
     if (cost == null) return { ok: true, cost: 0 } // 未列入积分表 = 免费
     const u = get(id)
     if (!u) return { ok: false, reason: 'no_user' }
-    if (isSuperAdmin(u)) return { ok: true, user: publicUser(u), cost: 0, remaining: Infinity }
-    const plan = planByKey(u.plan)
-    const used = u.creditsUsed || 0
-    const available = plan.credits - used
-    if (available < cost) return { ok: false, reason: 'insufficient', cost, available }
-    u.creditsUsed = used + cost
+    if (isSuperAdmin(u)) return { ok: true, user: publicUser(u), cost: 0, remaining: Infinity, charge: { id: newId('c'), monthly: 0, permanent: 0 } }
+    const balance = getCreditBalance(u)
+    if (balance.total < cost) return { ok: false, reason: 'insufficient', cost, available: balance.total, balance }
+    const monthly = Math.min(balance.monthly, cost)
+    const permanent = cost - monthly
+    u.monthlyCreditsUsed = Math.max(0, Number(u.monthlyCreditsUsed ?? u.creditsUsed ?? 0)) + monthly
+    u.creditsUsed = u.monthlyCreditsUsed
+    u.permanentCredits = Math.max(0, Number(u.permanentCredits || 0) - permanent)
+    const charge = { id: newId('c'), feature: featureKey, monthly, permanent, refunded: false, createdAt: Date.now() }
+    u.creditCharges = [...(u.creditCharges || []), charge].slice(-120)
     save()
-    return { ok: true, user: publicUser(u), cost, remaining: plan.credits - u.creditsUsed }
+    const next = getCreditBalance(u)
+    return {
+      ok: true,
+      user: publicUser(u),
+      cost,
+      remaining: next.total,
+      balance: next,
+      charge: { id: charge.id, monthly, permanent },
+    }
   }
 
   /** 退还积分。用于「扣了钱但这一轮什么都没产出」（模型立刻报错等）。 */
-  function refundCredit(id, featureKey) {
+  function refundCredit(id, featureKey, chargeRef = null) {
     const cost = FEATURE_COSTS[featureKey]
     if (cost == null) return { ok: true, cost: 0 }
     const u = get(id)
     if (!u) return { ok: false, reason: 'no_user' }
-    // 不能退成负数：月度重置可能刚好发生在扣减与退还之间，那时 creditsUsed 已归零，
-    // 再减一次就等于凭空发钱。
-    u.creditsUsed = Math.max(0, (u.creditsUsed || 0) - cost)
+    const charge = chargeRef?.id
+      ? (u.creditCharges || []).find(item => item.id === chargeRef.id)
+      : [...(u.creditCharges || [])].reverse().find(item => item.feature === featureKey && !item.refunded)
+    // 没有对应扣款或已经退过，直接幂等返回，绝不能再发一次积分。
+    if (!charge || charge.refunded) return { ok: true, refunded: false, user: publicUser(u), cost: 0 }
+    const now = Date.now()
+    if ((u.planCreditsResetAt || 0) > now) {
+      u.monthlyCreditsUsed = Math.max(0, Number(u.monthlyCreditsUsed ?? u.creditsUsed ?? 0) - charge.monthly)
+      u.creditsUsed = u.monthlyCreditsUsed
+    }
+    u.permanentCredits = Math.max(0, Number(u.permanentCredits || 0)) + charge.permanent
+    charge.refunded = true
+    charge.refundedAt = now
     save()
-    return { ok: true, user: publicUser(u), cost }
+    return { ok: true, refunded: true, user: publicUser(u), cost, charge: { id: charge.id, monthly: charge.monthly, permanent: charge.permanent } }
   }
 
   /** 注销账号。隐私合规要求连坐清除，调用方负责清各自集合里的数据。 */
@@ -367,7 +430,9 @@ export function createAccountStore(file) {
     if (!u) return { ok: false, msg: '账号不存在' }
     u.role = 'super_admin'
     u.plan = SUPER_PLAN.key
+    u.monthlyCreditsUsed = 0
     u.creditsUsed = 0
+    u.permanentCredits = 0
     u.planCreditsResetAt = 0
     u.planExpiresAt = 0
     save()

@@ -100,7 +100,7 @@ test('PUT /auth/me 不能改档位与积分', async () => {
   } finally { srv.close() }
 })
 
-test('积分扣减在服务端进行；扣光后 402', async () => {
+test('永久积分扣减在服务端进行；扣光后 402', async () => {
   const { app } = mkApp()
   const { srv, base } = await listen(app)
   try {
@@ -111,11 +111,12 @@ test('积分扣减在服务端进行；扣光后 402', async () => {
       body: JSON.stringify({ feature: 'bazi.full' }),
     })).json()
     assert.equal(one.ok, true)
-    assert.equal(one.cost, 8)
-    assert.equal(one.remaining, 92)
+    assert.equal(one.cost, 5)
+    assert.equal(one.remaining, 15)
+    assert.deepEqual(one.balance, { monthly: 0, permanent: 15, total: 15 })
 
     let last
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 4; i++) {
       last = await fetch(`${base}/api/auth/credits/consume`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...bearer(body.token) },

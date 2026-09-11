@@ -74,6 +74,9 @@ export const config = {
     redirectUri: env.WX_REDIRECT_URI || '',
     // 公众号/开放平台模板消息(推送用)
     templateId: env.WX_TEMPLATE_ID || '',
+    // 微信公众平台服务器配置中的 Token。公众号关注/扫码事件需经由回调验签后
+    // 绑定站内账号；未配置时不应对外声称模板消息可用。
+    webhookToken: env.WX_WEBHOOK_TOKEN || '',
     // 微信 access_token 缓存文件
     tokenCacheFile: env.WX_TOKEN_CACHE || path.join(__dirname, 'data', 'wx_token.json'),
   },
@@ -116,6 +119,12 @@ export const config = {
     loginMaxAttempts: Number(env.AUTH_LOGIN_MAX_ATTEMPTS || 5),
     registerWindowMin: Number(env.AUTH_REGISTER_WINDOW_MIN || 60),
     registerMaxAttempts: Number(env.AUTH_REGISTER_MAX_ATTEMPTS || 5),
+  },
+
+  // ---- 账号报告档案 ----
+  reports: {
+    // 与账号、订阅和 AI 会话分文件保存，便于按用户独立清理与备份。
+    file: env.REPORT_ARCHIVE_FILE || path.join(__dirname, 'data', 'report_archives.json'),
   },
 
   security: {
@@ -176,6 +185,14 @@ export const smsConfigured = () =>
 
 // 判断微信是否已配置
 export const wechatConfigured = () => Boolean(config.wechat.appId && config.wechat.appSecret)
+
+// 「网页扫码登录」和「公众号模板消息提醒」是两条不同通道。后者除了凭证还需要
+// 关注入口和受微信验签的事件回调，缺一项都无法把公众号 openid 正确绑定给用户。
+export const wechatTemplateConfigured = () => Boolean(
+  wechatConfigured()
+  && config.wechat.templateId
+  && config.wechat.webhookToken,
+)
 
 /**
  * 取 JWT 密钥。

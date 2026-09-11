@@ -51,7 +51,9 @@ test('黄历场景：生活翻译保留传统字段来源，不覆盖彭祖黄�
   assert.ok(data.scene.guidance.every(item => item.source.includes('日历依据：丁酉月除日')))
   assert.match(data.scene.persona, /丁酉月除日/)
   assert.match(data.scene.persona, /丙火日主/)
-  assert.match(data.scene.personaTitle, /从容安排日/)
+  assert.match(data.scene.personaTitle, /享受族/)
+  assert.match(data.scene.personaTitle, /丙火日主/)
+  assert.match(data.scene.personaTitle, /可顺势推进/)
   assert.match(data.scene.personaSummary, /丁酉月除日/)
   assert.equal(data.scene.personaFacts.length, 4)
   assert.match(data.scene.context.anchor, /享受族/)
@@ -60,7 +62,10 @@ test('黄历场景：生活翻译保留传统字段来源，不覆盖彭祖黄�
   assert.match(data.scene.context.arrangeLead, /丙火日主/)
   assert.match(data.scene.advice.career, /家人团聚/)
   assert.match(data.scene.advice.career, /伐木/)
-  assert.ok(Object.values(data.scene.advice).every(value => !value.includes('丙火日主')))
+  assert.ok(data.scene.advice.cards.every(card => !card.text.includes('丙火日主')))
+  assert.deepEqual(data.scene.advice.cards.map(card => card.label), [
+    '今日主线', '家事与兴趣', '人际沟通', '消费取舍', '出行方位', '身心节奏', '决策边界', '命局提醒',
+  ])
   assert.match(data.scene.context.notesLead, /传统宜忌/)
   assert.ok(Object.values(data.scene.tips).every(value => !value.includes('丙火日主')))
   assert.ok(Object.values(data.scene.zodiac).every(value => !value.includes('丙火日主')))
@@ -77,4 +82,41 @@ test('黄历场景：生活翻译保留传统字段来源，不覆盖彭祖黄�
   assert.match(report, /把黄历放进今天/)
   assert.match(report, /不替代传统黄历规则/)
   assert.match(report, /传统规则层/)
+})
+
+test('黄历今日场景标题：随日期与命盘变化，不复用身份模板', () => {
+  const chartA = buildChart(1988, 6, 15, 12, '男')
+  const chartB = buildChart(1995, 6, 15, 12, '女')
+  const aToday = generateHuangli({ chart: chartA, date: '2026-09-09', scenario: 'worker', mode: 'personalized' })
+  const bToday = generateHuangli({ chart: chartB, date: '2026-09-09', scenario: 'worker', mode: 'personalized' })
+  const aTomorrow = generateHuangli({ chart: chartA, date: '2026-09-10', scenario: 'worker', mode: 'personalized' })
+
+  assert.match(aToday.scene.personaTitle, /打工人/)
+  assert.match(aToday.scene.personaTitle, /日主/)
+  assert.notEqual(aToday.scene.personaTitle, bToday.scene.personaTitle, '不同命盘不应复用同一场景标题')
+  assert.notEqual(aToday.scene.personaTitle, aTomorrow.scene.personaTitle, '不同日期不应复用同一场景标题')
+  assert.notDeepEqual(aToday.scene.advice, aTomorrow.scene.advice, '八项安排应随所选日期的传统黄历与日气一起变化')
+  assert.notDeepEqual(aToday.scene.advice, bToday.scene.advice, '八项安排应随命盘关系变化，而非只套身份模板')
+  for (const field of ['tips', 'zodiac', 'mental']) {
+    assert.notDeepEqual(aToday.scene[field], aTomorrow.scene[field], `${field} 应随日期与传统黄历变化`)
+    assert.notDeepEqual(aToday.scene[field], bToday.scene[field], `${field} 应随命盘日气变化`)
+  }
+  assert.match(aToday.scene.advice.career, /日气/)
+  assert.match(aToday.scene.advice.wealth, /必要、可等、想买/)
+  assert.match(aToday.scene.advice.opening, /日主.*偏好/)
+  assert.deepEqual(aToday.scene.advice.cards.map(card => card.label), [
+    '今日主线', '工作推进', '人际沟通', '消费取舍', '出行方位', '身心节奏', '决策边界', '命局提醒',
+  ])
+})
+
+test('黄历动态卡片：今日安排与生活便签保持短句且不丢失每日变化', () => {
+  const chart = buildChart(1988, 6, 15, 12, '男')
+  const today = generateHuangli({ chart, date: '2026-09-09', scenario: 'worker', mode: 'personalized' })
+  const tomorrow = generateHuangli({ chart, date: '2026-09-10', scenario: 'worker', mode: 'personalized' })
+  const charLength = text => [...String(text || '')].length
+
+  assert.ok(today.scene.advice.cards.every(card => charLength(card.text) <= 60), '今天怎么安排的单卡应控制在 60 字内')
+  assert.ok(Object.values(today.scene.tips).every(text => charLength(text) <= 50), '场景生活便签的单卡应控制在 50 字内')
+  assert.notDeepEqual(today.scene.advice.cards, tomorrow.scene.advice.cards, '短句仍应随日期变化')
+  assert.notDeepEqual(today.scene.tips, tomorrow.scene.tips, '便签仍应随日期变化')
 })

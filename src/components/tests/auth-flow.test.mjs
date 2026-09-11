@@ -78,6 +78,14 @@ test('登录失败：显示服务端的提示，不调用 onSuccess', async () =
   r.unmount()
 })
 
+test('登录页清楚告知注册赠送 20 点永久积分可开启四个咨询主题', async () => {
+  const r = render(LoginPage, { onBack: () => {}, onSwitch: () => {}, onSuccess: () => {} })
+  const text = r.text()
+  assert.ok(text.includes('注册赠 20 点永久积分'), `没有注册赠点说明：${text.slice(0, 300)}`)
+  assert.ok(text.includes('4 个元气 Agent 咨询主题'), `没有说明注册后可持续咨询：${text.slice(0, 300)}`)
+  r.unmount()
+})
+
 test('登录请求不把口令写进 URL', async () => {
   const calls = stubFetch({ '/api/auth/login': { body: { ok: true, token: 't', user: USER } } })
   const r = render(LoginPage, { onBack: () => {}, onSwitch: () => {}, onSuccess: () => {} })
@@ -119,6 +127,34 @@ test('订阅弹窗：续费入口先展示会员选择，选档后进入扫码�
   r.click(option)
   await flush()
   assert.ok(r.text().includes('续费 玄者'), `选择后没有进入支付页：${r.text().slice(0, 200)}`)
+  r.unmount()
+})
+
+test('订阅弹窗：同时提供永久点数包，并清楚标记为永久有效', async () => {
+  stubFetch({})
+  localStorage.setItem('genki-token', 'jwt-abc')
+  const r = render(MembershipModal, {
+    open: true, planKey: 'earth', user: USER, showPlanPicker: true,
+    onClose: () => {}, onRequireLogin: () => {},
+  })
+  await flush()
+  assert.ok(r.text().includes('永久点数包'), `没有永久点数包：${r.text().slice(0, 300)}`)
+  assert.ok(r.text().includes('360 点'), `没有完整点数包：${r.text().slice(0, 300)}`)
+  r.unmount()
+})
+
+test('订阅弹窗：会员可切换月付、季付和年付，并说明元气 Agent 主题额度', async () => {
+  stubFetch({})
+  localStorage.setItem('genki-token', 'jwt-abc')
+  const r = render(MembershipModal, {
+    open: true, planKey: 'earth', user: USER, showPlanPicker: true,
+    onClose: () => {}, onRequireLogin: () => {},
+  })
+  await flush()
+  const text = r.text()
+  assert.ok(text.includes('月付') && text.includes('季付') && text.includes('年付'), `缺少订阅周期：${text.slice(0, 500)}`)
+  assert.ok(text.includes('95 折') && text.includes('83 折'), `缺少周期优惠：${text.slice(0, 500)}`)
+  assert.ok(text.includes('12 个咨询主题') && text.includes('96 次具体问题解读'), `没有突出元气 Agent 顾问额度：${text.slice(0, 700)}`)
   r.unmount()
 })
 

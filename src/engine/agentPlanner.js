@@ -93,7 +93,7 @@ export function planIntents(q) {
 
 // 工具域 → 规划器意图（工具域在生活议题上的收敛）
 const DOMAIN_TO_INTENT = {
-  bazi: 'bazi', ziwei: 'ziwei', liuyao: 'divine', qimen: 'qimen',
+  bazi: 'bazi', chenggu: 'bazi', ziwei: 'ziwei', liuyao: 'divine', qimen: 'qimen',
   huangli: 'luck', tarot: 'tarot', name: 'name', fengshui: 'fengshui', hehun: 'love'
 }
 

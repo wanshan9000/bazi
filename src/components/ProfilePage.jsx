@@ -1,16 +1,17 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PLANS, AVATARS, updateProfile, changePassword, logout } from '../data/users.js'
-import { planByKey, getMonthlyCredits, getMonthlyProgress, nextPlanKey } from '../engine/membership.js'
+import { agentConsultationAllowance, getCreditBalance, planByKey, nextPlanKey } from '../engine/membership.js'
+import { reportApi } from '../api/reports.js'
 
 const PLAN_STYLE = {
   // free 是「未订阅 / 已过期」的落点，不在可购买的 PLANS 里，但个人中心一定会
   // 渲染到它 —— 漏了这一项就是 PLAN_STYLE[plan].cls 读 undefined，
   // 过期用户一进个人中心整页白屏。
-  free: { label: '游客', cls: 'pr-free' },
+  free: { label: '客者', cls: 'pr-free' },
   earth: { label: '凡者', cls: 'pr-earth' },
   heaven: { label: '玄者', cls: 'pr-heaven' },
   oracle: { label: '天者', cls: 'pr-oracle' },
-  supreme: { label: '超级尊者', cls: 'pr-supreme' }
+  supreme: { label: '尊者', cls: 'pr-supreme' }
 }
 
 const IMAGE_AVATAR_RE = /^data:image\/(?:png|jpeg|webp);base64,/i
@@ -46,7 +47,7 @@ function compressAvatar(file) {
 
 // onSubscribe 由 App 传入（openSubscribe），此前漏在解构里，而第 55/168/174 行直接引用它，
 // 严格模式下就是 ReferenceError：个人中心的「升级 / 续费」按钮一点就崩。
-export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, onBack, onLogout, onUpdate, onSubscribe }) {
+export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, onBack, onLogout, onUpdate, onSubscribe, onReports, onAskAgent }) {
   const [editing, setEditing] = useState(false)
   const [nickname, setNickname] = useState(user.nickname)
   const [avatarOpen, setAvatarOpen] = useState(false)
@@ -58,6 +59,15 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
   const [msg, setMsg] = useState('')
   const [msgType, setMsgType] = useState('ok')
   const avatarInputRef = useRef(null)
+  const [reportCount, setReportCount] = useState(null)
+
+  useEffect(() => {
+    let alive = true
+    reportApi.list().then(result => {
+      if (alive && result.ok) setReportCount((result.reports || []).length)
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [user?.id])
 
   const days = Math.max(1, Math.ceil((Date.now() - user.createdAt) / 86400000))
   // 必须走 planByKey：PLANS 里没有 free，用 find 会静默回落到 PLANS[0]（凡境），
@@ -65,11 +75,15 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
   const plan = planByKey(user.plan)
   const isSuper = Boolean(user.isSuperAdmin)
   const nextPlan = nextPlanKey(plan.key)
-  const remaining = getMonthlyCredits(user)
-  const used = user.creditsUsed || 0
-  const progress = getMonthlyProgress(user)
+  const balance = getCreditBalance(user)
+  const remaining = balance.total
+  const agentAllowance = agentConsultationAllowance(remaining)
   const expiresAt = user.planExpiresAt || 0
   const daysLeft = expiresAt ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 86400000)) : 0
+  const membershipStatus = isSuper ? '永久有效' : expiresAt ? `剩余 ${daysLeft} 天` : '未开通'
+  const agentTip = isSuper
+    ? '元气 Agent 可随时开启咨询与追问，适合在阅读报告时持续深入交流。'
+    : `元气 Agent 可开启 ${agentAllowance.topics} 个咨询主题、完成 ${agentAllowance.rounds} 次具体问题解读；每个主题含 8 次具体问题解读、72 小时内有效。扣点时优先使用当月积分。`
   const fmtDate = (ts) => ts ? new Date(ts).toLocaleDateString('zh-CN') : '—'
 
   const flash = (text, type = 'ok') => {
@@ -164,116 +178,74 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
       )}
 
       <div className="profile-wrap">
-        {/* 用户信息卡 */}
-        <div className="profile-card pr-id-card">
-          <div className="pr-id-avatar" onClick={() => setAvatarOpen(v => !v)} title="点击更换头像">
-            <span className={`pr-id-glyph ${isImageAvatar(user.avatar) ? 'pr-id-photo' : ''}`}>
-              {isImageAvatar(user.avatar) ? <img src={user.avatar} alt="" /> : user.avatar}
-            </span>
-            <span className="pr-id-edit">✎</span>
-          </div>
-          <div className="pr-id-info">
-            {editing ? (
-              <div className="pr-nick-edit">
-                <input value={nickname} maxLength={16} onChange={e => setNickname(e.target.value)} autoFocus />
-                <button onClick={saveNickname} className="pr-nick-save">保存</button>
-                <button onClick={() => { setEditing(false); setNickname(user.nickname) }} className="pr-nick-cancel">取消</button>
+        <section className="pr-account-overview" aria-label="账户总览">
+          {/* 身份信息 */}
+          <div className="profile-card pr-id-card">
+            <div className="pr-id-avatar" onClick={() => setAvatarOpen(v => !v)} title="点击更换头像">
+              <span className={`pr-id-glyph ${isImageAvatar(user.avatar) ? 'pr-id-photo' : ''}`}>
+                {isImageAvatar(user.avatar) ? <img src={user.avatar} alt="" /> : user.avatar}
+              </span>
+              <span className="pr-id-edit">✎</span>
+            </div>
+            <div className="pr-id-info">
+              {editing ? (
+                <div className="pr-nick-edit">
+                  <input value={nickname} maxLength={16} onChange={e => setNickname(e.target.value)} autoFocus />
+                  <button onClick={saveNickname} className="pr-nick-save">保存</button>
+                  <button onClick={() => { setEditing(false); setNickname(user.nickname) }} className="pr-nick-cancel">取消</button>
+                </div>
+              ) : (
+                <h2 className="pr-nick" onClick={() => setEditing(true)} title="点击修改昵称">
+                  {user.nickname} <span className="pr-nick-pen">✎</span>
+                </h2>
+              )}
+              <p className="pr-account">{user.account}</p>
+              <p className="pr-join">加入第 {days} 天 · {new Date(user.createdAt).toLocaleDateString('zh-CN')} 加入</p>
+            </div>
+            <div className="pr-badge">
+              <div className="pr-badge-row">
+                <span className={`pr-badge-tag ${(PLAN_STYLE[user.plan] || PLAN_STYLE.free).cls}`}>{(PLAN_STYLE[user.plan] || PLAN_STYLE.free).label}</span>
+                <button className="pr-logout-btn" onClick={doLogout} title="退出登录" aria-label="退出登录">↪</button>
               </div>
-            ) : (
-              <h2 className="pr-nick" onClick={() => setEditing(true)} title="点击修改昵称">
-                {user.nickname} <span className="pr-nick-pen">✎</span>
-              </h2>
-            )}
-            <p className="pr-account">{user.account}</p>
-            <p className="pr-join">加入第 {days} 天 · {new Date(user.createdAt).toLocaleDateString('zh-CN')} 加入</p>
-          </div>
-          <div className="pr-badge">
-            <div className="pr-badge-row">
-              <span className={`pr-badge-tag ${(PLAN_STYLE[user.plan] || PLAN_STYLE.free).cls}`}>{(PLAN_STYLE[user.plan] || PLAN_STYLE.free).label}</span>
-              <button className="pr-logout-btn" onClick={doLogout} title="退出登录" aria-label="退出登录">↪</button>
             </div>
-            <span className="pr-badge-meta">{plan.tag}会员</span>
           </div>
-        </div>
 
-        {/* 头像选择 */}
-        {avatarOpen && (
-          <div className="pr-avatar-picker">
-            {AVATARS.map(a => (
-              <button key={a} className={`pr-avatar-opt ${a === user.avatar ? 'active' : ''}`} onClick={() => pickAvatar(a)} disabled={avatarBusy}>{a}</button>
-            ))}
-            <input ref={avatarInputRef} className="pr-avatar-file" type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadAvatar} />
-            <button className="pr-avatar-upload" onClick={() => avatarInputRef.current?.click()} disabled={avatarBusy}>
-              <span aria-hidden="true">＋</span>
-              <b>{avatarBusy ? '处理中' : '上传图片'}</b>
+          {avatarOpen && (
+            <div className="pr-avatar-picker">
+              {AVATARS.map(a => (
+                <button key={a} className={`pr-avatar-opt ${a === user.avatar ? 'active' : ''}`} onClick={() => pickAvatar(a)} disabled={avatarBusy}>{a}</button>
+              ))}
+              <input ref={avatarInputRef} className="pr-avatar-file" type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadAvatar} />
+              <button className="pr-avatar-upload" onClick={() => avatarInputRef.current?.click()} disabled={avatarBusy}>
+                <span aria-hidden="true">＋</span>
+                <b>{avatarBusy ? '处理中' : '上传图片'}</b>
+              </button>
+            </div>
+          )}
+
+          <div className="pr-account-tools" aria-label="账户工具">
+            <button className="pr-account-tool pr-report-tool" onClick={() => onReports?.()}>
+              <span className="pr-tool-kicker">REPORT ARCHIVE</span>
+              <strong>{reportCount ?? (historyCount + tarotCount || '—')}</strong>
+              <span className="pr-tool-title">我的报告</span>
+              <small>查看全部记录 <i>›</i></small>
             </button>
-          </div>
-        )}
-
-        {/* 统计条 */}
-        <div className="profile-card pr-stats">
-          <div className="pr-stat">
-            <span className="pr-stat-num">{historyCount}</span>
-            <span className="pr-stat-label">命盘记录</span>
-          </div>
-          <div className="pr-stat">
-            <span className="pr-stat-num">{tarotCount}</span>
-            <span className="pr-stat-label">塔罗足迹</span>
-          </div>
-          <div className="pr-stat">
-            <span className="pr-stat-num">{isSuper ? '—' : plan.price}</span>
-            <span className="pr-stat-label">当前月费 ¥</span>
-          </div>
-        </div>
-
-        {/* 积分余额（核心新增） */}
-        <div className="profile-card pr-credits">
-          <div className="pr-cr-top">
-            <div className="pr-cr-title">
-              <span className="pr-cr-eyebrow">月度权益</span>
-              <h3>积分额度</h3>
-            </div>
-            <span className="pr-cr-plan">{plan.name}</span>
-          </div>
-
-          <div className="pr-cr-overview">
-            <div className="pr-cr-balance">
-              <span className="pr-cr-label">本月可用积分</span>
-              <div className="pr-cr-num"><b>{isSuper ? '∞' : remaining}</b><i>/ {isSuper ? '∞' : plan.credits}</i></div>
-            </div>
-            <div className="pr-cr-meta" aria-label="积分使用详情">
-              <div><span>{isSuper ? '权限' : '已用'}</span><b>{isSuper ? '全量' : used}</b><em>{isSuper ? '访问' : '积分'}</em></div>
-              <div><span>{isSuper ? '有效期' : '到期日'}</span><b>{isSuper ? '永久' : fmtDate(expiresAt)}</b></div>
-              <div><span>{isSuper ? '后台' : '剩余'}</span><b>{isSuper ? '已授权' : daysLeft}</b><em>{isSuper ? '' : '天'}</em></div>
+            <div className="pr-account-tool pr-points-tool">
+              <span className="pr-tool-kicker">积分账户 · CREDITS</span>
+              <strong>{isSuper ? '∞' : remaining}<em>{isSuper ? '' : ' 点'}</em></strong>
+              <span className="pr-tool-title">{isSuper ? '全量使用权限' : '可用点数'}</span>
+              <button className="pr-points-action" onClick={() => nextPlan ? upgrade(nextPlan) : onSubscribe?.(null, { selectPlan: true })}>
+                {nextPlan ? `升级至${PLAN_STYLE[nextPlan].label}` : '会员订阅管理'} <i>›</i>
+              </button>
             </div>
           </div>
 
-          <div className="pr-cr-progress">
-            <div className="pr-cr-progress-head"><span>额度使用进度</span><b>{Math.min(100, Math.round(progress * 100))}%</b></div>
-            <div className="pr-cr-bar" role="progressbar" aria-label="本月积分使用进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.min(100, Math.round(progress * 100))}>
-              <i style={{ width: `${Math.min(100, Math.round(progress * 100))}%` }} />
-            </div>
+          <div className="pr-agent-strip">
+            <span className="pr-agent-sigil" aria-hidden="true">✦</span>
+            <p><b>元气 AI</b><span>{agentTip}</span></p>
+            <button onClick={() => onAskAgent?.()}>去咨询</button>
           </div>
-
-          <p className="pr-cr-tip">
-            完整命书、AI 解读与元氣 AI 对话按次扣减积分；额度每月自动续期。
-          </p>
-          <div className="pr-cr-actions">
-            <button
-              className="pr-cr-action primary"
-              disabled={!nextPlan}
-              onClick={() => nextPlan && upgrade(nextPlan)}
-            >
-              {nextPlan ? `升级至${PLAN_STYLE[nextPlan].label}` : '已是最高档位'}
-            </button>
-            <button
-              className="pr-cr-action secondary"
-              onClick={() => onSubscribe && onSubscribe(null, { selectPlan: true })}
-            >
-              续费当前会员
-            </button>
-          </div>
-        </div>
+        </section>
 
         {/* 会员权益 */}
         <div className="profile-block">
@@ -328,7 +300,7 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
           </div>
         </div>
 
-        <p className="profile-foot">元氣滿滿 · 数据仅保存在本设备浏览器中</p>
+        <p className="profile-foot">元氣滿滿 · 报告与咨询记录会安全归入你的账号</p>
       </div>
     </section>
   )

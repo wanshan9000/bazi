@@ -10,10 +10,10 @@ import { createAccountStore } from '../accounts.js'
 import { signJwt } from '../jwt.js'
 import { resolveJwtSecret } from '../config.js'
 
-function fakePool(events) {
+function fakePool(events, { timing = null } = {}) {
   return {
     isBusy: () => false,
-    async run({ onEvent }) { for (const e of events) onEvent(e); return { finalText: events.filter(e => e.type === 'text').map(e => e.delta).join(''), usage: null, title: null } },
+    async run({ onEvent }) { for (const e of events) onEvent(e); return { finalText: events.filter(e => e.type === 'text').map(e => e.delta).join(''), usage: null, title: null, timing } },
   }
 }
 
@@ -39,6 +39,7 @@ async function mkUser(accounts, account = 'u1') {
 }
 const bearer = t => ({ authorization: `Bearer ${t}` })
 const guest = id => ({ 'x-genki-uid': `anon:${id}` })
+const sseFrames = body => body.split('\n\n').filter(frame => frame.startsWith('data: ')).map(frame => JSON.parse(frame.replace(/^data: /, '')))
 
 test('chat 流式返回并镜像消息', async () => {
   const { app, store, accounts } = mkApp(fakePool([{ type: 'text', delta: '你' }, { type: 'text', delta: '好' }, { type: 'done', reason: 'completed' }]))
@@ -58,6 +59,39 @@ test('chat 流式返回并镜像消息', async () => {
   } finally { srv.close() }
 })
 
+test('完成帧与会话只记录 Agent 耗时指标', async () => {
+  // 若路由层忘了转存 pool timing，性能排查会退化成只能靠主观感受“好像慢”。
+  const timing = { firstEventMs: 83, firstTextMs: 126, totalMs: 912 }
+  const { app, store, accounts } = mkApp(fakePool([{ type: 'text', delta: '已整理。' }], { timing }))
+  const me = await mkUser(accounts, 'timing-user')
+  const { srv, base } = await listen(app)
+  try {
+    const res = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify({ text: '看看事业' }),
+    })
+    const frames = sseFrames(await res.text())
+    const sid = frames.find(frame => frame.type === 'session').sessionId
+    assert.deepEqual(frames.at(-1).timing, timing)
+    assert.deepEqual(store.getSession(me.id, sid).lastTiming, timing)
+  } finally { srv.close() }
+})
+
+test('报告咨询会话在历史中使用清晰的报告来源标题', async () => {
+  const { app, store, accounts } = mkApp(fakePool([{ type: 'text', delta: '可以继续问。' }]))
+  const me = await mkUser(accounts, 'report-title')
+  const { srv, base } = await listen(app)
+  try {
+    const res = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearer(me.token) },
+      body: JSON.stringify({ text: '报告咨询：奇门遁甲\n我正在阅读奇门遁甲报告。请解释当前报告。' }),
+    })
+    const frames = sseFrames(await res.text())
+    const sessionId = frames.find(frame => frame.type === 'session').sessionId
+    assert.equal(store.getSession(me.id, sessionId).title, '奇门遁甲报告咨询')
+  } finally { srv.close() }
+})
+
 test('缺身份 → 401；text 超长 → 400', async () => {
   const { app, accounts } = mkApp(fakePool([]))
   const me = await mkUser(accounts)
@@ -67,6 +101,68 @@ test('缺身份 → 401；text 超长 → 400', async () => {
     assert.equal(r1.status, 401)
     const r2 = await fetch(`${base}/api/agent/chat`, { method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify({ text: 'x'.repeat(2001) }) })
     assert.equal(r2.status, 400)
+  } finally { srv.close() }
+})
+
+test('客者可免费体验一个咨询主题，最多获得十次具体问题解读', async () => {
+  const { app, store } = mkApp(fakePool([{ type: 'text', delta: '已解答你的具体问题，建议稳住节奏。' }]))
+  const { srv, base } = await listen(app)
+  try {
+    let sessionId = null
+    for (let i = 0; i < 10; i++) {
+      const res = await fetch(`${base}/api/agent/chat`, {
+        method: 'POST', headers: { 'content-type': 'application/json', ...guest('trial-user') }, body: JSON.stringify({ sessionId, text: `第${i + 1}次：今年财运如何？` }),
+      })
+      assert.equal(res.status, 200)
+      const frames = sseFrames(await res.text())
+      sessionId = frames.find(frame => frame.type === 'session').sessionId
+      const consultation = frames.find(frame => frame.type === 'consultation')?.consultation
+      assert.equal(consultation.remainingRounds, 9 - i)
+    }
+    const exhausted = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...guest('trial-user') }, body: JSON.stringify({ sessionId, text: '第十一次：今年财运如何？' }),
+    })
+    // 单 uid 的安全限流仍保持每分钟 10 次，因此第 11 次会先命中安全层；
+    // 不放宽防刷规则，只验证客者主题已正确用满 10 轮。
+    assert.ok([402, 429].includes(exhausted.status))
+    if (exhausted.status === 402) assert.equal((await exhausted.json()).reason, 'guest_limit')
+    assert.equal(store.getSession('anon:trial-user', sessionId).consultation.remainingRounds, 0)
+  } finally { srv.close() }
+})
+
+test('寒暄、补充资料与仅澄清信息不消耗具体问题解读次数', async () => {
+  // 防止退回“只要模型吐字就扣一次”的旧规则：用户真正得到的咨询判断才应消耗主题额度。
+  const pool = {
+    isBusy: () => false,
+    async run({ text, onEvent }) {
+      const answer = text.includes('今年财运如何')
+        ? '## 财运判断\n今年宜稳中求进，先守住现金流。'
+        : text.includes('1995年')
+          ? '请补充出生时辰与想重点咨询的问题，我再为你排盘。'
+          : '你好，我一直都在。你可以先说说想从哪个方向开始聊，我会结合你提供的信息逐步解答。'
+      onEvent({ type: 'text', delta: answer })
+      return { finalText: answer, usage: null, title: null }
+    },
+  }
+  const { app } = mkApp(pool)
+  const { srv, base } = await listen(app)
+  try {
+    const first = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...guest('effective-rounds') }, body: JSON.stringify({ text: 'Hi，你回来了' }),
+    })
+    const firstFrames = sseFrames(await first.text())
+    const sessionId = firstFrames.find(frame => frame.type === 'session').sessionId
+    assert.equal(firstFrames.find(frame => frame.type === 'consultation').consultation.remainingRounds, 10)
+
+    const details = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...guest('effective-rounds') }, body: JSON.stringify({ sessionId, text: '1995年6月15日，女' }),
+    })
+    assert.equal(sseFrames(await details.text()).find(frame => frame.type === 'consultation').consultation.remainingRounds, 10)
+
+    const consultation = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...guest('effective-rounds') }, body: JSON.stringify({ sessionId, text: '今年财运如何' }),
+    })
+    assert.equal(sseFrames(await consultation.text()).find(frame => frame.type === 'consultation').consultation.remainingRounds, 9)
   } finally { srv.close() }
 })
 
@@ -135,8 +231,8 @@ test('turn/end 错误：不再补发 done', async () => {
     const frames = body.split('\n\n').filter(Boolean).map(l => JSON.parse(l.replace(/^data: /, '')))
     assert.equal(frames.at(-1).type, 'error')
     assert.ok(!frames.some(f => f.type === 'done'))
-    // 这一轮吐了「部分」正文才报错，属于有产出，照常收费
-    assert.equal(accounts.get(me.id).creditsUsed, 1)
+    // 有错误结束的半截输出不算成功回答，不开启主题也不扣点。
+    assert.equal(accounts.get(me.id).permanentCredits, 20)
   } finally { srv.close() }
 })
 
@@ -147,20 +243,92 @@ test('请求体读完不应提前中止 pool.run 的 signal', async () => {
     async run({ onEvent, signal }) {
       await new Promise(r => setTimeout(r, 30))
       aborted = signal.aborted
-      onEvent({ type: 'text', delta: 'ok' })
-      return { finalText: 'ok', usage: null, title: null }
+      onEvent({ type: 'text', delta: '你的事业趋势适合稳中求进，建议先做好长期积累。' })
+      return { finalText: '你的事业趋势适合稳中求进，建议先做好长期积累。', usage: null, title: null }
     },
   }
   const { app, accounts } = mkApp(pool)
   const me = await mkUser(accounts)
   const { srv, base } = await listen(app)
   try {
-    const res = await fetch(`${base}/api/agent/chat`, { method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify({ text: '嗨' }) })
+    const res = await fetch(`${base}/api/agent/chat`, { method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify({ text: '请解读我的事业趋势' }) })
     const body = await res.text()
     const frames = body.split('\n\n').filter(Boolean).map(l => JSON.parse(l.replace(/^data: /, '')))
-    assert.ok(frames.some(f => f.type === 'text' && f.delta === 'ok'))
+    assert.ok(frames.some(f => f.type === 'text' && f.delta.includes('事业趋势')))
     assert.equal(aborted, false)
-    assert.equal(accounts.get(me.id).creditsUsed, 1, '有产出的一轮按 agent.chat 扣 1 分')
+    assert.equal(accounts.get(me.id).permanentCredits, 15, '首次成功回答开启主题，扣 5 点永久积分')
+  } finally { srv.close() }
+})
+
+test('付费咨询主题在首次成功回答时扣五点，同一主题八次具体问题解读内不重复扣款', async () => {
+  const { app, store, accounts } = mkApp(fakePool([{ type: 'text', delta: '已解答你的具体问题，建议稳住节奏。' }]))
+  const me = await mkUser(accounts, 'topic-member')
+  const { srv, base } = await listen(app)
+  try {
+    let sessionId = null
+    for (let i = 0; i < 8; i++) {
+      const res = await fetch(`${base}/api/agent/chat`, {
+        method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify({ sessionId, text: `第${i + 1}次：今年事业如何？` }),
+      })
+      assert.equal(res.status, 200)
+      const frames = sseFrames(await res.text())
+      sessionId = frames.find(frame => frame.type === 'session').sessionId
+      const consultation = frames.find(frame => frame.type === 'consultation')?.consultation
+      assert.equal(consultation.remainingRounds, 7 - i)
+    }
+    assert.equal(accounts.get(me.id).permanentCredits, 15, '八轮主题只扣一次 5 点')
+    assert.equal(store.getSession(me.id, sessionId).consultation.remainingRounds, 0)
+    const exhausted = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify({ sessionId, text: '第九问' }),
+    })
+    assert.equal(exhausted.status, 402)
+    assert.equal((await exhausted.json()).reason, 'topic_exhausted')
+    assert.equal(accounts.get(me.id).permanentCredits, 15)
+  } finally { srv.close() }
+})
+
+test('主题用尽后续问沿用同一会话并保留上下文', async () => {
+  // 若续问被迫新建 session，DSH 拿到的是空白上下文，用户会感觉“昨天聊过的全忘了”。
+  const { app, store, accounts } = mkApp(fakePool([{ type: 'text', delta: '已解答你的具体问题，建议稳住节奏。' }]))
+  const me = await mkUser(accounts, 'topic-continuation')
+  const { srv, base } = await listen(app)
+  try {
+    let sessionId = null
+    for (let i = 0; i < 8; i++) {
+      const res = await fetch(`${base}/api/agent/chat`, {
+        method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify({ sessionId, text: `第${i + 1}次：今年事业如何？` }),
+      })
+      sessionId = sseFrames(await res.text()).find(frame => frame.type === 'session').sessionId
+    }
+    const continued = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) },
+      body: JSON.stringify({ sessionId, text: '继续追问昨天的选择', renew: true }),
+    })
+    assert.equal(continued.status, 200)
+    const frames = sseFrames(await continued.text())
+    assert.equal(frames.find(frame => frame.type === 'session').sessionId, sessionId)
+    assert.equal(frames.find(frame => frame.type === 'consultation').consultation.remainingRounds, 7)
+    assert.equal(store.listSessions(me.id).length, 1, '续问不能另建一条失忆会话')
+    assert.equal(accounts.get(me.id).permanentCredits, 10, '每个八轮主题仍按原规则扣五点')
+  } finally { srv.close() }
+})
+
+test('过期的咨询主题未经确认不能继续', async () => {
+  const { app, store, accounts } = mkApp(fakePool([{ type: 'text', delta: '已解答你的具体问题，建议稳住节奏。' }]))
+  const me = await mkUser(accounts, 'topic-expired')
+  const { srv, base } = await listen(app)
+  try {
+    const first = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify({ text: '请解读我的事业趋势' }),
+    })
+    const sessionId = sseFrames(await first.text()).find(frame => frame.type === 'session').sessionId
+    const session = store.getSession(me.id, sessionId)
+    store.updateSession(me.id, sessionId, { consultation: { ...session.consultation, expiresAt: Date.now() - 1 } })
+    const expired = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify({ sessionId, text: '续问' }),
+    })
+    assert.equal(expired.status, 402)
+    assert.equal((await expired.json()).reason, 'topic_expired')
   } finally { srv.close() }
 })
 
@@ -169,7 +337,59 @@ test('models 列表', async () => {
   const { srv, base } = await listen(app)
   try {
     const m = await (await fetch(`${base}/api/agent/models`)).json()
-    assert.ok(m.routes.find(r => r.key === 'deepseek-flash'))
+    assert.ok(m.routes.find(r => r.key === 'minimax'))
+    assert.equal(m.routes.some(r => r.key === 'deepseek-flash'), false, '没有 DeepSeek 凭据时不能展示不可用的快速模型')
+    assert.equal(m.default, 'minimax')
+  } finally { srv.close() }
+})
+
+test('黄历 AI 解读：先计算事实、调用一次后缓存且只扣一次积分', async () => {
+  const prompts = []
+  const pool = {
+    isBusy: () => false,
+    async run({ text }) {
+      prompts.push(text)
+      return { finalText: '## 今日判断\n稳住节奏。\n\n## 安排重点\n先完成沟通。\n\n## 提醒\n别仓促拍板。', usage: null, title: null }
+    },
+  }
+  const { app, accounts } = mkApp(pool)
+  const me = await mkUser(accounts, 'huangli-insight')
+  const { srv, base } = await listen(app)
+  const body = { date: '2026-09-10', scenario: 'worker', chart: { year: 1995, month: 6, day: 15, hour: 12, gender: '女' } }
+  try {
+    const first = await (await fetch(`${base}/api/agent/huangli-insight`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify(body),
+    })).json()
+    assert.equal(first.ok, true)
+    assert.equal(first.cached, false)
+    assert.match(first.text, /今日判断/)
+    assert.equal(prompts.length, 1)
+    assert.match(prompts[0], /严格遵守“huangli” Skill/)
+    assert.match(prompts[0], /传统/)
+    assert.equal(accounts.get(me.id).permanentCredits, 19)
+
+    const second = await (await fetch(`${base}/api/agent/huangli-insight`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify(body),
+    })).json()
+    assert.equal(second.ok, true)
+    assert.equal(second.cached, true)
+    assert.equal(prompts.length, 1, '缓存命中不应再次调用模型')
+    assert.equal(accounts.get(me.id).permanentCredits, 19, '缓存命中不应再次扣分')
+  } finally { srv.close() }
+})
+
+test('黄历 AI 解读：模型无内容时退还积分', async () => {
+  const pool = { isBusy: () => false, async run() { return { finalText: '', usage: null, title: null } } }
+  const { app, accounts } = mkApp(pool)
+  const me = await mkUser(accounts, 'huangli-refund')
+  const { srv, base } = await listen(app)
+  try {
+    const response = await fetch(`${base}/api/agent/huangli-insight`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) },
+      body: JSON.stringify({ date: '2026-09-10', scenario: 'worker' }),
+    })
+    assert.equal(response.status, 502)
+    assert.equal(accounts.get(me.id).permanentCredits, 20)
   } finally { srv.close() }
 })
 
@@ -218,13 +438,14 @@ test('chart 字段非法/超长时不得进入 prompt', async () => {
       return { finalText: '好', usage: null, title: null }
     },
   }
-  const { app } = mkApp(pool)
+  const { app, accounts } = mkApp(pool)
+  const me = await mkUser(accounts, 'chart-invalid')
   const { srv, base } = await listen(app)
   try {
     const huge = 'A'.repeat(50000)
     await fetch(`${base}/api/agent/chat`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...guest('chart') },
+      headers: { 'content-type': 'application/json', ...bearer(me.token) },
       body: JSON.stringify({ text: '你好', chart: { year: 1990, month: 5, day: 6, hour: 8, gender: huge } }),
     })
     assert.equal(captured.length, 1)
@@ -244,22 +465,106 @@ test('合法 chart 会拼出命盘行；时辰未知不伪装成 12 时', async 
       return { finalText: '好', usage: null, title: null }
     },
   }
-  const { app } = mkApp(pool)
+  const { app, accounts } = mkApp(pool)
+  const me = await mkUser(accounts, 'chart-valid')
   const { srv, base } = await listen(app)
   try {
     await fetch(`${base}/api/agent/chat`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...guest('c1') },
+      headers: { 'content-type': 'application/json', ...bearer(me.token) },
       body: JSON.stringify({ text: '排盘', chart: { year: 1990, month: 5, day: 6, hour: 8, gender: '男' } }),
     })
     assert.match(captured[0], /当前缘主命盘.*1990年5月6日 8时 男/)
 
     await fetch(`${base}/api/agent/chat`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...guest('c2') },
+      headers: { 'content-type': 'application/json', ...bearer(me.token) },
       body: JSON.stringify({ text: '排盘', chart: { year: 1990, month: 5, day: 6, gender: '女' } }),
     })
     assert.match(captured[1], /时辰未知/, '缺 hour 应标注未知，而不是补成 12 时')
+  } finally { srv.close() }
+})
+
+test('完整出生信息首次进入会话时，提示模型先校盘再在同一轮回答问题', async () => {
+  const captured = []
+  const pool = {
+    isBusy: () => false,
+    async run({ text, onEvent }) {
+      captured.push(text)
+      onEvent({ type: 'text', delta: '答复' })
+      return { finalText: '答复', usage: null, title: null }
+    },
+  }
+  const { app, accounts } = mkApp(pool)
+  const me = await mkUser(accounts, 'bazi-calibration')
+  const { srv, base } = await listen(app)
+  try {
+    await fetch(`${base}/api/agent/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearer(me.token) },
+      body: JSON.stringify({ text: '我是1990年5月6日早上8点出生的男生，今年适合换工作吗？' }),
+    })
+
+    assert.match(captured[0], /【排盘校验任务】/)
+    assert.match(captured[0], /^\/mangpai\b/, '完整生辰只注入实际要执行的默认盲派 Skill')
+    assert.doesNotMatch(captured[0], /^\/bazi-router\b/, '流派选择已由服务端完成，首轮不应重复注入只负责路由的 Skill')
+    assert.match(captured[0], /必须先调用 `bazi` 工具/)
+    assert.match(captured[0], /同一轮继续回答用户这次的具体问题/)
+    assert.match(captured[0], /标题必须独占一行/)
+    assert.match(captured[0], /不得使用 Markdown 表格/)
+    assert.match(captured[0], /不得输出.*think/)
+    assert.match(captured[0], /今年适合换工作吗？/)
+  } finally { srv.close() }
+})
+
+test('完整生辰且明确指定子平时，服务端注入子平 Skill 而不走默认盲派', async () => {
+  const captured = []
+  const pool = {
+    isBusy: () => false,
+    async run({ text, onEvent }) {
+      captured.push(text)
+      onEvent({ type: 'text', delta: '答复' })
+      return { finalText: '答复', usage: null, title: null }
+    },
+  }
+  const { app, accounts } = mkApp(pool)
+  const me = await mkUser(accounts, 'bazi-ziping-calibration')
+  const { srv, base } = await listen(app)
+  try {
+    await fetch(`${base}/api/agent/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearer(me.token) },
+      body: JSON.stringify({ text: '1990年5月6日早上8点，男，请按子平派看今年工作。' }),
+    })
+
+    assert.match(captured[0], /^\/yixue-taishan\b/)
+    assert.doesNotMatch(captured[0], /^\/bazi-router\b/)
+    assert.doesNotMatch(captured[0], /^\/mangpai\b/)
+  } finally { srv.close() }
+})
+
+test('Agent 原始推理不会向用户暴露 Skill 跳过或重走流程等内部过程', async () => {
+  const pool = {
+    isBusy: () => false,
+    async run({ onEvent }) {
+      onEvent({ type: 'reasoning', delta: '我刚才跳过了 Skill，是否需要重走流程？' })
+      onEvent({ type: 'text', delta: '我先为你核对盘面。' })
+      return { finalText: '我先为你核对盘面。', usage: null, title: null }
+    },
+  }
+  const { app, accounts } = mkApp(pool)
+  const me = await mkUser(accounts, 'private-reasoning')
+  const { srv, base } = await listen(app)
+  try {
+    const response = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearer(me.token) },
+      body: JSON.stringify({ text: '帮我看看' }),
+    })
+    const frames = sseFrames(await response.text())
+    const reasoning = frames.filter(frame => frame.type === 'reasoning').map(frame => frame.delta).join('')
+    assert.equal(reasoning, '正在整理命盘与问题要点…')
+    assert.doesNotMatch(JSON.stringify(frames), /跳过.*Skill|重走流程/)
   } finally { srv.close() }
 })
 
@@ -273,15 +578,16 @@ test('聊天内排出命盘后，会话历史以命盘摘要命名', async () =>
       return { finalText: '已排盘', usage: null, title: null }
     },
   }
-  const { app, store } = mkApp(pool)
+  const { app, store, accounts } = mkApp(pool)
+  const me = await mkUser(accounts, 'bazi-title')
   const { srv, base } = await listen(app)
   try {
     await fetch(`${base}/api/agent/chat`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...guest('bazi-title') },
+      headers: { 'content-type': 'application/json', ...bearer(me.token) },
       body: JSON.stringify({ text: '1975年10月13日早上6点，男，帮我排盘' }),
     })
-    const [session] = store.listSessions('anon:bazi-title')
+    const [session] = store.listSessions(me.id)
     assert.equal(session.chartKey, '1975-10-13-6-男')
     assert.equal(session.title, '乾造 · 1975年10月13日 · 卯时')
   } finally { srv.close() }
@@ -336,7 +642,7 @@ test('一轮完全没有产出时退还积分', async () => {
       headers: { 'content-type': 'application/json', ...bearer(me.token) },
       body: JSON.stringify({ text: '嗨' }),
     })
-    assert.equal(accounts.get(me.id).creditsUsed, 0, '无产出的一轮必须退还积分')
+    assert.equal(accounts.get(me.id).permanentCredits, 20, '无产出不能开启主题或扣点')
   } finally { srv.close() }
 })
 
@@ -347,7 +653,7 @@ test('积分不足时 /agent/chat 返回 402，且没有真的调用模型', asy
   const { app, accounts } = mkApp(pool)
   const me = await mkUser(accounts, 'broke')
   // 把额度花光
-  while (accounts.consumeCredit(me.id, 'agent.chat').ok) { /* 一直扣到不足为止 */ }
+  while (accounts.consumeCredit(me.id, 'agent.topic').ok) { /* 一直扣到不足为止 */ }
   const { srv, base } = await listen(app)
   try {
     const res = await fetch(`${base}/api/agent/chat`, {
@@ -380,5 +686,31 @@ test('游客的单桶额度比登录用户紧', async () => {
       userHits++
     }
     assert.ok(guestHits < userHits, `游客额度(${guestHits}) 应小于登录用户(${userHits})`)
+  } finally { srv.close() }
+})
+
+test('正文夹带的内部 think 不会流给用户或写入会话历史', async () => {
+  const events = [
+    { type: 'text', delta: '<think>我需要先加载 mangpai Skill，再调用 ' },
+    { type: 'text', delta: 'bazi 工具校盘。</think>\n\n## 盘面核对\n- 四柱：戊午 · 甲寅 · 辛亥 · 丁酉' },
+  ]
+  const { app, store, accounts } = mkApp(fakePool(events))
+  const me = await mkUser(accounts, 'safe-think')
+  const { srv, base } = await listen(app)
+  try {
+    const res = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearer(me.token) },
+      body: JSON.stringify({ text: '请看这个命盘' }),
+    })
+    const frames = sseFrames(await res.text())
+    const publicText = frames.filter(frame => frame.type === 'text').map(frame => frame.delta).join('')
+    const sessionId = frames.find(frame => frame.type === 'session').sessionId
+    const storedText = store.listMessages(me.id, sessionId).find(message => message.role === 'ai').text
+
+    assert.equal(publicText.includes('加载 mangpai Skill'), false, 'SSE 不应发送内部流程')
+    assert.equal(storedText.includes('加载 mangpai Skill'), false, '会话历史不应保存内部流程')
+    assert.ok(publicText.includes('已完成命盘与要点核对'), '用户应看到统一的思考状态')
+    assert.ok(storedText.includes('盘面核对'), '可读结论应完整保存')
   } finally { srv.close() }
 })

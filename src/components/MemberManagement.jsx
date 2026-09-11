@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client.js'
 
 const PLANS = [
-  { key: 'free', label: '游客' },
+  { key: 'free', label: '客者' },
   { key: 'earth', label: '凡者' },
   { key: 'heaven', label: '玄者' },
   { key: 'oracle', label: '天者' },
@@ -174,17 +174,21 @@ export default function MemberManagement({ token, onNotify }) {
                 <article className="am-member" key={member.id}>
                   <div className="am-avatar">{member.avatar}</div>
                   <div className="am-member-main">
-                    <div className="am-member-name"><b>{member.nickname}</b><span>{member.account}</span>{member.isSuperAdmin && <em>超级尊者</em>}{member.status === 'suspended' && <em className="suspended">已停用</em>}</div>
+                    <div className="am-member-name"><b>{member.nickname}</b><span>{member.account}</span>{member.isSuperAdmin && <em>尊者</em>}{member.status === 'suspended' && <em className="suspended">已停用</em>}</div>
                     <p>注册于 {fmtDate(member.createdAt)} · 最近登录 {fmtDate(member.lastLoginAt)}</p>
                   </div>
                   <div className="am-member-plan">
                     <strong>{member.isSuperAdmin ? '无限权限' : member.planName}</strong>
                     <small>{member.isSuperAdmin ? '永久有效' : member.planExpiresAt ? `至 ${fmtDate(member.planExpiresAt)}` : '无有效订阅'}</small>
                   </div>
-                  <div className="am-member-credit"><b>{member.isSuperAdmin ? '∞' : Math.max(0, member.creditsTotal - member.creditsUsed)}</b><span>/ {member.isSuperAdmin ? '∞' : member.creditsTotal} 积分</span></div>
+                  <div className="am-member-credit" aria-label={`${member.nickname} 的点数余额`}>
+                    <b>{member.isSuperAdmin ? '∞' : member.totalCredits ?? Math.max(0, member.creditsTotal - member.creditsUsed)}</b>
+                    <span>{member.isSuperAdmin ? '全量权限' : '可用点数'}</span>
+                    {!member.isSuperAdmin && <small>月度 {member.monthlyCredits ?? Math.max(0, member.creditsTotal - member.creditsUsed)} · 永久 {member.permanentCredits ?? 0}</small>}
+                  </div>
                   <div className="am-member-actions">
                     <select value={member.plan} disabled={member.isSuperAdmin} onChange={event => updateSubscription(member, event.target.value)} aria-label={`调整 ${member.nickname} 的会员档位`}>
-                      {member.isSuperAdmin ? <option>超级尊者</option> : PLANS.map(plan => <option value={plan.key} key={plan.key}>{plan.label}</option>)}
+                      {member.isSuperAdmin ? <option>尊者</option> : PLANS.map(plan => <option value={plan.key} key={plan.key}>{plan.label}</option>)}
                     </select>
                     <button className="ask-btn ghost" disabled={member.isSuperAdmin} onClick={() => updateMemberStatus(member)}>{member.status === 'suspended' ? '恢复账号' : '停用账号'}</button>
                     <button className="ask-btn ghost warn" disabled={member.isSuperAdmin || member.plan === 'free'} onClick={() => createRefund(member)}>登记退款</button>

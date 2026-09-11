@@ -4,9 +4,9 @@ import { buildQimenReport } from '../engine/reports';
 import ReportView from './ReportView';
 import ReportLock from './ReportLock.jsx';
 import UpgradePrompt from './UpgradePrompt.jsx';
-import { loadQuota, incQimen, FREE_LIMIT, isQimenOverLimit } from '../engine/freeQuota.js';
 import { consumeCredit } from '../data/users.js';
 import { getMonthlyCredits, planByKey, nextPlanKey } from '../engine/membership.js';
+import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx';
 
 const SHICHEN = [
   { value: '子时 (23-01点)', start: 23, end: 1 },
@@ -45,7 +45,7 @@ function nowParts() {
   };
 }
 
-export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChange }) {
+export default function QimenPage({ user, onBack, onRequireLogin, onUpgrade, onUserChange, onAskAgent, onReportReady }) {
   const reportRef = useRef(null);
   const initial = useMemo(() => {
     const n = nowParts();
@@ -66,10 +66,7 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
   // 积分不足时展示升级卡。这个 state 此前漏声明，而渲染分支里直接读 `insufficient`，
   // ES 模块是严格模式 → 已登录用户一打开奇门页就 ReferenceError 整页白屏。
   const [insufficient, setInsufficient] = useState(false);
-  // 游客免费配额（奇门 10 次含 10），注册会员不计数
-  const [qimenUsed, setQimenUsed] = useState(0);
-  useEffect(() => { setQimenUsed(loadQuota().qimen || 0) }, []);
-  const qimenLocked = !user && isQimenOverLimit(qimenUsed);
+  const [archiveId, setArchiveId] = useState(null);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -91,8 +88,8 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
   const submit = async (e) => {
     e?.preventDefault();
     setError('');
-    // 游客配额检查：免费 10 次用尽后必须先注册/登录
-    if (!user && qimenLocked) {
+    // 奇门完整起局属于登录后的标准解读，避免游客额度与积分账本并存。
+    if (!user) {
       onRequireLogin && onRequireLogin('qimen')
       return
     }
@@ -107,7 +104,7 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
       const res = await consumeCredit(user.id, 'qimen.reading')
       if (!res.ok) {
         if (res.reason === 'insufficient') {
-          setError('本月积分不足，升级到更高档位可继续起盘解读')
+          setError('可用点数不足，开通会员或购买永久点数后可继续起盘解读')
           setInsufficient(true)
         } else {
           setError(res.msg || '扣减积分失败，请稍后再试')
@@ -116,8 +113,6 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
       }
       setInsufficient(false)
       if (res.user) onUserChange && onUserChange(res.user)
-    } else {
-      setQimenUsed(incQimen())
     }
     setLoading(true);
     try {
@@ -139,6 +134,22 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
       const rpt = buildQimenReport(chart, date, form.question || '');
       if (rpt && rpt.sub !== undefined) rpt.sub = sub;
       setReport(rpt);
+      setArchiveId(null)
+      if (onReportReady) {
+        const reportId = await onReportReady({
+          type: 'qimen',
+          clientKey: `qimen:${form.year}-${form.month}-${form.day}-${zhi}:${form.question.trim()}`,
+          title: '奇门遁甲 · 用事报告',
+          summary: rpt.sub || '奇门遁甲起局报告',
+          result: rpt,
+          facts: [
+            `起局：${form.year}-${form.month}-${form.day} ${form.shichen}`,
+            form.question?.trim() ? `所问：${form.question.trim()}` : '所问：综合运势',
+            `局式：${rpt?.meta?.juLabel || '待查'} · ${rpt?.meta?.shiChen || '时家奇门'}`,
+          ],
+        })
+        if (reportId) setArchiveId(reportId)
+      }
       setStage('report');
       setTimeout(() => {
         document.getElementById('qimen-report-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -160,6 +171,18 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
   };
 
   const handleReportShare = () => reportRef.current?.share?.();
+  const handleAskAgent = () => onAskAgent?.({
+    reportId: archiveId,
+    prompt: buildReportAgentPrompt({
+      reportName: '奇门遁甲',
+      facts: [
+        `起局：${form.year}-${form.month}-${form.day} ${form.shichen}`,
+        form.question?.trim() ? `所问：${form.question.trim()}` : '所问：未填写具体问题',
+        `局式：${report?.meta?.juLabel || '待查'} · ${report?.meta?.shiChen || '时家奇门'}`,
+      ],
+      report,
+    }),
+  });
 
   // 阶段一：排盘页
   if (stage === 'form') {
@@ -180,17 +203,17 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
               onClose={() => setInsufficient(false)}
             />
           </div>
-        ) : qimenLocked ? (
+        ) : !user ? (
           <div className="qimen-board" style={{ padding: '24px' }}>
             <ReportLock
               user={user}
               onRequireLogin={onRequireLogin}
               backView="qimen"
               icon="◈"
-              eyebrow="奇门遁甲 · 游客免费 10 次"
-              title="免费 10 次起盘已用完"
-              desc="游客每起 1 次盘计 1 次免费配额，累计 10 次后需注册/登录成为会员，即可继续无限制起盘解读。"
-              note={`已累计起盘 ${qimenUsed} 次 · 注册/登录后即可继续使用`}
+              eyebrow="奇门遁甲 · 登录后解读"
+              title="登录后查看奇门完整解读"
+              desc="奇门起局与解读会消耗 5 点积分；注册即送 20 点永久积分可先体验。"
+              note="登录后可使用会员月度积分或永久点数"
             />
           </div>
         ) : (
@@ -203,11 +226,6 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
             </h2>
             <p className="qb-sub">填写起局时间，查看当下机缘与行动方向</p>
           </header>
-          {!user && (
-            <p className="quota-hint">
-              游客免费 <b>{FREE_LIMIT}</b> 次起盘 · 已用 <b>{qimenUsed}</b> / {FREE_LIMIT}{qimenLocked ? ' · 已用完 · 登录后可继续' : ''}
-            </p>
-          )}
           {user && (
             <p className="quota-hint">
               {planByKey(user.plan).name}会员 · 每次起盘消耗 <b>5</b> 积分 · 本月剩余 <b>{getMonthlyCredits(user)}</b>
@@ -324,6 +342,7 @@ export default function QimenPage({ user, onRequireLogin, onUpgrade, onUserChang
           </div>
         </div>
         {report && <div style={{ marginTop: 16 }}><ReportView ref={reportRef} report={report} hideLead /></div>}
+        {report && <ReportAgentFooter onAskAgent={handleAskAgent} onBack={onBack} />}
       </div>
     </section>
   );

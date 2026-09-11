@@ -1,17 +1,59 @@
 import { useState, useMemo, useEffect } from 'react'
 import { horoscope, ALL_SIGNS, findSign } from '../engine/horoscope.js'
+import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx'
 
-export default function HoroscopePage({ onBack }) {
+export default function HoroscopePage({ user, onBack, onAskAgent, onReportReady }) {
   const [date] = useState(new Date())
   const [sign, setSign] = useState(() => findSign(date).name)
   const [pickerOpen, setPickerOpen] = useState(false)
   const current = ALL_SIGNS.find(z => z.name === sign)
 
   const r = useMemo(() => horoscope(sign, date), [sign, date.getTime()])
+  const [archiveId, setArchiveId] = useState(null)
 
   useEffect(() => {
     window.scrollTo({ top: 0 })
   }, [sign])
+  useEffect(() => {
+    if (!user?.id || !onReportReady) return
+    let alive = true
+    const day = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
+    onReportReady({
+      type: 'horoscope',
+      clientKey: `horoscope:${sign}:${day}`,
+      title: `${r.sign.name} · 每日星座运势`,
+      summary: r.today.toneDesc,
+      result: {
+        ...r,
+        markdown: [
+          `# ${r.sign.name}今日运势`,
+          `${r.today.tone} · 综合评分 ${r.today.overall}/5\n\n${r.today.toneDesc}`,
+          `宜：${r.today.yi.join('、')}\n忌：${r.today.ji.join('、')}`,
+          `幸运色：${r.today.luckyColor} · 幸运数：${r.today.luckyNum} · 方位：${r.today.luckyDir}`,
+          `明日：${r.tomorrow.tone} · ${r.tomorrow.text}`,
+        ].join('\n\n'),
+      },
+      facts: [
+        `日期：${day}`,
+        `星座：${r.sign.name} · 守护星：${r.sign.ruler}`,
+        `今日基调：${r.today.tone} · 综合评分：${r.today.overall}/5`,
+      ],
+    }).then(id => { if (alive && id) setArchiveId(id) }).catch(() => {})
+    return () => { alive = false }
+  }, [date, onReportReady, r, sign, user?.id])
+  const handleAskAgent = () => onAskAgent?.({
+    reportId: archiveId,
+    prompt: buildReportAgentPrompt({
+      reportName: '星座运势',
+      facts: [
+        `日期：${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`,
+        `星座：${r.sign.name} · 守护星：${r.sign.ruler}`,
+        `今日基调：${r.today.tone} · 综合评分：${r.today.overall}/5`,
+        `宜：${r.today.yi.join('、')}；忌：${r.today.ji.join('、')}`,
+      ],
+      report: { markdown: `# ${r.sign.name}今日运势\n\n${r.today.toneDesc}\n\n明日：${r.tomorrow.tone} · ${r.tomorrow.text}` },
+    }),
+  })
 
   return (
     <div className="page-wrap">
@@ -129,6 +171,7 @@ export default function HoroscopePage({ onBack }) {
         <div className="hs-foot rise">
           行星行运 · 仅作日常参考，不替代理性思考。
         </div>
+        <ReportAgentFooter onAskAgent={handleAskAgent} onBack={onBack} />
       </div>
     </div>
   )

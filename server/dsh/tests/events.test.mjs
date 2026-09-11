@@ -163,7 +163,7 @@ test('isIdle 只认本会话', () => {
 })
 
 test('TOOL_NAME_CN 覆盖所有已知工具', () => {
-  for (const key of ['bazi', 'ziwei', 'liuyao', 'qimen', 'huangli', 'tarot', 'name', 'fengshui', 'wuyunliuqi', 'report', 'skill']) {
+  for (const key of ['bazi', 'chenggu', 'ziwei', 'liuyao', 'qimen', 'huangli', 'tarot', 'name', 'fengshui', 'wuyunliuqi', 'report', 'skill']) {
     assert.equal(typeof TOOL_NAME_CN[key], 'string')
   }
 })

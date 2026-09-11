@@ -10,6 +10,7 @@ import { shiftDate } from '../utils/solarTime.js'
 import { consumeCredit } from '../data/users.js'
 import { hasPaid, markPaid } from '../engine/entitlements.js'
 import { getMonthlyCredits, planByKey, nextPlanKey } from '../engine/membership.js'
+import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx'
 
 const SHICHEN = [
   { zhi: '子时', range: '23-01', hour: 0 },
@@ -46,7 +47,7 @@ const WX_STAR = {
   水: { lord: '天同 · 破军', color: '玄', tone: '圆融善变，智谋深远' }
 }
 
-export default function ZiweiPage({ chart, onBack, onChart, user, onRequireLogin, onUpgrade, onUserChange }) {
+export default function ZiweiPage({ chart, onBack, onChart, user, onRequireLogin, onUpgrade, onUserChange, onAskAgent, onReportReady }) {
   const [editing, setEditing] = useState(false)
   const hasChart = !!chart
   const [paid, setPaid] = useState(false)
@@ -110,6 +111,9 @@ export default function ZiweiPage({ chart, onBack, onChart, user, onRequireLogin
             reason={reason}
             onRequireLogin={onRequireLogin}
             onUpgrade={onUpgrade}
+            onAskAgent={onAskAgent}
+            onReportReady={onReportReady}
+            onBack={onBack}
           />
         )}
       </div>
@@ -380,7 +384,7 @@ const ZW_FREE_SECTIONS = ['info', 'gege', 'starOverview', 'quickPalaces', 'palac
 // 调用方传了 paid / reason / onUpgrade，这里此前没有解构：
 //  · `reason` 在下方渲染分支被直接读 → 已登录用户打开紫微页即 ReferenceError 白屏；
 //  · `paid` 被忽略 → 扣分失败（积分不足）时照样把完整报告全文展示出去。
-function ZiweiBoard({ chart, user, paid, reason, onRequireLogin, onUpgrade }) {
+function ZiweiBoard({ chart, user, paid, reason, onRequireLogin, onUpgrade, onAskAgent, onReportReady, onBack }) {
   const star = WX_STAR[chart.dayMasterWx]
   const reportRef = useRef(null)
   const handleShare = () => reportRef.current?.share?.()
@@ -396,6 +400,38 @@ function ZiweiBoard({ chart, user, paid, reason, onRequireLogin, onUpgrade }) {
   // 一样能看到全文，扣费形同虚设。
   const unlocked = !!user && paid
   const shownReport = unlocked ? fullReport : { ...fullReport, sections: freeSections }
+  const [archiveId, setArchiveId] = useState(null)
+  useEffect(() => {
+    if (!user?.id || !unlocked || !onReportReady) return
+    let alive = true
+    onReportReady({
+      type: 'ziwei',
+      clientKey: `ziwei:${chart.year}-${chart.month}-${chart.day}-${chart.hour ?? 12}-${chart.gender}`,
+      title: `紫微命盘 · ${chart.dayMaster || '命局'}日主`,
+      summary: fullReport.sub || fullReport.title || '紫微斗数完整报告',
+      result: fullReport,
+      chart,
+      facts: [
+        `生辰：${chart.year}-${chart.month}-${chart.day} ${chart.hour ?? 12} 时`,
+        `日主：${chart.dayMaster || '待查'} · 生肖：${chart.shengxiao || '待查'}`,
+        `命主星曜：${star.lord}`,
+      ],
+    }).then(id => { if (alive && id) setArchiveId(id) }).catch(() => {})
+    return () => { alive = false }
+  }, [chart, fullReport, onReportReady, star.lord, unlocked, user?.id])
+  const handleAskAgent = () => onAskAgent?.({
+    chart,
+    reportId: archiveId,
+    prompt: buildReportAgentPrompt({
+      reportName: '紫微斗数',
+      facts: [
+        `生辰：${chart.year}-${chart.month}-${chart.day} ${chart.hour ?? 12} 时`,
+        `日主：${chart.dayMaster || '待查'} · 生肖：${chart.shengxiao || '待查'}`,
+        `命主星曜：${star.lord}`,
+      ],
+      report: shownReport,
+    }),
+  })
 
   return (
     <div className="rise">
@@ -437,6 +473,8 @@ function ZiweiBoard({ chart, user, paid, reason, onRequireLogin, onUpgrade }) {
           onUpgrade={onUpgrade ? () => onUpgrade(nextPlanKey(user.plan)) : null}
         />
       ) : null}
+
+      <ReportAgentFooter onAskAgent={handleAskAgent} onBack={onBack} />
     </div>
   )
 }

@@ -81,7 +81,7 @@ test('八字命书：积分不足时不出报告，改为提示升级', async ()
   const r = render(BaziPage, { chart, user: USER, onBack: () => {}, onChart: () => {}, onRequireLogin: () => {}, onUpgrade: () => {}, onUserChange: () => {} })
   await flush(5)
   assert.deepEqual(consumed, ['bazi.full'])
-  assert.ok(r.text().includes('积分不足'), `积分不足时页面应给出提示，实际：${r.text().slice(0, 200)}`)
+  assert.ok(r.text().includes('可用点数不足'), `点数不足时页面应给出提示，实际：${r.text().slice(0, 200)}`)
   r.unmount()
 })
 
@@ -95,7 +95,7 @@ test('奇门：扣费失败时不进报告页', async () => {
   await flush(6)
 
   assert.deepEqual(consumed, ['qimen.reading'])
-  assert.ok(r.text().includes('积分不足'), `应提示积分不足，实际：${r.text().slice(0, 240)}`)
+  assert.ok(r.text().includes('可用点数不足'), `应提示可用点数不足，实际：${r.text().slice(0, 240)}`)
   assert.equal(r.findByText('重新排盘'), null, '扣费失败绝不能进到报告页')
   r.unmount()
 })

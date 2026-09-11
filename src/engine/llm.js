@@ -10,6 +10,7 @@
 // docs/Agent记忆与账号服务端隔离R2改造方案.md。
 //
 // 配置存于 localStorage（genki-agent-config）
+import { normalizeEnabledSkillKeys } from '../data/skills.js'
 
 export const PROVIDERS = {
   minimax: {
@@ -68,8 +69,8 @@ export const DEFAULT_CONFIG = {
   // 同一个问题在两条路径上得到的能力范围不一样。
   enabledSkills: [
     'bazi', 'bazi-router', 'yixue-taishan', 'mangpai', 'wuyunliuqi', 'liuyao', 'tarot',
-    'huangli', 'ziwei', 'qimen', 'love', 'wealth',
-    'health', 'fengshui', 'name',
+    'huangli', 'chenggu', 'ziwei', 'qimen', 'love', 'wealth',
+    'fengshui', 'name',
   ],
   useLLM: false
 }
@@ -78,7 +79,8 @@ export function loadConfig() {
   try {
     const raw = localStorage.getItem(LS_KEY)
     if (!raw) return { ...DEFAULT_CONFIG }
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) }
+    const cfg = { ...DEFAULT_CONFIG, ...JSON.parse(raw) }
+    return { ...cfg, enabledSkills: normalizeEnabledSkillKeys(cfg.enabledSkills) }
   } catch {
     return { ...DEFAULT_CONFIG }
   }
@@ -86,7 +88,10 @@ export function loadConfig() {
 
 export function saveConfig(cfg) {
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify(cfg))
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      ...cfg,
+      enabledSkills: normalizeEnabledSkillKeys(cfg?.enabledSkills),
+    }))
   } catch { /* ignore */ }
 }
 

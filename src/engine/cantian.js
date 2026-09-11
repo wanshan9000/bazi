@@ -373,6 +373,26 @@ function baziContext(daily) {
   }
 }
 
+// 首页黄历的“今日场景”必须由当天历法和个人日气共同决定，不能只复用身份模板。
+// 身份只决定行动如何落地；干支、建除、传统宜忌和日主关系决定今天的标题。
+function buildPersonaTitle(scene, cal, daily) {
+  const yi = almanacItems(cal?.宜)
+  const primaryYi = yi[0] || '当日宜事'
+  const calendar = daily?.monthGanzhi && daily?.jianchu
+    ? `${daily.monthGanzhi}${daily.jianchu}日`
+    : '当日黄历'
+  const day = daily?.dayGanzhi || calendar
+  const bazi = daily?.bazi
+  const master = bazi?.dayMaster ? `${bazi.dayMaster}${bazi.dayMasterWx || ''}日主` : '今日节奏'
+  const relation = daily?.relation === '顺'
+    ? '可顺势推进'
+    : daily?.relation === '慎'
+      ? '先收边界再推进'
+      : '小步推进更合拍'
+  const action = scenePriority(scene, primaryYi) || '完成一件关键小事'
+  return `${day} · ${scene.name}：${master}${relation}，优先${action}`
+}
+
 // 同一份上下文供个性化黄历各区块复用，避免场景、八字、传统黄历各说各话。
 function buildPersonalContext(scene, cal, daily) {
   const yi = almanacItems(cal?.宜)
@@ -387,6 +407,7 @@ function buildPersonalContext(scene, cal, daily) {
   const sceneLabel = `${scene.emoji} ${scene.name}`
   const anchor = `${calendar}｜${relation}｜${sceneLabel}`
   const chong = cal?.冲煞 ? `，并留意${cal.冲煞}` : ''
+  const personaTitle = buildPersonaTitle(scene, cal, daily)
 
   return {
     anchor,
@@ -395,9 +416,9 @@ function buildPersonalContext(scene, cal, daily) {
     relationHint: `${relation}。`,
     baziHint: bazi.detail,
     baziShort: bazi.short,
-    persona: `${scene.persona} 今天是${calendar}，${traditional}；${bazi.detail}，${relation}，${pace}`,
-    personaTitle: scene.persona,
-    personaSummary: `${calendar}：${traditional}。${bazi.short}，${relation}。`,
+    persona: `${personaTitle}。今天是${calendar}，${traditional}；${bazi.detail}，${relation}，${pace}`,
+    personaTitle,
+    personaSummary: `${calendar}：${traditional}。${bazi.short}，${relation}。优先根据传统宜${yi[0] || '事'}安排。`,
     personaFacts: [
       `${scene.emoji} ${scene.name}`,
       calendar,
@@ -423,32 +444,93 @@ function buildIntegratedAdvice(scene, cal, daily, context) {
   if (!daily) return null
   const yi = almanacItems(cal?.宜)
   const ji = almanacItems(cal?.忌)
-  const yiText = yi.slice(0, 2).join('、') || '当日宜事'
-  const jiText = ji[0] || '当日忌事'
-  const direction = daily.tips?.dir || '适合的方向'
-  const people = daily.tips?.noble || '熟悉的人'
-  const color = daily.tips?.color || '-'
-  const number = daily.tips?.num || '-'
+  const primaryYi = compactHuangliText(yi[0] || '当日宜事', 8)
+  const primaryJi = compactHuangliText(ji[0] || '当日忌事', 8)
+  const direction = compactHuangliText(daily.tips?.dir || '合适方向', 8)
+  const people = compactHuangliText(daily.tips?.noble || '熟悉的人', 8)
+  const color = compactHuangliText(daily.tips?.color || '-', 8)
+  const number = compactHuangliText(daily.tips?.num || '-', 8)
   const cautious = daily.relation === '慎'
-  const chong = cal?.冲煞 ? `留意${cal.冲煞}` : '路线和时间都留一档余量'
+  const favorable = compactHuangliText(daily.bazi?.favorable?.filter(Boolean).join('、') || '平衡五行', 10)
+  const dayMaster = compactHuangliText(`${daily.bazi?.dayMaster || ''}${daily.bazi?.dayMasterWx || ''}`, 5)
+  const relationPace = daily.relation === '顺' ? '日气顺'
+    : daily.relation === '慎' ? '日气宜慎'
+      : '日气平稳'
+  const chong = compactHuangliText(cal?.冲煞 || '', 14)
   const sceneActions = sceneItemContext(scene)
-  const primaryAction = scenePriority(scene, yi[0]) || sceneActions?.settle || '推进一件最关键的待办'
-  const secondaryAction = scenePriority(scene, yi[1] || yi[0]) || sceneActions?.settle || '完成一个小闭环'
+  const primaryAction = compactHuangliText(scenePriority(scene, yi[0]) || sceneActions?.settle || '推进一件关键待办', 14)
+  const secondaryAction = compactHuangliText(scenePriority(scene, yi[1] || yi[0]) || sceneActions?.settle || '完成一个小闭环', 14)
   const peopleChars = String(people).replace(/[、,，]/g, '').split('').filter(Boolean)
   const peopleText = peopleChars.length > 1 && peopleChars.length <= 3
     ? peopleChars.map(item => `属${item}`).join('、')
     : people
+  const sceneFocus = adviceSceneFocus(scene)
+  const roleText = `先${primaryAction}，做完再${secondaryAction}。${cautious ? '今天留余量，不硬扛。' : '做到可交付即可。'}`
+  const cards = [
+    {
+      key: 'focus', label: '今日主线', tone: 'career',
+      text: `宜${primaryYi}，${relationPace}。先${primaryAction}；忌${primaryJi}相关大动作缓一缓。`,
+    },
+    {
+      key: 'role', label: sceneFocus.roleLabel, tone: 'noble', text: roleText,
+    },
+    {
+      key: 'relationship', label: '人际沟通', tone: 'love',
+      text: `宜${primaryYi}，适合沟通。联系${peopleText}的熟人时，先说目的和下一步。`,
+    },
+    {
+      key: 'money', label: '消费取舍', tone: 'wealth',
+      text: `消费按“必要、可等、想买”分档。${cautious ? '预付与大额隔一轮再定。' : '不因顺手临时放大预算。'}`,
+    },
+    {
+      key: 'travel', label: '出行方位', tone: 'travel',
+      text: `出行可参考${direction}${chong ? `，留意${chong}` : ''}。${cautious ? '先核对时间与路线。' : '行程留一档余量。'}`,
+    },
+    {
+      key: 'health', label: '身心节奏', tone: 'health',
+      text: `${compactHuangliText(daily.action?.mode || '保持节奏', 12)}。${cautious ? '任务切小段，主动留缓冲。' : '安排吃饭、补水和走动。'}`,
+    },
+    {
+      key: 'decision', label: '决策边界', tone: 'decision',
+      text: `忌${primaryJi}。不可逆事项先写成本和后果；${cautious ? '分步决定。' : '不凭情绪拍板。'}`,
+    },
+    {
+      key: 'bazi', label: '命局提醒', tone: 'opening',
+      text: `${dayMaster ? `日主${dayMaster}偏好${favorable}` : `命局偏好${favorable}`}，${relationPace}。配色${color}，数字${number}。`,
+    },
+  ]
 
+  // 兼容旧字段，其他调用方仍可读取；页面展示统一使用 cards，避免维度与话术各自漂移。
   return {
-    career: `优先${primaryAction}；若时间允许，再${secondaryAction}。${jiText}相关的大改动先放进待确认清单。`,
-    wealth: `支出先分成“必要、可等、想买”三档，今天只处理前两档；不因传统宜事临时放大预算。`,
-    love: `适合${sceneActions?.relationship || '主动回应一位重要的人'}；有分歧先确认事实再表达看法，不抢着给结论。`,
-    health: `先把吃饭、补水和活动排进日程；连续久坐或奔波时主动留出一段缓冲。`,
-    noble: `可优先联系${peopleText}的熟人、同事或伙伴；邀约时说明目标和下一步，减少来回确认。`,
-    travel: `${sceneActions?.travel || '出门办事'}；方向可参考${direction}，${chong}。${cautious ? '临时改线前先核对一次。' : '不把行程排得过满。'}`,
-    decision: `${cautious ? '重要承诺至少核对一次时间、成本与后果。' : '先把目标、范围与资源写清，再决定是否扩大范围。'} 涉及${jiText}的不可逆变动，今天别仓促拍板。`,
-    opening: `配色可参考${color}，数字提示${number}。把它当作轻量提醒，不替代行程、预算和安全判断。`,
+    cards,
+    career: cards[0].text,
+    wealth: cards[3].text,
+    love: cards[2].text,
+    health: cards[5].text,
+    noble: cards[1].text,
+    travel: cards[4].text,
+    decision: cards[6].text,
+    opening: cards[7].text,
   }
+}
+
+function compactHuangliText(value, limit) {
+  const text = String(value || '').replace(/[。；，、]+$/g, '').trim()
+  return [...text].slice(0, limit).join('')
+}
+
+function adviceSceneFocus(scene) {
+  const name = String(scene?.name || scene || '')
+  const key = name.includes('享受族') ? 'enjoy'
+    : name.includes('学生') ? 'student'
+      : name.includes('自由') ? 'free'
+        : parseScenario(name)
+  return {
+    worker: { roleLabel: '工作推进', roleLead: '工作上先', recoveryLead: '先把吃饭、补水和短暂走动排进日程' },
+    student: { roleLabel: '学习安排', roleLead: '学习上先', recoveryLead: '先安排一段不被手机打断的专注时间，再处理社交和娱乐' },
+    free: { roleLabel: '业务节奏', roleLead: '业务上先', recoveryLead: '把交付、吃饭和休息切成几个小段，别让灵感拖到透支' },
+    enjoy: { roleLabel: '家事与兴趣', roleLead: '生活里先', recoveryLead: '把散步、吃饭和休息放在安排前面，舒服地完成一件事就很好' },
+  }[key] || { roleLabel: '今日安排', roleLead: '今天先', recoveryLead: '先把吃饭、补水和活动排进日程' }
 }
 
 function scenePriority(scene, almanacItem) {
@@ -567,6 +649,86 @@ function buildTraditionalItemNotes(scene, cal, daily) {
   }
 }
 
+// 页面中的场景便签同样是“当日生成”，不是按学生/职场等身份直接复用一套固定句子。
+// 与八项安排不同：这里提供可以立即执行的微动作，避免重复讲同一层面的决策建议。
+function buildSceneLifeNotes(scene, cal, daily) {
+  if (!daily) return scene?.tips || {}
+  const yi = almanacItems(cal?.宜)
+  const ji = almanacItems(cal?.忌)
+  const primaryYi = yi[0] || '当日宜事'
+  const primaryJi = ji[0] || '当日忌事'
+  const relation = daily.relation === '顺' ? '日气顺' : daily.relation === '慎' ? '日气宜慎' : '日气平稳'
+  const sceneActions = sceneItemContext(scene)
+  const focus = adviceSceneFocus(scene)
+  const primaryAction = compactHuangliText(scenePriority(scene, primaryYi) || '完成一个最小步骤', 14)
+  const secondaryAction = compactHuangliText(scenePriority(scene, yi[1] || primaryYi) || '留出一个收尾动作', 14)
+  const people = compactHuangliText(daily.tips?.noble || '熟悉的人', 8)
+
+  return {
+    [focus.roleLabel]: `宜${compactHuangliText(primaryYi, 8)}：先把${primaryAction}拆成十分钟的一步。完成再决定是否加码。`,
+    '专注方式': `${relation}。只开一份资料或一个任务，先完成${secondaryAction}。`,
+    '沟通句式': `联系${people}熟人时：先说“我要推进什么，下一步是什么”。`,
+    '收尾边界': `忌${compactHuangliText(primaryJi, 8)}：只做确认、整理和留痕；临时决定明天再定。`,
+  }
+}
+
+const ZODIAC_ORDER = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪']
+
+function copySeed(...parts) {
+  return parts.filter(Boolean).join('|').split('').reduce((total, char) => total + char.charCodeAt(0), 0)
+}
+
+function buildZodiacNotes(scene, cal, daily) {
+  if (!daily) return scene?.zodiac || {}
+  const yi = almanacItems(cal?.宜)
+  const ji = almanacItems(cal?.忌)
+  const primaryYi = yi[0] || '当日宜事'
+  const primaryJi = ji[0] || '当日忌事'
+  const calendar = daily.monthGanzhi && daily.jianchu ? `${daily.monthGanzhi}${daily.jianchu}日` : '当日黄历'
+  const relation = relationLabel(daily)
+  const sceneActions = sceneItemContext(scene)
+  const candidates = [
+    scenePriority(scene, primaryYi),
+    scenePriority(scene, yi[1] || primaryYi),
+    sceneActions?.relationship,
+    sceneActions?.travel,
+  ].filter(Boolean)
+  const seed = copySeed(daily.dayGanzhi, daily.bazi?.dayMaster, primaryYi, primaryJi, daily.relation)
+  const chongsha = String(cal?.冲煞 || '')
+  const pace = daily.relation === '顺' ? '可把准备好的事往前推' : daily.relation === '慎' ? '先留余量再推进' : '按既定节奏即可'
+
+  return Object.fromEntries(ZODIAC_ORDER.map((zodiac, index) => {
+    if (chongsha.includes(zodiac)) {
+      return [zodiac, `${calendar}${chongsha}，属${zodiac}今天把${primaryJi}相关的大动作先缓一缓；${pace}，但别赶时间。`]
+    }
+    const action = candidates[(seed + index) % candidates.length] || '完成一件小事'
+    const cue = ['先列清单', '先发一条明确消息', '先做十分钟', '先留出收尾'][Math.floor((seed + index) / 3) % 4]
+    return [zodiac, `${calendar}宜${primaryYi}，属${zodiac}可${action}；${cue}，${relation}，${pace}。`]
+  }))
+}
+
+function buildMentalNotes(scene, cal, daily) {
+  if (!daily) return scene?.mental || []
+  const yi = almanacItems(cal?.宜)
+  const ji = almanacItems(cal?.忌)
+  const primaryYi = yi[0] || '当日宜事'
+  const primaryJi = ji[0] || '当日忌事'
+  const calendar = daily.monthGanzhi && daily.jianchu ? `${daily.monthGanzhi}${daily.jianchu}日` : '当日黄历'
+  const focus = adviceSceneFocus(scene)
+  const direction = daily.tips?.dir || '熟悉的地方'
+  const relationLine = daily.relation === '顺'
+    ? '状态顺时也只推进一件最重要的事，别把顺手变成透支。'
+    : daily.relation === '慎'
+      ? '感觉卡住时先缩小任务，而不是否定自己；把下一步缩到十分钟。'
+      : '状态平稳时不急着证明自己，照计划完成一个小闭环就够了。'
+  return [
+    `${calendar}宜${primaryYi}：${focus.roleLabel}只抓一个主目标，做完再看下一项。`,
+    `命局与日气${relationLabel(daily)}：${relationLine}`,
+    `传统忌${primaryJi}：遇到情绪上头或意见不同时，先暂停确认，再回应。`,
+    `需要换气时向${direction}方向走一小段，喝水、活动或安静坐几分钟，再回到手头任务。`,
+  ]
+}
+
 // “你的今日节奏”使用这份融合结果，避免卡片局部只取八字日运字段。
 function buildRhythmData(scene, cal, daily, context) {
   if (!daily) return null
@@ -619,10 +781,6 @@ function buildRhythmData(scene, cal, daily, context) {
   }
 }
 
-function contextualizeSceneMap(map) {
-  return Object.fromEntries(Object.entries(map || {}))
-}
-
 // 取真实黄历数据对象（getChineseCalendar），失败返回 null
 function realHuangli(y, m, d) {
   try {
@@ -662,6 +820,9 @@ function renderHuangliMarkdown(dateStr, scenario, extra, tone = 'practical') {
   const daily = extra?.daily || null
   const context = buildPersonalContext(s, cal, daily)
   const guidance = buildSceneGuidance(scenario, cal, daily)
+  const sceneTips = daily ? buildSceneLifeNotes(s, cal, daily) : s.tips
+  const zodiacNotes = daily ? buildZodiacNotes(s, cal, daily) : s.zodiac
+  const mentalNotes = daily ? buildMentalNotes(s, cal, daily) : s.mental
 
   const lines = []
   lines.push(`# 📅 黄历 · ${y}年${m}月${d}日`)
@@ -748,7 +909,7 @@ function renderHuangliMarkdown(dateStr, scenario, extra, tone = 'practical') {
   if (daily) lines.push(`> ${context.notesLead}`)
   lines.push('| 项目 | 建议 |')
   lines.push('|------|------|')
-  for (const [k, v] of Object.entries(s.tips)) lines.push(`| **${k}** | ${v} |`)
+  for (const [k, v] of Object.entries(sceneTips)) lines.push(`| **${k}** | ${v} |`)
   lines.push('')
   lines.push('---')
   lines.push('')
@@ -756,14 +917,14 @@ function renderHuangliMarkdown(dateStr, scenario, extra, tone = 'practical') {
   // 生肖轻松参考
   lines.push(`## 🐭 十二生肖${humorous ? '轻松参考（幽默版）' : '参考'}`)
   if (daily) lines.push(`> ${context.zodiacLead}`)
-  for (const [z, text] of Object.entries(s.zodiac)) lines.push(`${z}：${text}`)
+  for (const [z, text] of Object.entries(zodiacNotes)) lines.push(`${z}：${text}`)
   lines.push('')
   lines.push('---')
   lines.push('')
 
   // 心理小贴士
   lines.push('## 💊 今日心理健康小贴士')
-  for (const tip of s.mental) lines.push(`- ${tip}`)
+  for (const tip of mentalNotes) lines.push(`- ${tip}`)
   lines.push('')
   lines.push('---')
   lines.push('')
@@ -795,6 +956,9 @@ function buildHuangliData(dateStr, scenario, extra) {
   const cal = realHuangli(y, m, d)
   const daily = extra?.daily || null
   const context = buildPersonalContext(s, cal, daily)
+  const sceneTips = daily ? buildSceneLifeNotes(s, cal, daily) : s.tips
+  const zodiacNotes = daily ? buildZodiacNotes(s, cal, daily) : s.zodiac
+  const mentalNotes = daily ? buildMentalNotes(s, cal, daily) : s.mental
   const jieqiData = cal?.节气
   const jieqi = cal && (typeof jieqiData === 'string' ? jieqiData : (jieqiData && (jieqiData.name || jieqiData.jieqi || jieqiData.term)) || '')
   const jieqiProgress = jieqi && typeof jieqiData === 'object'
@@ -833,9 +997,9 @@ function buildHuangliData(dateStr, scenario, extra) {
       personaFacts: daily ? context.personaFacts : [],
       bgm: daily ? context.rhythm : s.bgm,
       yi: yiJiItems(s.yi), ji: yiJiItems(s.ji),
-      tips: daily ? contextualizeSceneMap(s.tips) : s.tips,
-      zodiac: daily ? contextualizeSceneMap(s.zodiac) : s.zodiac,
-      mental: s.mental,
+      tips: sceneTips,
+      zodiac: zodiacNotes,
+      mental: mentalNotes,
       guidance: buildSceneGuidance(scenario, cal, daily),
       traditionalItems: buildTraditionalItemNotes(s, cal, daily),
       context,

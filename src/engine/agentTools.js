@@ -13,6 +13,7 @@ import { skillByKey } from '../data/skills.js'
 import { buildBaziReport } from './baziReport.js'
 import { buildReport } from './reports.js'
 import { buildWuyunliuqi } from './wuyunliuqi.js'
+import { generateChenggu } from './chenggu.js'
 
 // 六爻：真实纳甲装卦（基于 iching-shifa）
 function toolLiuyao(chart) {
@@ -53,6 +54,14 @@ function toolHuangli(chart) {
     tone: chart && chart.tone,
     format: 'markdown',
   })
+}
+
+// 称骨：与称骨报告页共用 generateChenggu，确保骨重明细与动态八字解读口径一致。
+function toolChenggu(birth) {
+  if (!birth || !birth.year || !birth.month || !birth.day) {
+    return '（请提供出生年月日、性别；出生时辰可选，但缺失时骨重只能按午时估算）'
+  }
+  return generateChenggu({ birth, gender: birth.gender, format: 'markdown' })
 }
 
 // 紫微斗数：真实排盘（供 LLM 解读）
@@ -184,6 +193,7 @@ export function runSkillTool(skillKey, chart) {
     case 'liuyao': return toolLiuyao(chart)
     case 'tarot': return toolTarot()
     case 'huangli': return toolHuangli(chart)
+    case 'chenggu': return toolChenggu(chart)
     case 'bazi': return toolBazi(chart)
     case 'ziwei': return toolZiwei(chart)
     case 'qimen': return toolQimen(chart)
@@ -225,6 +235,7 @@ export function runToolByName(name, args, chart) {
     // 只合并该工具确实声明过的字段，避免模型乱传的键污染命盘对象
     const ALLOWED = {
       huangli: ['date', 'scenario', 'mode', 'tone'],
+      chenggu: ['year', 'month', 'day', 'hour', 'gender'],
       liuyao: ['question'],
       qimen: ['date'],
       name: ['name', 'surname'],
@@ -235,11 +246,31 @@ export function runToolByName(name, args, chart) {
     }
   }
   if (name === 'huangli') return toolHuangli(merged)
+  if (name === 'chenggu') return toolChenggu(merged)
   return runSkillTool(name, merged)
 }
 
 // OpenAI 兼容 function calling 工具清单（Agent 自主决策用）
 export const TOOL_SCHEMAS = [
+  {
+    type: 'function',
+    function: {
+      name: 'chenggu',
+      description: '生成称骨论命报告：按出生农历年、月、日、时计算年骨、月骨、日骨、时骨与总骨重，再结合实际四柱给动态的性格、事业、财务、关系和身心参考。传统称骨与八字提示分开呈现。',
+      parameters: {
+        type: 'object',
+        properties: {
+          year: { type: 'number', description: '出生年（公历）' },
+          month: { type: 'number', description: '出生月（公历）' },
+          day: { type: 'number', description: '出生日（公历）' },
+          hour: { type: 'number', description: '出生小时 0-23；未知时可不传，结果会按午时估算' },
+          gender: { type: 'string', enum: ['男', '女'], description: '性别' }
+        },
+        required: ['year', 'month', 'day', 'gender'],
+        additionalProperties: false
+      }
+    }
+  },
   {
     type: 'function',
     function: {

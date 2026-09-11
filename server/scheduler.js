@@ -5,6 +5,8 @@ import { listSubscribers } from './store.js'
 import { buildPushContent } from './huangli.js'
 import { sendDailyPush } from './sms.js'
 import { sendWxTemplate } from './wechat.js'
+import { sharedAccounts } from './accounts.js'
+import { canUseHuangliReminder } from '../src/engine/membership.js'
 
 let started = false
 const timers = new Map()
@@ -29,6 +31,11 @@ export function nextRunAt(hhmm, from = new Date()) {
 // 每个用户一次推送任务
 async function pushSubscriber(sub) {
   try {
+    const account = sub.userId ? sharedAccounts().get(sub.userId) : null
+    if (!canUseHuangliReminder(account)) {
+      log('跳过无提醒权益订阅 →', sub.userId || sub.phone || sub.openid)
+      return
+    }
     const content = buildPushContent(sub)
     if (sub.channel === 'sms' && sub.phone && sub.enabled !== false) {
       await sendDailyPush(sub, content.text)

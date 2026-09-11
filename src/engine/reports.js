@@ -1669,6 +1669,7 @@ export function buildFengshuiReport(chart, args = {}) {
             { k: '大门朝向', v: `${f.door.dir}（${f.door.wuxing}）· 吉位 ${f.door.lucky}` },
             { k: '大门吉凶', v: f.door.match },
             { k: '床头朝向', v: `${f.bed.dir} · ${f.bed.verdict}` },
+            { k: '书桌座位', v: `${f.desk.dir}（${f.desk.wuxing}）· ${f.desk.score} 分 · ${f.desk.verdict}` },
             { k: '喜用神', v: f.favorable.join('、') },
             { k: '忌神', v: f.avoid.join('、') },
           ],
@@ -1685,12 +1686,16 @@ export function buildFengshuiReport(chart, args = {}) {
     if (f.bed.desc) {
       sections.push({ key: 'bed', title: '床头详解', kind: 'note', data: { text: f.bed.desc } })
     }
+    if (f.desk) {
+      sections.push({ key: 'desk', title: '书桌 / 座位风水', kind: 'note', data: { text: [`评分：${f.desk.score}/100 · ${f.desk.verdict}`, `朝向：${f.desk.dir}（${f.desk.wuxing}）`, ...f.desk.tips].join('\n') } })
+    }
 
     const advice = {
       career: `大门为宅之气口，${f.door.match}宜保持玄关整洁明亮，有助事业运。`,
       wealth: `吉位推荐「${f.lucky.生方}」生气方作主卧或客厅，财气流通更佳。`,
       love: f.bed.verdict === '吉' ? '床头朝向与命格相合，利于安眠与感情稳定。' : `床头朝向需调整：${f.bed.desc}。`,
       health: '注意通风采光，忌杂物堆积，厨房明火朝吉方。',
+      study: `书桌座位 ${f.desk.verdict}（${f.desk.score} 分）：${f.desk.tips[0] || '保持背有靠、前开阔。'}`,
       opening: `推荐主题色：${f.rooms[0]?.colorList?.join(' / ') || '青绿 / 米黄'}；整体得分 ${f.overallScore} 分，${f.overallScore >= 80 ? '格局优良' : f.overallScore >= 60 ? '尚可，宜微调' : '需重点调整弱位'}。`,
     }
     return makeReport('fengshui', {

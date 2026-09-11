@@ -27,7 +27,7 @@ function installStorage(name) {
 const ls = installStorage('localStorage')
 installStorage('sessionStorage')
 
-const { getMonthlyCredits, getMonthlyProgress, planByKey, FREE_PLAN, SUPER_PLAN, isPlanExpired, canAfford } = await import('../membership.js')
+const { getCreditBalance, getMonthlyCredits, getMonthlyProgress, planByKey, FREE_PLAN, SUPER_PLAN, PLANS, AGENT_CONSULTATION, agentConsultationAllowance, isPlanExpired, canAfford, canUseHuangliReminder } = await import('../membership.js')
 const { localKey } = await import('../userScope.js')
 const { remapScopedKeys } = await import('../../data/legacyMigrate.js')
 const { setAuth, clearAuth } = await import('../../api/auth.js')
@@ -44,15 +44,17 @@ function signOut() {
   clearAuth()
 }
 
-test('额度换算：未过期按本档，已过期按 free 档', () => {
+test('双钱包余额：未过期有月度额度；到期后只保留永久积分', () => {
   const now = Date.now()
-  const active = { plan: 'oracle', planExpiresAt: now + 86400000, planCreditsResetAt: now + 86400000, creditsUsed: 100 }
+  const active = { plan: 'oracle', planExpiresAt: now + 86400000, planCreditsResetAt: now + 86400000, monthlyCreditsUsed: 100, permanentCredits: 10 }
   assert.equal(getMonthlyCredits(active), planByKey('oracle').credits - 100)
+  assert.equal(getCreditBalance(active).total, planByKey('oracle').credits - 90)
 
   // 这是「到期不降级」的回归点：过期账号的顶栏此前照样显示 1000 积分可用
   const expired = { ...active, planExpiresAt: now - 1000 }
   assert.equal(isPlanExpired(expired), true)
-  assert.equal(getMonthlyCredits(expired), FREE_PLAN.credits - 100)
+  assert.equal(getMonthlyCredits(expired), 0)
+  assert.deepEqual(getCreditBalance(expired), { monthly: 0, permanent: 10, total: 10 })
 })
 
 test('free 档本身不会过期', () => {
@@ -60,12 +62,35 @@ test('free 档本身不会过期', () => {
   assert.equal(isPlanExpired(null), false)
 })
 
-test('超级尊者拥有无限额度且不会因会员有效期到期降级', () => {
+test('会员额度：客者与三档会员按翻倍后的产品策略展示', () => {
+  assert.equal(FREE_PLAN.name, '客者')
+  assert.equal(FREE_PLAN.perks.some(item => item.includes('10 次具体问题解读')), true)
+  assert.equal(FREE_PLAN.perks.some(item => item.includes('20 点')), true)
+  assert.deepEqual(PLANS.map(plan => [plan.key, plan.credits]), [
+    ['earth', 60], ['heaven', 200], ['oracle', 520],
+  ])
+  assert.equal(AGENT_CONSULTATION.guestRounds, 10)
+  assert.deepEqual(agentConsultationAllowance(60), { topics: 12, rounds: 96 })
+  assert.equal(SUPER_PLAN.name, '尊者')
+})
+
+test('每日黄历提醒仅限凡者及以上的有效会员', () => {
+  const now = Date.now()
+  assert.equal(canUseHuangliReminder(null), false)
+  assert.equal(canUseHuangliReminder({ plan: 'free' }), false)
+  assert.equal(canUseHuangliReminder({ plan: 'earth', planExpiresAt: now + 1000 }), true)
+  assert.equal(canUseHuangliReminder({ plan: 'heaven', planExpiresAt: now + 1000 }), true)
+  assert.equal(canUseHuangliReminder({ plan: 'oracle', planExpiresAt: now + 1000 }), true)
+  assert.equal(canUseHuangliReminder({ plan: 'earth', planExpiresAt: now - 1000 }), false)
+  assert.equal(canUseHuangliReminder({ role: 'super_admin', plan: 'free' }), true)
+})
+
+test('尊者拥有无限额度且不会因会员有效期到期降级', () => {
   const superAdmin = { role: 'super_admin', plan: SUPER_PLAN.key, planExpiresAt: 1, creditsUsed: 9999 }
   assert.equal(isPlanExpired(superAdmin), false)
   assert.equal(getMonthlyCredits(superAdmin), Infinity)
   assert.equal(getMonthlyProgress(superAdmin), 0)
-  assert.equal(canAfford(superAdmin, 'agent.chat'), true)
+  assert.equal(canAfford(superAdmin, 'agent.topic'), true)
 })
 
 test('planByKey 认识 free，但它不在可购买的 PLANS 里', async () => {
@@ -76,15 +101,15 @@ test('planByKey 认识 free，但它不在可购买的 PLANS 里', async () => {
 
 test('canAfford 以余额为准；未计价的功能一律放行', () => {
   const now = Date.now()
-  const poor = { plan: 'earth', planExpiresAt: now + 86400000, planCreditsResetAt: now + 86400000, creditsUsed: 199 }
-  assert.equal(canAfford(poor, 'bazi.full'), false) // 需 8 分，只剩 1
-  assert.equal(canAfford(poor, 'agent.chat'), true) // 需 1 分
+  const poor = { plan: 'earth', planExpiresAt: now + 86400000, planCreditsResetAt: now + 86400000, monthlyCreditsUsed: 59, permanentCredits: 0 }
+  assert.equal(canAfford(poor, 'bazi.full'), false) // 需 5 分，只剩 1
+  assert.equal(canAfford(poor, 'agent.topic'), false) // 需 5 分
   assert.equal(canAfford(poor, 'huangli.daily'), true, '未列入积分表的功能视为免费')
 })
 
 test('月度进度在 0~1 之间且用满不溢出', () => {
   const now = Date.now()
-  const u = { plan: 'earth', planExpiresAt: now + 86400000, planCreditsResetAt: now + 86400000, creditsUsed: 999 }
+  const u = { plan: 'earth', planExpiresAt: now + 86400000, planCreditsResetAt: now + 86400000, monthlyCreditsUsed: 999 }
   const p = getMonthlyProgress(u)
   assert.ok(p >= 0 && p <= 1, `进度越界：${p}`)
 })
@@ -132,12 +157,12 @@ test('迁移：不覆盖新账号已有的数据', () => {
 // 「积分不足 → 去升级」的引导档位。此前各页面各写一遍
 // `plan === 'earth' ? 'heaven' : 'oracle'`，free 档不等于 earth，
 // 于是刚过期的账号会被直接推到最贵的天机境。
-test('nextPlanKey：free / earth 推玄者，玄者推天者，天者与超级尊者到顶', async () => {
+test('nextPlanKey：free 推凡者，凡者推玄者，玄者推天者', async () => {
   const { nextPlanKey } = await import('../membership.js')
-  assert.equal(nextPlanKey('free'), 'heaven')
+  assert.equal(nextPlanKey('free'), 'earth')
   assert.equal(nextPlanKey('earth'), 'heaven')
   assert.equal(nextPlanKey('heaven'), 'oracle')
   assert.equal(nextPlanKey('oracle'), null)
   assert.equal(nextPlanKey('supreme'), null)
-  assert.equal(nextPlanKey(undefined), 'heaven', '档位缺失时按最低档处理，不该推最贵的')
+  assert.equal(nextPlanKey(undefined), 'earth', '档位缺失时按最低档处理，不该推最贵的')
 })

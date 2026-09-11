@@ -47,7 +47,7 @@ export const api = {
   },
   // 短信订阅
   async smsSubscribe({ phone, code, birth, time, favZodiac }) {
-    return request('/api/sms/subscribe', { method: 'POST', body: JSON.stringify({ phone, code, birth, time, favZodiac }) })
+    return request('/api/sms/subscribe', { method: 'POST', body: JSON.stringify({ phone, code, birth, time, favZodiac }), headers: authHeader() })
   },
   // 凭手机号 + 验证码找回订阅令牌（换设备/清缓存后仍能管理自己的订阅）
   async smsRecover({ phone, code }) {
@@ -56,6 +56,16 @@ export const api = {
   // 获取微信扫码链接
   async wechatQr() {
     return request('/api/wechat/qr')
+  },
+  // 公众号模板消息提醒：获取公众号关注二维码。这里不走网页登录扫码，因为该 openid
+  // 不能直接用于公众号模板消息。
+  async officialWechatQr({ birth, time, favZodiac }) {
+    return request('/api/wechat/official/qrcode', {
+      method: 'POST', body: JSON.stringify({ birth, time, favZodiac }), headers: authHeader(),
+    })
+  },
+  async officialWechatStatus() {
+    return request('/api/wechat/official/bind-status', { headers: authHeader() })
   },
   // 微信模拟扫码完成（降级联调）
   async wechatMockDone({ phone, birth, time, favZodiac }) {
@@ -67,11 +77,11 @@ export const api = {
   },
   // 更新订阅偏好
   async update(token, patch) {
-    return request('/api/update', { method: 'POST', body: JSON.stringify({ token, ...patch }) })
+    return request('/api/update', { method: 'POST', body: JSON.stringify({ token, ...patch }), headers: authHeader() })
   },
   // 取消订阅
   async unsubscribe(token) {
-    return request('/api/unsubscribe', { method: 'POST', body: JSON.stringify({ token }) })
+    return request('/api/unsubscribe', { method: 'POST', body: JSON.stringify({ token }), headers: authHeader() })
   },
 
   // ================= 管理后台：自定义技能 =================

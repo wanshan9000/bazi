@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { drawCards, interpret, saveHistory, SPREAD_MAP } from '../data/tarot.js'
+import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx'
 
 const STAGES = { INTRO: 'intro', SHUFFLE: 'shuffle', PICK: 'pick', READING: 'reading' }
 
@@ -91,16 +92,80 @@ function SpreadLayout({ spread, drawn }) {
   )
 }
 
+/** 已完成塔罗档案的只读回放。它只消费保存时的牌阵与解读，不重新抽牌、不扣点、不写入新记录。 */
+export function TarotArchiveReading({ reading }) {
+  const spread = reading?.spread
+  const cards = Array.isArray(reading?.cards) ? reading.cards : []
+  const interpretation = reading?.interpretation
+  if (!spread || !cards.length || !interpretation) return null
+  return (
+    <div className="archived-tarot-view tarot-reading tarot-result">
+      <div className="card rise">
+        <div className="tr-head">
+          <h3 className="tr-title">牌面回放</h3>
+          <span className="archive-readonly-chip">历史记录</span>
+        </div>
+        {reading.question ? (
+          <div className="tr-question">
+            <span className="trq-label">当时所问</span>
+            <p className="trq-text">「{reading.question}」</p>
+          </div>
+        ) : null}
+        <SpreadLayout spread={spread} drawn={cards} />
+        <p className="tr-spreadname">{spread.name}{spread.nameEn ? ` · ${spread.nameEn}` : ''}</p>
+      </div>
+
+      <div className="card tr-archive-summary" style={{ marginTop: 16 }}>
+        <h3 className="tr-section">三门解卦 · 总论</h3>
+        {interpretation.summary ? <p className="tr-summary">{interpretation.summary}</p> : null}
+        {interpretation.narrative ? <><div className="tr-divider" /><h4 className="tr-subhead">牌面叙事</h4><p className="tr-text">{interpretation.narrative}</p></> : null}
+        {interpretation.crossTheme ? <><div className="tr-divider" /><h4 className="tr-subhead">贯穿线索</h4><p className="tr-text">{interpretation.crossTheme}</p></> : null}
+      </div>
+
+      {Array.isArray(interpretation.perCard) && interpretation.perCard.length ? (
+        <div className="card" style={{ marginTop: 16 }}>
+          <h3 className="tr-section">逐位解读</h3>
+          <div className="tr-list">
+            {interpretation.perCard.map((item, index) => (
+              <div key={`${item.card?.id || item.card?.name || index}-${index}`} className="tr-row">
+                <div className="tr-row-head">
+                  <span className="tr-pos">第 {index + 1} 位 · {item.position || spread.positions?.[index]?.name || '牌位提示'}</span>
+                  {item.positionDesc ? <span className="tr-posdesc">{item.positionDesc}</span> : null}
+                </div>
+                <div className="tr-card">
+                  <div className="tr-card-name">{item.card?.name || cards[index]?.name}{item.isReversed || cards[index]?.reversed ? <span className="tr-rev">（逆位）</span> : null}</div>
+                  {item.card?.en || cards[index]?.en ? <div className="tr-card-en">{item.card?.en || cards[index]?.en}</div> : null}
+                </div>
+                {item.text ? <p className="tr-text">{item.text}</p> : null}
+                {item.contextText ? <div className="tr-context"><span className="tr-context-label">落到当下</span><p className="tr-context-text">{item.contextText}</p></div> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {Array.isArray(interpretation.actions) && interpretation.actions.length ? (
+        <div className="card" style={{ marginTop: 16 }}>
+          <h3 className="tr-section">行动指引</h3>
+          <ol className="tr-actions">{interpretation.actions.map((item, index) => <li key={index} className="tr-action">{item}</li>)}</ol>
+          {interpretation.suggestion ? <><div className="tr-divider" /><h4 className="tr-subhead">三门建议</h4><p className="tr-text">{interpretation.suggestion}</p></> : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 // onCharge：由 App 注入的计费闸门（游客扣免费配额 / 会员扣积分），返回 { ok, reason }。
 // 「换一批」是一次全新解读，必须和首次抽牌走同一条闸门 —— 此前它直接重抽，
 // 等于把 10 次游客配额和 5 积分的扣费彻底绕开，无限白嫖。
-export default function TarotReading({ spreadId, onBack, onReading, onCharge }) {
+export default function TarotReading({ spreadId, onBack, onReading, onCharge, onAskAgent, onHome, user, onReportReady }) {
   const spread = SPREAD_MAP[spreadId]
   const [stage, setStage] = useState(STAGES.INTRO)
   const [question, setQuestion] = useState('')
   const [drawn, setDrawn] = useState([])
   const [revealed, setRevealed] = useState(0)
   const [interpretation, setInterpretation] = useState(null)
+  const [archiveId, setArchiveId] = useState(null)
 
   // TarotPage 在跳转过来之前已经为「这一次解读」扣过费，所以进入本页后的第一次抽牌
   // 不再重复计费；此后的每一次重抽都是一次全新解读，都要重新过闸门。
@@ -114,6 +179,7 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
     setInterpretation(null)
     setQuestion('')
     setChargeErr('')
+    setArchiveId(null)
     firstDrawRef.current = true
   }, [spreadId])
 
@@ -126,8 +192,8 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
     const res = await onCharge()
     if (!res || !res.ok) {
       setChargeErr(res && res.reason === 'quota'
-        ? '游客免费次数已用完，登录后可继续抽牌'
-        : '本月积分不足，升级档位后可继续抽牌')
+        ? '客者免费次数已用完，登录后可继续抽牌'
+        : '可用点数不足，开通会员或购买永久点数后可继续抽牌')
       return false
     }
     setChargeErr('')
@@ -165,6 +231,7 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
           const result = { spread, cards: drawn, drawnAt: Date.now() }
           const interp = interpret(result, question)
           setInterpretation(interp)
+          const drawnAt = Date.now()
           const next = saveHistory({
             spreadId: spread.id,
             spreadName: spread.name,
@@ -173,6 +240,7 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
             summary: interp.summary
           })
           if (onReading) onReading(next)
+          saveReading(interp, drawnAt)
           setStage(STAGES.READING)
         }, 700)
       }
@@ -182,16 +250,19 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
   const revealAll = () => {
     setRevealed(drawn.length)
     setTimeout(() => {
-      const result = { spread, cards: drawn, drawnAt: Date.now() }
+      const drawnAt = Date.now()
+      const result = { spread, cards: drawn, drawnAt }
       const interp = interpret(result, question)
       setInterpretation(interp)
-      saveHistory({
+      const next = saveHistory({
         spreadId: spread.id,
         spreadName: spread.name,
         question,
         cards: drawn,
         summary: interp.summary
       })
+      if (onReading) onReading(next)
+      saveReading(interp, drawnAt)
       setStage(STAGES.READING)
     }, 600)
   }
@@ -213,6 +284,54 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
     setInterpretation(null)
     setStage(STAGES.PICK)
   }
+  const saveReading = (interp, drawnAt) => {
+    if (!user?.id || !onReportReady) return
+    onReportReady({
+      type: 'tarot',
+      clientKey: `tarot:${spread.id}:${drawnAt}`,
+      title: `塔罗 · ${spread.name}`,
+      summary: interp.summary || '塔罗牌阵解读',
+      result: {
+        spread,
+        cards: drawn,
+        interpretation: interp,
+        question,
+        drawnAt,
+        archive: {
+          version: 1,
+          mode: 'native',
+          sourceType: 'tarot',
+          input: { question: question.trim() },
+          ui: { spreadId: spread.id, layout: spread.layout },
+        },
+        markdown: [
+          `# ${spread.name}`,
+          question.trim() ? `所问：${question.trim()}` : '',
+          interp.summary || '',
+          `## 逐位提示\n${interp.perCard?.map((card, index) => `- 第 ${index + 1} 位 · ${card.position}：${card.card.name}${card.isReversed ? '（逆位）' : ''}。${card.text}`).join('\n') || ''}`,
+          interp.suggestion ? `## 行动建议\n${interp.suggestion}` : '',
+        ].filter(Boolean).join('\n\n'),
+      },
+      facts: [
+        `牌阵：${spread.name}`,
+        question.trim() ? `所问：${question.trim()}` : '所问：未填写具体问题',
+        `抽到的牌：${drawn.map(card => `${card.name}${card.reversed ? '（逆位）' : ''}`).join('、')}`,
+      ],
+      createdAt: drawnAt,
+    }).then(id => { if (id) setArchiveId(id) }).catch(() => {})
+  }
+  const handleAskAgent = () => onAskAgent?.({
+    reportId: archiveId,
+    prompt: buildReportAgentPrompt({
+      reportName: '塔罗牌阵',
+      facts: [
+        `牌阵：${spread.name}`,
+        question.trim() ? `所问：${question.trim()}` : '所问：未填写具体问题',
+        `抽到的牌：${drawn.map(card => `${card.name}${card.reversed ? '（逆位）' : ''}`).join('、')}`,
+      ],
+      report: { markdown: `# ${spread.name}\n\n${interpretation?.summary || ''}\n\n行动建议：${interpretation?.suggestion || ''}` },
+    }),
+  })
 
   return (
     <div className="page-wrap tarot-reading">
@@ -508,6 +627,7 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge }) 
                 塔罗映照的是当下的能量倾向，最终的选择与行动始终在于你。信任直觉，方能穿越迷雾。
               </p>
             </div>
+            <ReportAgentFooter onAskAgent={handleAskAgent} onBack={onHome} />
           </div>
         )}
       </div>

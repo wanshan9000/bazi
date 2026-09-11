@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { renderMarkdown } from '../../utils/markdown.jsx'
 
 export function isNearScrollBottom(element, threshold = 32) {
@@ -50,10 +50,9 @@ export function CopyButton({ text, title = '复制结果' }) {
 }
 
 // ── AI 思考块：回复中的 <think>…</think> 默认收起为一行（点击展开看推演过程） ────
-// 思考过程与结果正文分别输出：流式中自动展开以便用户实时看到推演；结论到达时自动收起，
-// 用户仍可按需展开查看完整推演。结果正文渲染在思考块下方，二者清晰分离。
-export function ThinkBlock({ content, streaming = false }) {
-  // 流式中默认展开；结束时收起，让结论成为视觉焦点。
+// 还没有正文时可暂时展开显示进度；正文一开始流式出现就立刻收起，把首屏留给答案。
+export function ThinkBlock({ content, streaming = false, collapseWhenStreamingText = false }) {
+  // 流式中默认展开；开始出正文或结束时收起，让结论成为视觉焦点。
   const [open, setOpen] = useState(streaming)
   const [elapsed, setElapsed] = useState(0)
   const bodyRef = useRef(null)
@@ -77,6 +76,11 @@ export function ThinkBlock({ content, streaming = false }) {
     if (!streaming && wasStreamingRef.current) setOpen(false)
     wasStreamingRef.current = streaming
   }, [streaming])
+  // layout effect 保证正文首次出现的同一帧就折叠，不会先闪出一帧大块思考内容。
+  // 依赖只在 false → true 时变化，之后用户手动展开不会被每个 SSE chunk 强行收回。
+  useLayoutEffect(() => {
+    if (collapseWhenStreamingText) setOpen(false)
+  }, [collapseWhenStreamingText])
   const label = streaming ? `思考中 · ${Math.max(1, elapsed)} 秒` : elapsed ? `已思考 ${elapsed} 秒` : '思考过程'
   return (
     <div className={`think-block ${open ? 'open' : ''} ${streaming ? 'think-streaming' : ''}`}>
@@ -93,6 +97,15 @@ export function ThinkBlock({ content, streaming = false }) {
       )}
     </div>
   )
+}
+
+// 模型正文里的 <think> 不是面向用户的解释：历史中已经出现过 Skill、工具调用和
+// 内部工作流。无论来自旧会话还是新流，都只呈现稳定、可理解的进度语，正文结论不受影响。
+const PUBLIC_THINK_CONTENT = '已完成命盘与要点核对。'
+const AGENT_REPORT_HEADINGS = /(^|\n)##\s*(?:盘面核对|做功主线|根基与关系|当前大运|事业与关系|行动建议|格局法|用神法|结构与应期|主题判断|综合建议)(?=\s|$)/m
+
+function publicThinkContent(content) {
+  return String(content || '').trim() ? PUBLIC_THINK_CONTENT : ''
 }
 
 // 工具英文名 → 中文名。必须与 server/dsh/events.js 的 TOOL_NAME_CN 保持一致：
@@ -139,30 +152,28 @@ export function renderAiText(text, streaming = false) {
   // 剥离模型流式返回时包裹的 <output>…</output> 标签（保留内容），避免 "&lt;output&gt;" 显示在页面上
   let raw = String(text || '')
   raw = raw.replace(/<\/?output[^>]*>/gi, '')
+  // 有些模型会把 think 标签作为转义文本输出（&lt;think&gt;），或在标签内混入空格。
+  // 统一还原为标准标签，确保它们都能复用同一种 ThinkBlock，而不是泄漏到正文里。
+  raw = raw
+    .replace(/&lt;\s*(\/?)\s*think\s*&gt;/gi, '<$1think>')
+    .replace(/<\s*(\/?)\s*think\s*>/gi, '<$1think>')
 
-  // 处理未闭合的 <think>…（流式过程中末尾出现 <think> 但尚未到 </think> 也视为思考块）
-  // 思路：把流式中"从最近的 <think> 起到末尾"的内容也当作思考块，与结果正文分别输出
-  if (streaming) {
-    const lastOpen = raw.lastIndexOf('<think>')
-    const lastClose = raw.lastIndexOf('</think>')
-    if (lastOpen > lastClose) {
-      // 流式末尾存在未闭合的 <think>，把这段切出作为思考块
-      const before = raw.slice(0, lastOpen)
-      const thinkOpen = raw.slice(lastOpen + '<think>'.length)
-      // key 必须与下方 split 分支保持一致，否则流式结束（streaming:true→false）时
-      // React 因 key 变化（think-stream → t1）卸载旧 ThinkBlock、重挂新 ThinkBlock，
-      // 内部 open/streaming 状态被重置，视觉上"思考块闪一下、收起、又重启"。
-      // 未闭合 think 是第 (before 中已闭合 think 数 + 1) 个，split 分支里第 N 个 think 的
-      // key 为 t(N*2-1)。
-      const closedCount = (before.match(/<\/think>/g) || []).length
-      const streamKey = `t${closedCount * 2 + 1}`
-      return (
-        <>
-          {before && <div className="md-block">{renderMarkdown(before)}</div>}
-          <ThinkBlock key={streamKey} content={thinkOpen} streaming={true} />
-        </>
-      )
-    }
+  // 未闭合 think 不只会出现在流式中：少数模型在结束时漏掉 </think>。
+  // 无论是否结束，都把最近的 <think> 到末尾归入折叠思考条，避免正文直接显示标签和推演。
+  const lastOpen = raw.lastIndexOf('<think>')
+  const lastClose = raw.lastIndexOf('</think>')
+  if (lastOpen > lastClose) {
+    const before = raw.slice(0, lastOpen)
+    const thinkOpen = raw.slice(lastOpen + '<think>'.length)
+    // key 与下方 split 分支保持一致，流式结束时不会因重挂而闪烁。
+    const closedCount = (before.match(/<\/think>/g) || []).length
+    const streamKey = `t${closedCount * 2 + 1}`
+    return (
+      <>
+        {before && <div className="md-block">{renderMarkdown(before, { variant: AGENT_REPORT_HEADINGS.test(before) ? 'agent-report' : 'default' })}</div>}
+        <ThinkBlock key={streamKey} content={publicThinkContent(thinkOpen)} streaming={streaming} />
+      </>
+    )
   }
 
   // 按 <think>…</think> 切分：思考块与结果正文分别渲染（思考块在固定高度窗口，正文在其下方）
@@ -175,7 +186,7 @@ export function renderAiText(text, streaming = false) {
       // 或收尾边界导致同文块出现两次），避免渲染出"两个一样的深度思考"
       if (prevThink !== null && String(part).trim() === String(prevThink).trim()) return
       prevThink = part
-      nodes.push(<ThinkBlock key={`t${i}`} content={part} streaming={streaming} />)
+      nodes.push(<ThinkBlock key={`t${i}`} content={publicThinkContent(part)} streaming={streaming} />)
       return
     }
     // 剥离段落中残留的孤立 <think> / </think> 标签（模型可能输出残缺标签），避免显示在正文里
@@ -183,7 +194,7 @@ export function renderAiText(text, streaming = false) {
     // 跳过空段落：split 在文本开头/结尾或连续 <think>…</think> 处会产生空串，
     // 直接渲染会多出"啥都没有"的空框
     if (!clean.trim()) return
-    nodes.push(<div key={`p${i}`} className="md-block">{renderMarkdown(clean)}</div>)
+    nodes.push(<div key={`p${i}`} className="md-block">{renderMarkdown(clean, { variant: AGENT_REPORT_HEADINGS.test(clean) ? 'agent-report' : 'default' })}</div>)
   })
   // 防御：流式已结束但正文"只有标题没有内容"——通常是 token 截断 / 网络中断导致只输出了
   // ### 一、xxx 之类的章节标题，没有正文。这种情况下视觉上是一个"几乎空"的框，

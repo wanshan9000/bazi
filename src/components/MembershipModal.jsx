@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import QRCode from 'qrcode'
-import { PLANS, planByKey } from '../engine/membership.js'
+import { PLANS, POINT_PACKS, SUBSCRIPTION_CYCLES, agentConsultationAllowance, planByKey, subscriptionOffer } from '../engine/membership.js'
 
-function previewPaymentPayload(user, plan) {
-  return `GENKI-PAYMENT-PREVIEW|user=${user.id}|plan=${plan.key}|amount=${plan.price}|period=month`
+function previewPaymentPayload(user, item, kind, cycleKey = 'once') {
+  return `GENKI-PAYMENT-PREVIEW|user=${user.id}|kind=${kind}|item=${item.key}|cycle=${cycleKey}|amount=${item.price}`
 }
 
 export default function MembershipModal({
@@ -16,13 +16,20 @@ export default function MembershipModal({
   showPlanPicker = false,
 }) {
   const [selectedKey, setSelectedKey] = useState(planKey || 'earth')
+  const [selectedPack, setSelectedPack] = useState(null)
+  const [billingCycle, setBillingCycle] = useState('monthly')
   const [step, setStep] = useState(showPlanPicker ? 'plans' : 'checkout')
   const [qr, setQr] = useState('')
   const plan = planByKey(selectedKey)
+  const item = selectedPack || plan
+  const buyingPack = Boolean(selectedPack)
+  const offer = subscriptionOffer(plan, billingCycle)
 
   useEffect(() => {
     if (!open) return
     setSelectedKey(planKey || 'earth')
+    setSelectedPack(null)
+    setBillingCycle('monthly')
     setStep(showPlanPicker ? 'plans' : 'checkout')
     const onKey = event => { if (event.key === 'Escape') onClose && onClose() }
     document.addEventListener('keydown', onKey)
@@ -31,11 +38,11 @@ export default function MembershipModal({
 
   useEffect(() => {
     let active = true
-    if (!open || step !== 'checkout' || !user || !plan) {
+    if (!open || step !== 'checkout' || !user || !item) {
       setQr('')
       return undefined
     }
-    QRCode.toDataURL(previewPaymentPayload(user, plan), {
+    QRCode.toDataURL(previewPaymentPayload(user, buyingPack ? item : offer, buyingPack ? 'points' : 'membership', buyingPack ? 'once' : billingCycle), {
       width: 220,
       margin: 1,
       color: { dark: '#442c35', light: '#fffdfb' },
@@ -45,7 +52,7 @@ export default function MembershipModal({
       if (active) setQr('')
     })
     return () => { active = false }
-  }, [open, step, user, plan])
+  }, [open, step, user, item, buyingPack, billingCycle, offer.price])
 
   if (!open || !plan) return null
 
@@ -55,6 +62,16 @@ export default function MembershipModal({
       return
     }
     setSelectedKey(key)
+    setSelectedPack(null)
+    setStep('checkout')
+  }
+
+  const choosePack = pack => {
+    if (!user) {
+      onRequireLogin && onRequireLogin('subscribe')
+      return
+    }
+    setSelectedPack(pack)
     setStep('checkout')
   }
 
@@ -63,24 +80,51 @@ export default function MembershipModal({
       <div className="mm-head mm-picker-head">
         <div>
           <p className="mm-kicker">MEMBERSHIP RENEWAL</p>
-          <h3 className="mm-title">选择续费会员</h3>
-          <p className="mm-sub">选择后进入扫码支付页</p>
+          <h3 className="mm-title">会员与点数</h3>
+          <p className="mm-sub">月度积分当月有效，购买点数永久有效</p>
         </div>
       </div>
       <div className="mm-plan-grid">
+        <div className="mm-cycle-switch" role="group" aria-label="会员订阅周期">
+          {SUBSCRIPTION_CYCLES.map(cycle => (
+            <button key={cycle.key} type="button" className={billingCycle === cycle.key ? 'active' : ''} onClick={() => setBillingCycle(cycle.key)}>
+              <b>{cycle.label}</b><span>{cycle.badge}</span>
+            </button>
+          ))}
+        </div>
         {PLANS.map(item => {
           const active = item.key === user?.plan
+          const itemOffer = subscriptionOffer(item, billingCycle)
+          const allowance = agentConsultationAllowance(item.credits)
           return (
             <button key={item.key} className={`mm-plan-option ${item.featured ? 'featured' : ''}`} onClick={() => choosePlan(item.key)}>
               {item.hot && <span className="mm-plan-hot">推荐</span>}
               <span className="mm-plan-icon" aria-hidden="true">{item.icon}</span>
               <strong>{item.name}</strong>
               <span>{item.tag}</span>
-              <b>¥{item.price}<small>/月</small></b>
-              <em>{active ? '当前会员 · 续费' : `选择${item.name}`}</em>
+              <b>¥{itemOffer.price}<small>/{itemOffer.label}</small></b>
+              <em>{allowance.topics} 个咨询主题 · {allowance.rounds} 次具体问题解读</em>
+              <i>{active ? '当前会员 · 续费' : `选择${item.name}`}</i>
             </button>
           )
         })}
+      </div>
+      <div className="mm-points-head">
+        <div>
+          <b>永久点数包</b>
+          <span>不随会员到期清零</span>
+        </div>
+      </div>
+      <div className="mm-points-grid">
+        {POINT_PACKS.map(pack => (
+          <button key={pack.key} className={`mm-points-option ${pack.featured ? 'featured' : ''}`} onClick={() => choosePack(pack)}>
+            {pack.featured && <span className="mm-plan-hot">推荐</span>}
+            <strong>{pack.name}</strong>
+            <b>{pack.credits} 点</b>
+            <span>{pack.hint}</span>
+            <em>¥{pack.price} · 永久有效</em>
+          </button>
+        ))}
       </div>
       <button className="mm-text-btn" onClick={onClose}>稍后再说</button>
     </>
@@ -90,11 +134,11 @@ export default function MembershipModal({
     <>
       <div className="mm-head">
         {showPlanPicker && <button className="mm-back" onClick={() => setStep('plans')} aria-label="返回会员选择">‹</button>}
-        <span className="mm-icon" aria-hidden="true">{plan.icon}</span>
+        <span className="mm-icon" aria-hidden="true">{buyingPack ? '✦' : plan.icon}</span>
         <div>
           <p className="mm-kicker">SCAN TO PAY</p>
-          <h3 className="mm-title">续费 {plan.name}</h3>
-          <p className="mm-sub">{plan.en} · {plan.tag}</p>
+          <h3 className="mm-title">{buyingPack ? `购买 ${item.name}` : `续费 ${plan.name}`}</h3>
+          <p className="mm-sub">{buyingPack ? `${item.credits} 点永久积分` : `${plan.en} · ${offer.label} · ${offer.badge}`}</p>
         </div>
       </div>
       {!user ? (
@@ -106,8 +150,8 @@ export default function MembershipModal({
       ) : (
         <>
           <div className="mm-payment-summary">
-            <span>{plan.name}会员 · 30 天</span>
-            <b>¥{plan.price}</b>
+            <span>{buyingPack ? `${item.credits} 点永久积分 · 永久有效` : `${plan.name}会员 · ${offer.months} 个月 · 月度积分按月发放`}</span>
+            <b>¥{buyingPack ? item.price : offer.price}</b>
           </div>
           <div className="mm-qr-wrap">
             {qr ? <img src={qr} alt="支付二维码预览" /> : <span>二维码生成中</span>}
@@ -125,7 +169,7 @@ export default function MembershipModal({
 
   return createPortal(
     <div className="mm-mask" onClick={onClose}>
-      <section className={`mm-card ${step === 'plans' ? 'mm-card-picker' : ''}`} onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="会员续费">
+      <section className={`mm-card ${step === 'plans' ? 'mm-card-picker' : ''}`} onClick={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="会员与点数购买">
         <button className="mm-close" onClick={onClose} aria-label="关闭">×</button>
         {step === 'plans' ? picker : checkout}
       </section>

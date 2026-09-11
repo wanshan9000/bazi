@@ -7,54 +7,81 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createAccountStore } from '../accounts.js'
-import { planByKey, FREE_PLAN, SUPER_PLAN, getMonthlyCredits } from '../../src/engine/membership.js'
+import { planByKey, FREE_PLAN, SUPER_PLAN, getCreditBalance, getMonthlyCredits } from '../../src/engine/membership.js'
 
 function mkStore() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'acct-'))
   return { store: createAccountStore(path.join(dir, 'accounts.json')), dir, file: path.join(dir, 'accounts.json') }
 }
 
-test('新注册用户带齐积分状态，且不泄漏口令散列', async () => {
+test('新注册客者获得 20 点永久积分，且不泄漏口令散列', async () => {
   const { store } = mkStore()
   const raw = await store.create({ account: 'alice', password: 'secret123', nickname: '小明' })
   const u = store.publicUser(raw)
   assert.equal(typeof u.creditsUsed, 'number')
+  assert.equal(typeof u.monthlyCreditsUsed, 'number')
+  assert.equal(u.permanentCredits, 20, '注册赠点必须进入永久钱包')
   assert.equal(typeof u.planCreditsResetAt, 'number')
   assert.equal(u.plan, FREE_PLAN.key, '新用户应从免费档开始')
+  assert.deepEqual(getCreditBalance(u), { monthly: 0, permanent: 20, total: 20 })
   assert.equal(u.planExpiresAt, 0, '免费档不应有伪造的到期时间')
   assert.equal(u.passHash, undefined, '不得把口令散列带到前端对象上')
   assert.equal(u.password, undefined)
 })
 
-test('扣分后余额真的减少；扣光后拒绝', async () => {
+test('旧账号只补发一次新增的 10 点客者欢迎积分', () => {
+  const { store, file } = mkStore()
+  fs.writeFileSync(file, JSON.stringify({ users: [{
+    id: 'legacy-user', account: 'legacy', nickname: '老用户', plan: 'free',
+    creditsUsed: 0, monthlyCreditsUsed: 0, permanentCredits: 10,
+    planCreditsResetAt: Date.now() + 86400000, planExpiresAt: 0,
+  }] }))
+
+  assert.equal(store.get('legacy-user').permanentCredits, 20)
+  assert.equal(store.get('legacy-user').permanentCredits, 20, '重复读取不能重复补发')
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8')).users[0]
+  assert.equal(saved.welcomeCreditPolicyVersion, 2)
+})
+
+test('月度积分优先扣减；月度不足时由永久积分补足', async () => {
   const { store } = mkStore()
-  const u = await store.create({ account: 'bob', password: 'secret123', nickname: '小明' })
+  const u = await store.create({ account: 'bob', password: 'secret123', nickname: '小明', plan: 'earth' })
   const plan = planByKey(u.plan)
   assert.equal(getMonthlyCredits(store.publicUser(u)), plan.credits)
 
   const res = store.consumeCredit(u.id, 'bazi.full')
   assert.equal(res.ok, true)
-  assert.equal(res.user.creditsUsed, 8)
-  assert.equal(getMonthlyCredits(res.user), plan.credits - 8)
+  assert.equal(res.cost, 5)
+  assert.equal(res.charge.monthly, 5)
+  assert.equal(res.charge.permanent, 0)
+  assert.equal(res.user.monthlyCreditsUsed, 5)
+  assert.equal(res.user.permanentCredits, 20)
 
-  let last = res
-  for (let i = 0; i < Math.ceil(plan.credits / 8) + 2 && last.ok; i++) {
-    last = store.consumeCredit(u.id, 'bazi.full')
-  }
-  assert.equal(last.ok, false)
-  assert.equal(last.reason, 'insufficient')
+  const raw = store.get(u.id)
+  raw.monthlyCreditsUsed = plan.credits - 2
+  const mixed = store.consumeCredit(u.id, 'bazi.full')
+  assert.equal(mixed.ok, true)
+  assert.equal(mixed.charge.monthly, 2)
+  assert.equal(mixed.charge.permanent, 3)
+  assert.equal(mixed.user.permanentCredits, 17)
+  assert.deepEqual(getCreditBalance(mixed.user), { monthly: 0, permanent: 17, total: 17 })
 })
 
-test('退还积分：不产出就不该收费，且不会退成负数', async () => {
+test('退还积分：按原扣款来源退还，且不会重复发放', async () => {
   const { store } = mkStore()
-  const u = await store.create({ account: 'carol', password: 'secret123', nickname: '小明' })
-  store.consumeCredit(u.id, 'agent.chat')
-  assert.equal(store.get(u.id).creditsUsed, 1)
-  store.refundCredit(u.id, 'agent.chat')
-  assert.equal(store.get(u.id).creditsUsed, 0)
-  // 再退一次（模拟「扣减与退还之间发生了月度重置」）不得凭空发钱
-  store.refundCredit(u.id, 'agent.chat')
-  assert.equal(store.get(u.id).creditsUsed, 0, '退还不得把 creditsUsed 压到负数')
+  const u = await store.create({ account: 'carol', password: 'secret123', nickname: '小明', plan: 'earth' })
+  const raw = store.get(u.id)
+  raw.monthlyCreditsUsed = planByKey('earth').credits - 1
+  const paid = store.consumeCredit(u.id, 'bazi.full')
+  assert.equal(paid.charge.monthly, 1)
+  assert.equal(paid.charge.permanent, 4)
+  assert.equal(store.get(u.id).permanentCredits, 16)
+
+  store.refundCredit(u.id, 'bazi.full', paid.charge)
+  assert.equal(store.get(u.id).monthlyCreditsUsed, planByKey('earth').credits - 1)
+  assert.equal(store.get(u.id).permanentCredits, 20)
+  store.refundCredit(u.id, 'bazi.full', paid.charge)
+  assert.equal(store.get(u.id).permanentCredits, 20, '同一笔退款不得重复发放永久积分')
 })
 
 test('续费在原到期时间之上顺延；换档从当下重算', async () => {
@@ -103,14 +130,16 @@ test('超级尊者由服务端角色授予，额度无限且不能通过会员�
 test('会员到期自动降级到 free，额度随之变成 free 档', async () => {
   const { store } = mkStore()
   const u = await store.create({ account: 'frank', password: 'secret123', nickname: '小明', plan: 'oracle' })
+  const beforePermanent = store.get(u.id).permanentCredits
   store.consumeCredit(u.id, 'bazi.full')
   // 把到期时间推到过去
   store.get(u.id).planExpiresAt = Date.now() - 1000
 
   const after = store.get(u.id)
   assert.equal(after.plan, FREE_PLAN.key, '过期后必须降级，否则 planExpiresAt 写了也白写')
-  assert.equal(after.creditsUsed, 0, '降级时额度窗口重置')
-  assert.equal(getMonthlyCredits(store.publicUser(after)), FREE_PLAN.credits)
+  assert.equal(after.monthlyCreditsUsed, 0, '降级时月度钱包必须清空')
+  assert.equal(getMonthlyCredits(store.publicUser(after)), 0)
+  assert.equal(after.permanentCredits, beforePermanent, '会员到期不得清掉永久点数')
 })
 
 test('月度窗口到期后积分归零', async () => {

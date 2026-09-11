@@ -15,6 +15,7 @@ import { buildToolRegistry } from './agentToolsR.js'
 // 领域 → 工具名映射（与 TOOL_SCHEMAS 一致）
 const DOMAIN_TOOL = {
   bazi: ['bazi', 'bazi_report', 'mangpai_report'],
+  chenggu: ['chenggu'],
   ziwei: ['ziwei', 'ziwei_report'],
   liuyao: ['liuyao', 'liuyao_report'],
   qimen: ['qimen', 'qimen_report'],
@@ -32,6 +33,11 @@ const DOMAIN_KEYWORDS = {
     // 八字大运按节气交运：起运/交运/起运年龄/起运日期 均属八字（区别于紫微大限按五行局起限）
     medium: ['运势', '大运', '流年', '本命', '命格', '天干', '地支', '身强', '身弱', '起运', '交运', '起运年龄', '起运日期'],
     weak: ['批命', '看命', '算卦的', '算命', '大运排盘']
+  },
+  chenggu: {
+    strong: ['称骨', '称骨论命', '袁天罡称骨', '骨重'],
+    medium: ['袁天罡', '几两命', '几两', '称骨歌诀'],
+    weak: ['称骨歌']
   },
   ziwei: {
     strong: ['紫微', '紫微斗数', '命宫', '十二宫', '星曜', '四化'],
@@ -78,7 +84,7 @@ const DOMAIN_KEYWORDS = {
 
 // 领域 → 展示名
 const DOMAIN_LABEL = {
-  bazi: '八字', ziwei: '紫微', liuyao: '六爻', qimen: '奇门',
+  bazi: '八字', chenggu: '称骨', ziwei: '紫微', liuyao: '六爻', qimen: '奇门',
   huangli: '黄历', tarot: '塔罗', name: '命名', fengshui: '风水', hehun: '合婚'
 }
 

@@ -21,24 +21,31 @@ const groupTraditionalItems = entries => {
   return [...grouped.values()].map(entry => ({ ...entry, item: entry.items.join('、') }))
 }
 
-export default function FusedHuangliCard({ chart, date = new Date(), onChangeDate, defaultScenario = 'worker', myZodiac, favZodiac = [] }) {
+export default function FusedHuangliCard({
+  chart, date = new Date(), onChangeDate, defaultScenario = 'worker', myZodiac, favZodiac = [],
+  snapshot = null, historyMode = false,
+}) {
   // 依据订阅人身份/年纪推断出的场景，仅显示这一种，不提供切换
   const [scenario] = useState(defaultScenario)
   const [showTips, setShowTips] = useState(false)
   const [showOtherJi, setShowOtherJi] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
   // 受控：日期由外部传入（SubscribePage 维护），弹层 30 天选择通过 onChangeDate 上抛
-  const viewDate = date
-  const personalized = Boolean(chart)
+  const viewDate = useMemo(() => {
+    if (!snapshot?.date) return date
+    const match = String(snapshot.date).match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/)
+    return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : date
+  }, [date, snapshot?.date])
+  const personalized = Boolean(chart || snapshot?.daily)
   const data = useMemo(
-    () => generateHuangli({
+    () => snapshot || generateHuangli({
       chart,
       date: viewDate,
       scenario,
       mode: personalized ? 'personalized' : 'standard',
       tone: 'practical',
     }),
-    [chart, viewDate, scenario, personalized]
+    [chart, viewDate, scenario, personalized, snapshot]
   )
   const d = data.daily
   const calendar = data.calendar
@@ -57,6 +64,9 @@ export default function FusedHuangliCard({ chart, date = new Date(), onChangeDat
   const context = data.scene.context
   const integratedAdvice = data.scene.advice || d?.advice
   const rhythm = data.scene.rhythm
+  const personaTitle = data.scene.personaTitle || data.scene.persona || ''
+  // 标题信息保持中性，真正由八字、传统黄历与场景共同得出的当日行动结论单独高亮。
+  const personaTitleParts = personaTitle.match(/^(.+?[：:])\s*(.+)$/)
   const directionItems = [
     { label: '喜神', value: data.real?.xishen, tone: 'xi' },
     { label: '财神', value: data.real?.caishen, tone: 'cai' },
@@ -64,7 +74,6 @@ export default function FusedHuangliCard({ chart, date = new Date(), onChangeDat
     { label: '阳贵神', value: data.real?.yanggui, tone: 'gui' },
     { label: '阴贵神', value: data.real?.yingui, tone: 'gui' },
   ].filter(item => item.value)
-
   // 30 天可选日期范围（以今天为中心：前 14 天 + 后 15 天）
   const todayMid = useMemo(() => {
     const t = new Date()
@@ -81,6 +90,7 @@ export default function FusedHuangliCard({ chart, date = new Date(), onChangeDat
     return out
   }, [todayMid])
   const isSameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+  const badgeText = isSameDay(viewDate, todayMid) ? '今日黄历' : `${viewDate.getMonth() + 1}月${viewDate.getDate()}日黄历`
   const pickDate = (dt) => {
     if (onChangeDate) {
       onChangeDate(new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()))
@@ -110,17 +120,21 @@ export default function FusedHuangliCard({ chart, date = new Date(), onChangeDat
               <span className="fh-date-w">{weekName}</span>
             </div>
           </div>
-          <button
-            type="button"
-            className={`fh-badge ${showPicker ? 'open' : ''}`}
-            onClick={() => setShowPicker(v => !v)}
-            title="查看最近 30 天"
-            aria-expanded={showPicker}
-          >
-            🧧 {isSameDay(viewDate, todayMid) ? '今日黄历' : `${viewDate.getMonth() + 1}月${viewDate.getDate()}日黄历`} ▾
-          </button>
+          {historyMode ? (
+            <span className="fh-badge fh-history-badge">🧧 {badgeText}</span>
+          ) : (
+            <button
+              type="button"
+              className={`fh-badge ${showPicker ? 'open' : ''}`}
+              onClick={() => setShowPicker(v => !v)}
+              title="查看最近 30 天"
+              aria-expanded={showPicker}
+            >
+              🧧 {badgeText} ▾
+            </button>
+          )}
         </div>
-        {showPicker && (
+        {!historyMode && showPicker && (
           <div className="fh-picker" role="dialog" aria-label="选择日期">
             <div className="fh-picker-head">
               <span className="fh-picker-title">查看最近 30 天</span>
@@ -168,7 +182,12 @@ export default function FusedHuangliCard({ chart, date = new Date(), onChangeDat
       {/* 今日开场金句（由订阅人身份/年纪在后台决定，不暴露身份标签） */}
       {personalized && <div className="fh-persona">
         <span className="fh-persona-kicker">今日场景</span>
-        <p className="fh-persona-txt">{data.scene.personaTitle || data.scene.persona}</p>
+        <p className="fh-persona-txt">
+          {personaTitleParts ? <>
+            <span>{personaTitleParts[1]} </span>
+            <strong className="fh-persona-emphasis">{personaTitleParts[2]}</strong>
+          </> : personaTitle}
+        </p>
       </div>}
 
       {/* 彭祖黄历宜忌：使用真实传统黄历字段，替换旧的现代幽默宜忌。 */}
@@ -274,26 +293,28 @@ export default function FusedHuangliCard({ chart, date = new Date(), onChangeDat
         <div className="fh-block fh-real">
           <h4 className="fh-sec-title"><span className="fh-sec-ic">📜</span> 传统规则层 · 日神与方位</h4>
 
-          {calendar?.monthGanzhi && calendar?.jianchu && (
-            <div className="fh-calendar-rule">
+          {(calendar?.monthGanzhi || calendar?.jianchu || data.real.jieqiProgress) && (
+            <div className="fh-calendar-summary">
+              {calendar?.monthGanzhi && (
               <div className="fh-calendar-rule-item">
                 <span>月令</span>
                 <b>{calendar.monthGanzhi}</b>
                 <small>以节气划分月令</small>
               </div>
-              <div className="fh-calendar-rule-divider" aria-hidden="true" />
+              )}
+              {calendar?.jianchu && (
               <div className="fh-calendar-rule-item">
                 <span>建除值日</span>
                 <b>{calendar.jianchu}日</b>
                 <small>先看冲忌，再看用事</small>
               </div>
-            </div>
-          )}
-
-          {data.real.jieqiProgress && (
-            <div className="fh-term-window">
-              <b>节气进度</b>
-              <span>{data.real.jieqiProgress}</span>
+              )}
+              {data.real.jieqiProgress && (
+                <div className="fh-term-window">
+                  <b>节气进度</b>
+                  <span>{data.real.jieqiProgress}</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -336,25 +357,29 @@ export default function FusedHuangliCard({ chart, date = new Date(), onChangeDat
       {/* 八运建议 */}
       {personalized && d && integratedAdvice && (
         <div className="fh-block">
-          <h4 className="fh-sec-title"><span className="fh-sec-ic">🔖</span> 今天怎么安排 · {data.scene.name}</h4>
+          <h4 className="fh-sec-title">
+            <span className="fh-sec-ic">🔖</span> 今天怎么安排 · {data.scene.name}
+            <span className="fh-title-tag dynamic">每日变化</span>
+          </h4>
           <div className="fh-advice-grid">
-            <div className="fh-advice-item"><b className="a-career">做事</b><span>{integratedAdvice.career}</span></div>
-            <div className="fh-advice-item"><b className="a-wealth">用钱</b><span>{integratedAdvice.wealth}</span></div>
-            <div className="fh-advice-item"><b className="a-love">相处</b><span>{integratedAdvice.love}</span></div>
-            <div className="fh-advice-item"><b className="a-health">状态</b><span>{integratedAdvice.health}</span></div>
-            <div className="fh-advice-item"><b className="a-noble">协作</b><span>{integratedAdvice.noble}</span></div>
-            <div className="fh-advice-item"><b className="a-travel">出门</b><span>{integratedAdvice.travel}</span></div>
-            <div className="fh-advice-item"><b className="a-decision">决定</b><span>{integratedAdvice.decision}</span></div>
-            <div className="fh-advice-item"><b className="a-opening">小提示</b><span>{integratedAdvice.opening}</span></div>
+            {(integratedAdvice.cards || []).map(card => (
+              <div className="fh-advice-item" key={card.key}>
+                <b className={`a-${card.tone}`}>{card.label}</b>
+                <span>{card.text}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* 玄学指南 */}
+      {/* 场景长期方法：不随所选日期变化，避免与当天动态安排重复。 */}
       {personalized && <div className="fh-block">
-        <h4 className="fh-sec-title"><span className="fh-sec-ic">🧭</span> 场景生活便签 · {data.scene.name}</h4>
+        <h4 className="fh-sec-title">
+          <span className="fh-sec-ic">🧭</span> 场景生活便签 · {data.scene.name}
+          <span className="fh-title-tag dynamic">每日变化</span>
+        </h4>
         <div className="fh-guide-grid">
-          {Object.entries(data.scene.tips).map(([k, v]) => (
+          {Object.entries(data.scene.tips || {}).map(([k, v]) => (
             <div className="fh-guide-item" key={k}><b>{TIPS_ICON[k] || '✦'} {k}</b><span>{v}</span></div>
           ))}
         </div>

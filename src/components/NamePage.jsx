@@ -1,15 +1,17 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { analyzeName, recommendName } from '../engine/nameAnalysis.js'
 import { buildChart } from '../engine/bazi.js'
 import { getLunarMonths, getLunarDayCount, tryLunarToSolar } from '../utils/lunar.js'
+import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx'
 
-export default function NamePage({ chart, onBack, onChart }) {
+export default function NamePage({ chart, onBack, onChart, onAskAgent, user, onReportReady }) {
   const [fullName, setFullName] = useState('')
   const [surname, setSurname] = useState('')
   const [result, setResult] = useState(null)
   const [recs, setRecs] = useState(null)
   const [baziChart, setBaziChart] = useState(chart)
   const [showBaziForm, setShowBaziForm] = useState(false)
+  const [archiveId, setArchiveId] = useState(null)
 
   const handleAnalyze = () => {
     if (!fullName.trim()) return
@@ -35,6 +37,52 @@ export default function NamePage({ chart, onBack, onChart }) {
     setBaziChart(c)
     onChart && onChart(c)
     setShowBaziForm(false)
+  }
+  useEffect(() => {
+    if (!user?.id || (!result && !recs?.length) || !onReportReady) return
+    const name = result ? `${result.input.surname || ''}${result.input.given}` : fullName.trim()
+    const summary = result?.summaryText || (recs?.length ? `已生成 ${recs.length} 个结合喜用的备选名字` : '')
+    let alive = true
+    onReportReady({
+      type: 'name',
+      clientKey: `name:${name}:${baziChart ? `${baziChart.year}-${baziChart.month}-${baziChart.day}-${baziChart.hour}-${baziChart.gender}` : 'general'}`,
+      title: `姓名测算 · ${name || '取名建议'}`,
+      summary,
+      result: {
+        analysis: result,
+        recommendations: recs,
+        markdown: [
+          result ? `# 姓名测算 · ${name}\n\n综合得分：${result.score}/100 · ${result.grade}\n\n${result.summaryText}\n\n三才：${result.sancai.tian} → ${result.sancai.ren} → ${result.sancai.di}（${result.sancai.verdict}）` : '',
+          recs?.length ? `## 推荐好名\n${recs.map(item => `- ${item.input.surname || ''}${item.input.given}：${item.score}分 · ${item.grade} · ${item.summaryText}`).join('\n')}` : '',
+        ].filter(Boolean).join('\n\n'),
+      },
+      chart: baziChart,
+      facts: [
+        name ? `姓名：${name}` : '',
+        result ? `综合得分：${result.score}/100 · ${result.grade}` : '',
+        baziChart ? `已结合喜用：${baziChart.favorable?.join('、') || '待查'}` : '通用五格与三才分析',
+      ].filter(Boolean),
+    }).then(id => { if (alive && id) setArchiveId(id) }).catch(() => {})
+    return () => { alive = false }
+  }, [baziChart, fullName, onReportReady, recs, result, user?.id])
+  const handleAskAgent = () => {
+    const recommended = recs?.map(item => `${item.input.surname || ''}${item.input.given}（${item.score}分，${item.grade}）`).join('、')
+    const reportText = [
+      result ? `姓名：${result.input.surname || ''}${result.input.given}\n综合得分：${result.score}/100 · ${result.grade}\n${result.summaryText}\n三才：${result.sancai.tian} → ${result.sancai.ren} → ${result.sancai.di}（${result.sancai.verdict}）` : '',
+      recommended ? `推荐结果：${recommended}` : '',
+    ].filter(Boolean).join('\n\n')
+    onAskAgent?.({
+      chart: baziChart,
+      reportId: archiveId,
+      prompt: buildReportAgentPrompt({
+        reportName: '姓名测算',
+        facts: [
+          `当前姓名：${result ? `${result.input.surname || ''}${result.input.given}` : fullName.trim() || '待查'}`,
+          baziChart ? `已结合八字喜用：${baziChart.favorable?.join('、') || '待查'}` : '当前为五格与三才通用分析，未输入八字。',
+        ],
+        report: { markdown: reportText },
+      }),
+    })
   }
 
   return (
@@ -170,6 +218,8 @@ export default function NamePage({ chart, onBack, onChart }) {
             </div>
           </section>
         )}
+
+        {(result || recs?.length) && <ReportAgentFooter onAskAgent={handleAskAgent} onBack={onBack} />}
       </div>
     </div>
   )

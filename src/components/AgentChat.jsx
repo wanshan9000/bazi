@@ -8,7 +8,7 @@ import { reflectAll } from '../engine/agentReflect.js'
 import { chatLLMReflective } from '../engine/agentReflectLoop.js'
 import { addFacts, memoryLine } from '../engine/agentMemory.js'
 import { localKey } from '../engine/userScope.js'
-import { loadCustomSkills, syncAdminSkills, BUILTIN_SKILLS } from '../data/skills.js'
+import { loadCustomSkills, syncAdminSkills, BUILTIN_SKILLS, shouldRunSkillTool } from '../data/skills.js'
 import { AGENT_SOUL } from '../data/knowledge.js'
 import { runSkillTool, runToolByName, skillSystem, TOOL_SCHEMAS } from '../engine/agentTools.js'
 import { detectSkills, planSkills, runSkillStructured } from '../engine/agentSkills.js'
@@ -24,8 +24,8 @@ import { loadSessions, getSession, upsertSession, deleteSession, clearSessions, 
 import { listCollection, saveToCollection, removeFromCollection, isInCollection } from '../engine/chartCollection.js'
 import ReportView from './ReportView.jsx'
 import { renderMarkdown } from '../utils/markdown.jsx'
-import { loadQuota, addAgentTokens, tokensToCredits, isAgentOverQuota, AGENT_QUOTA_TOKENS } from '../engine/freeQuota.js'
 import { consumeCredit } from '../data/users.js'
+import { canAfford, nextPlanKey } from '../engine/membership.js'
 import { ThinkBlock, ToolCallsBlock, FeedbackBar, CopyButton, renderAiText, timeNow, fmtSessionTime, QUICK, isNearScrollBottom } from './agent/ChatParts.jsx'
 
 // 报告类型 → 技能 key（反馈→进化信号关联）。子平→易学-泰山、盲派→盲派；合婚归姻缘、择日归黄历
@@ -641,11 +641,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
   const [showHistory, setShowHistory] = useState(false)
   // 长期用户画像记忆（跨会话记住称谓/职业/情感/关注）
   const [userProfile, setUserProfile] = useState(() => loadUserProfile())
-  // 元氣 AI · 游客积分制（注册会员不计数；累计 ≥ 100 积分 ≈ 1000 万 token 即提示订阅）
-  const [agentTokens, setAgentTokens] = useState(0)
-  const [quotaDismissed, setQuotaDismissed] = useState(false)
-  useEffect(() => { setAgentTokens(loadQuota().agentTokens || 0) }, [])
-  // 监听最后一条 AI 消息落字后累加 token 估算值；同一条消息仅计费一次（_counted 标记防重）
+  // 监听最后一条 AI 消息落字后同步服务端扣费；同一条消息仅计费一次（_counted 标记防重）。
   useEffect(() => {
     const last = messages[messages.length - 1]
     if (!last || last.role !== 'ai') return
@@ -665,13 +661,6 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
         if (!res.ok && res.reason === 'insufficient' && onUpgrade) onUpgrade()
         else if (res.ok && res.user) onUserChange && onUserChange(res.user)
       })
-    } else {
-      // 游客：按 token 估算累加到 freeQuota；累计 ≥ 100 积分提示订阅
-      const est = Math.ceil(last.text.length / 3)
-      if (est <= 0) return
-      const newTokens = addAgentTokens(est)
-      setAgentTokens(newTokens)
-      if (isAgentOverQuota(newTokens)) setQuotaDismissed(false)
     }
     setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, _counted: true } : m))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1092,6 +1081,8 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
   const send = async (text) => {
     const q = (text || input).trim()
     if (!q || typing) return
+    if (!user) { onRequireLogin && onRequireLogin('agent'); return }
+    if (!canAfford(user, 'agent.chat')) { onUpgrade && onUpgrade(nextPlanKey(user.plan)); return }
     followScrollRef.current = true
     setInput('')
     setMessages(prev => [...prev, { id: Date.now(), role: 'user', text: q, time: timeNow() }])
@@ -1291,7 +1282,7 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
       lastSkillRef.current = skill.key
       logSkillEvent({ key: skill.key, kind: 'hit', q })
     }
-    if (skill && skill.tool) {
+    if (shouldRunSkillTool(skill, chart)) {
       try {
         const _sr = runSkillStructured(skill, chart)
         skill.structured = _sr.structured
@@ -1899,22 +1890,6 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
           </svg>
         </button>
       </div>
-
-      {/* 元氣 AI · 积分用尽订阅引导弹窗（已登录不显示） */}
-      {!user && isAgentOverQuota(agentTokens) && !quotaDismissed && (
-        <div className="quota-modal-mask" onClick={() => setQuotaDismissed(true)}>
-          <div className="quota-modal" onClick={e => e.stopPropagation()}>
-            <div className="qm-icon">💎</div>
-            <h3>积分已用完 · 订阅会员继续对话</h3>
-            <p>游客已累计消耗 <b>{tokensToCredits(agentTokens).toFixed(1)}</b> / 100 积分。注册/登录成为会员，即可继续无限制对话。</p>
-            <p className="qm-tip">注册/登录后即可继续使用 · 扫码识别一步注册 · 自动登录</p>
-            <div className="qm-actions">
-              <button className="qm-btn primary" onClick={() => onRequireLogin && onRequireLogin('agent')}>立即订阅会员</button>
-              <button className="qm-btn ghost" onClick={() => setQuotaDismissed(true)}>我知道了</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -122,6 +122,9 @@ export function findByPhone(phone) {
 export function findByOpenid(openid) {
   return load().subscribers.find(s => s.channel === 'wechat' && s.openid === openid) || null
 }
+export function findByUserId(userId, channel = '') {
+  return load().subscribers.find(s => s.userId === userId && (!channel || s.channel === channel)) || null
+}
 export function findByToken(token) {
   return load().subscribers.find(s => s.token === token) || null
 }

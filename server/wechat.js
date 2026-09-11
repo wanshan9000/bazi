@@ -1,9 +1,9 @@
-// 微信扫码订阅：网页授权(网页应用/公众号扫码)+模板消息推送。
-// 未配置 appId/appSecret 时降级为「模拟微信」，便于开发联调。
+// 微信能力：网页登录授权只用于账号登录；每日提醒则使用公众号临时关注码、
+// 关注/扫码事件回调与公众号模板消息。两条链路的 openid 不可互换。
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
-import { config, wechatConfigured } from './config.js'
+import { config, wechatConfigured, wechatTemplateConfigured } from './config.js'
 
 const TOKEN_FILE = config.wechat.tokenCacheFile
 
@@ -40,6 +40,28 @@ async function getAccessToken(force = false) {
   throw new Error(`微信 access_token 获取失败: ${JSON.stringify(json)}`)
 }
 
+// 创建公众号临时关注码。scene 会在公众号的 subscribe / SCAN 回调事件里原样带回，
+// 服务端据此把公众号 openid 绑定到已登录的站内账号；它不是网页登录 OAuth 二维码。
+export async function createOfficialFollowQr(scene) {
+  if (!wechatTemplateConfigured()) throw new Error('公众号模板消息通道尚未完成配置')
+  const token = await getAccessToken()
+  const res = await fetch(`https://api.weixin.qq.com/cgi-bin/qrcode/create?access_token=${token}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      expire_seconds: 600,
+      action_name: 'QR_STR_SCENE',
+      action_info: { scene: { scene_str: scene } },
+    }),
+  })
+  const json = await res.json()
+  if (!json.ticket) throw new Error(`公众号关注码创建失败: ${JSON.stringify(json)}`)
+  return {
+    qrUrl: `https://mp.weixin.qq.com/cgi-bin/showqrcode?ticket=${encodeURIComponent(json.ticket)}`,
+    expiresIn: Number(json.expire_seconds || 600),
+  }
+}
+
 // 生成网页授权扫码链接（微信网页应用）
 export function qrAuthUrl(state) {
   if (!wechatConfigured()) return null
@@ -62,13 +84,7 @@ export async function exchangeCode(code) {
 
 // 发送模板消息推送当日黄历
 export async function sendWxTemplate(sub, content) {
-  if (!wechatConfigured()) {
-    console.log(`\n[本地微信·降级] → openid=${sub.openid}\n  推送内容: ${content}\n`)
-    return { RequestId: `local-wx-${Date.now()}` }
-  }
-  if (!config.wechat.templateId) {
-    throw new Error('未配置微信模板消息 ID（WX_TEMPLATE_ID）')
-  }
+  if (!wechatTemplateConfigured()) throw new Error('公众号模板消息通道尚未完成配置')
   const token = await getAccessToken()
 
   // 公众号模板消息的 data 字段名由模板本身定义（经典形态是
@@ -110,20 +126,16 @@ export async function sendWxTemplate(sub, content) {
 }
 
 /*
- * ⚠ openid 归属问题（配置真实通道前必须先想清楚）
+ * ⚠ openid 归属问题
  *
  * 现在的扫码走的是**开放平台「网站应用」**授权（qrAuthUrl 用 snsapi_login），
  * 拿到的 openid 属于「该网站应用」这个主体；而 sendWxTemplate 调用的是
  * **公众号**的模板消息接口，它只认「该公众号」下的 openid。两个 openid
  * 处在不同命名空间，直接拿前者去发后者的模板消息会被拒（errcode 40003/43004）。
  *
- * 两条可行路线，二选一：
- *   A. 全走公众号：改用公众号网页授权（snsapi_userinfo）取 openid，用户需先关注公众号。
- *   B. 走开放平台 + unionid 映射：网站应用与公众号绑定到同一个开放平台账号，
- *      通过 unionid 找到该用户在公众号下的 openid，再用它发模板消息。
- *
- * 在选定之前，微信推送不具备上线条件 —— 本地降级模式下打日志是能跑通的，
- * 但那条路径永远暴露不出这个问题。
+ * 每日提醒已采用公众号临时关注码 + subscribe / SCAN 事件回调的方案：回调取得的
+ * openid 才会被写入 wechat 订阅并用于模板消息。网页登录 OAuth 仍可供账号登录使用，
+ * 但绝不能把它拿来做公众号推送。
  */
 
 // 模拟微信扫码登录（降级模式）：生成一个稳定的 mock openid

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { buildChart } from '../engine/bazi.js'
 import { buildWeek, buildDaily, chartProfile } from '../engine/huangli.js'
-import { inferScenario, calcAge, sceneName } from '../engine/cantian.js'
+import { generateHuangli, inferScenario, calcAge, sceneName } from '../engine/cantian.js'
 import { WUXING_COLOR, WUXING_ICON } from '../data/ganzhi.js'
 import { dayElement } from '../data/huangli.js'
 import ShichenPicker from './ShichenPicker.jsx'
@@ -11,6 +11,8 @@ import FusedHuangliCard from './FusedHuangliCard.jsx'
 import ReportLock from './ReportLock.jsx'
 import { api } from '../api/client.js'
 import { getLunarMonths, getLunarDayCount, tryLunarToSolar } from '../utils/lunar.js'
+import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx'
+import { canUseHuangliReminder } from '../engine/membership.js'
 
 const IDENTITY_OPTIONS = [
   { key: 'worker', name: '打工人', emoji: '💼' },
@@ -26,19 +28,20 @@ const SHICHEN = [
   ['申时', '15-17'], ['酉时', '17-19'], ['戌时', '19-21'], ['亥时', '21-23']
 ]
 const SHICHEN_HOUR = { 子: 0, 丑: 2, 寅: 4, 卯: 6, 辰: 8, 巳: 10, 午: 12, 未: 14, 申: 16, 酉: 18, 戌: 20, 亥: 22 }
+const splitHuangliItems = value => String(value || '').split(/[、,，]/).map(item => item.trim()).filter(Boolean)
 
 function loadSub() {
   try { return JSON.parse(localStorage.getItem(LS_SUB)) || null } catch { return null }
 }
 
-export default function SubscribePage({ chart: extChart, onBack, user, onRequireLogin }) {
+export default function SubscribePage({ chart: extChart, onBack, user, onRequireLogin, onUpgrade, onAskAgent, onReportReady }) {
   const saved = useMemo(loadSub, [])
   const [chart, setChart] = useState(extChart || saved?.chart || null)
   const [pref, setPref] = useState(saved?.pref || { time: 'morning', notify: false, enabled: true, role: '', favZodiac: [] })
   const [subToken, setSubToken] = useState(saved?.subToken || '')
   const [serverOk, setServerOk] = useState(false)
   const [showForm, setShowForm] = useState(false)
-  const [today, setToday] = useState(new Date())
+  const [today] = useState(() => new Date())
   // 整页"当前查看日期"（默认今天），本周速览 / 30 天选择器 / 今日黄历卡片都以此同步
   const [viewDate, setViewDate] = useState(() => new Date(today))
 
@@ -58,18 +61,6 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
     }).catch(() => setServerOk(false))
   }, [])
 
-  // 微信授权回调会带着结果跳回本页（#/huangli?wechat=ok|failed|state_invalid）
-  const [wechatResult, setWechatResult] = useState('')
-  useEffect(() => {
-    const m = (window.location.hash || '').match(/[?&]wechat=([a-z_]+)/)
-    if (!m) return
-    setWechatResult(m[1])
-    const tok = (window.location.hash || '').match(/[?&]token=([^&]+)/)
-    if (m[1] === 'ok' && tok) { try { setSubToken(decodeURIComponent(tok[1])) } catch { /* ignore */ } }
-    // 结果读走后清掉 query，避免刷新反复提示
-    try { window.history.replaceState(null, '', window.location.pathname + '#/huangli') } catch { /* ignore */ }
-  }, [])
-
   // 订阅持久化
   useEffect(() => {
     try { localStorage.setItem(LS_SUB, JSON.stringify({ chart, pref, subToken })) } catch { /* ignore */ }
@@ -81,26 +72,75 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
   // 根据订阅人的「年纪 + 性别 + 身份」自动推断黄历场景
   const age = useMemo(() => (chart ? calcAge(chart.year, chart.month, chart.day) : 0), [chart])
   const sceneKey = useMemo(() => inferScenario(age, pref.role, chart?.gender), [age, pref.role, chart?.gender])
-
-  // 浏览器通知授权统一交给 SubscribeBar 内部处理（弹层内可一并开启）
-  // 保留占位 prop，避免破坏父组件 onToggleNotify 接口
-  // 浏览器通知：此前是个空函数，开关点了什么都不发生。
-  // 现在真的申请权限并给出结果反馈（后端不可用时这是唯一的提醒方式）。
-  const toggleNotify = async () => {
-    if (typeof Notification === 'undefined') {
-      window.alert('当前浏览器不支持桌面通知')
-      return
-    }
-    if (Notification.permission === 'granted') {
-      new Notification('元氣黄历', { body: '通知已开启，每日黄历将在此提醒你。' })
-      return
-    }
-    if (Notification.permission === 'denied') {
-      window.alert('通知权限已被拒绝，请在浏览器站点设置里重新允许')
-      return
-    }
-    const p = await Notification.requestPermission()
-    if (p === 'granted') new Notification('元氣黄历', { body: '通知已开启，每日黄历将在此提醒你。' })
+  const reportData = useMemo(() => generateHuangli({
+    chart,
+    date: viewDate,
+    scenario: sceneKey,
+    mode: chart ? 'personalized' : 'standard',
+    tone: 'practical',
+  }), [chart, viewDate, sceneKey])
+  const [archiveId, setArchiveId] = useState(null)
+  useEffect(() => {
+    if (!user?.id || !onReportReady || showForm) return
+    let alive = true
+    const birthKey = chart ? `${chart.year}-${chart.month}-${chart.day}-${chart.hour ?? 12}-${chart.gender}` : 'standard'
+    const facts = [
+      `日期：${reportData.date}（${reportData.lunar}，${reportData.ganzhi}）`,
+      `宜：${splitHuangliItems(reportData.real?.yi).slice(0, 6).join('、') || '待查'}`,
+      `忌：${splitHuangliItems(reportData.real?.ji).slice(0, 6).join('、') || '待查'}`,
+      chart ? `场景：${reportData.scene.personaTitle || reportData.scene.persona || '个人安排'}` : '通用黄历',
+    ]
+    onReportReady({
+      type: 'huangli',
+      clientKey: `huangli:${reportData.date}:${birthKey}:${sceneKey}`,
+      title: `${reportData.date} · ${chart ? '个性化黄历' : '黄历'}`,
+      summary: reportData.daily?.relation || reportData.scene?.guidance?.[0]?.body || '今日黄历安排',
+      result: {
+        ...reportData,
+        archive: {
+          version: 1,
+          mode: 'native',
+          sourceType: 'huangli',
+          input: { date: reportData.date, personalized: Boolean(chart) },
+          ui: { scenario: sceneKey },
+        },
+        markdown: [
+          `# ${reportData.date} 黄历报告`,
+          reportData.real?.yi ? `宜：${reportData.real.yi}` : '',
+          reportData.real?.ji ? `忌：${reportData.real.ji}` : '',
+          reportData.daily?.relation ? `个人日气：${reportData.daily.relation}` : '',
+          reportData.scene?.guidance?.map(item => `## ${item.title}\n${item.body}`).join('\n\n') || '',
+        ].filter(Boolean).join('\n\n'),
+      },
+      chart,
+      facts,
+    }).then(id => { if (alive && id) setArchiveId(id) }).catch(() => {})
+    return () => { alive = false }
+  }, [chart, onReportReady, reportData, sceneKey, showForm, user?.id])
+  const openHuangliAgent = () => {
+    const facts = [
+      `日期：${reportData.date}（${reportData.lunar}，${reportData.ganzhi}）`,
+      `建除：${reportData.calendar?.jianchu || '待查'}`,
+      `宜：${splitHuangliItems(reportData.real?.yi).slice(0, 6).join('、') || '待查'}`,
+      `忌：${splitHuangliItems(reportData.real?.ji).slice(0, 6).join('、') || '待查'}`,
+      chart
+        ? `个人日气：${reportData.daily?.relation || '平'}；场景提示：${reportData.scene.personaTitle || reportData.scene.persona || '无'}`
+        : '当前为通用黄历，未输入生辰八字。',
+    ]
+    onAskAgent?.({
+      chart,
+      reportId: archiveId,
+      prompt: buildReportAgentPrompt({
+        reportName: `${reportData.date} 黄历`,
+        facts,
+        report: { markdown: [
+          `# ${reportData.date} 黄历报告`,
+          reportData.real?.yi ? `宜：${reportData.real.yi}` : '',
+          reportData.real?.ji ? `忌：${reportData.real.ji}` : '',
+          reportData.scene?.guidance?.map(item => `${item.title}：${item.body}`).join('\n') || '',
+        ].filter(Boolean).join('\n\n') },
+      }),
+    })
   }
 
   return (
@@ -147,15 +187,14 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
                 <SubscribeBar
                   pref={pref}
                   setPref={setPref}
-                  onToggleNotify={toggleNotify}
                   chart={chart}
                   subToken={subToken}
                   onSubscribed={token => setSubToken(token)}
                   serverOk={serverOk}
                   channels={channels}
-                  wechatResult={wechatResult}
                   user={user}
                   onRequireLogin={onRequireLogin}
+                  onUpgrade={onUpgrade}
                 />
               </div>}
               <FusedHuangliCard
@@ -172,13 +211,11 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
 
             {chart && <MonthCurve chart={chart} today={today} />}
 
-            <div className="card" style={{ marginTop: 16, textAlign: 'center', padding: '16px' }}>
-              <button className="btn ghost small" onClick={() => { setToday(new Date()); window.scrollTo(0, 0) }}>回到今天</button>
-            </div>
-
             <p className="form-note" style={{ marginTop: 14, textAlign: 'center' }}>
               {chart ? '已结合你的命局与当天日气生成提示 · 用作安排参考，主动选择始终在你' : '当前展示传统黄历信息 · 输入生辰后，可获得更贴近你的节奏与安排提示'}
             </p>
+
+            <ReportAgentFooter onAskAgent={openHuangliAgent} onBack={onBack} />
           </>
         )}
       </div>
@@ -389,14 +426,15 @@ function birthFromChart(chart) {
   }
 }
 
-function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscribed, serverOk, channels = {}, wechatResult = '', user, onRequireLogin }) {
-  // 通道是否处于本地降级（未配置真实凭证）。null 表示还没探测到，按「已配置」处理，
-  // 避免探测期间闪一下「开发降级模式」。
+function SubscribeBar({ pref, setPref, chart, subToken, onSubscribed, serverOk, channels = {}, user, onRequireLogin, onUpgrade }) {
+  // 短信在本地可降级联调；公众号模板消息必须完成公众号二维码、回调和模板配置，
+  // 否则不能把普通网页登录扫码或 mock 当作可送达的微信提醒。
   const smsMock = channels.sms === 'local(mock)'
-  const wechatMock = channels.wechat === 'local(mock)'
+  const wechatReady = channels.wechat === 'official-template-ready'
+  const reminderMember = canUseHuangliReminder(user)
   const fav = pref.favZodiac || []
   const birthZodiac = chart?.shengxiao || ''
-  const [tab, setTab] = useState(serverOk ? 'sms' : 'local') // sms | wechat | local
+  const [tab, setTab] = useState('sms') // sms | wechat
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [countdown, setCountdown] = useState(0)
@@ -404,10 +442,7 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
   const [msg, setMsg] = useState({ type: '', text: '' })
   const [devCode, setDevCode] = useState('')
   const [showModal, setShowModal] = useState(false)
-
-  // 后端不可用时回退到本地浏览器通知
-  useEffect(() => { if (!serverOk && tab === 'sms') setTab('local') }, [serverOk, tab])
-  useEffect(() => { if (!serverOk && tab === 'wechat') setTab('local') }, [serverOk, tab])
+  const [officialQrUrl, setOfficialQrUrl] = useState('')
 
   // 倒计时
   useEffect(() => {
@@ -457,22 +492,37 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
     setBusy(false)
   }
 
-  // 微信扫码
+  // 公众号关注：仅请求公众号通道信息，绝不沿用开放平台网页登录扫码的 openid。
   const handleWechat = async () => {
+    if (!wechatReady) return flash('err', '公众号模板消息通道尚未完成配置')
     setBusy(true)
     try {
-      const r = await api.wechatQr()
-      if (r.mock) {
-        // 降级：模拟扫码完成，直接生成一个微信订阅
-        const done = await api.wechatMockDone({ phone: phone || undefined, birth: birthFromChart(chart), time: pref.time, favZodiac: fav })
-        if (done.token) onSubscribed(done.token)
-        flash('ok', wechatMock ? '微信订阅成功（本地降级模式）' : '微信订阅成功')
-      } else if (r.url) {
-        window.location.href = r.url
-      }
+      const r = await api.officialWechatQr({ birth: birthFromChart(chart), time: pref.time, favZodiac: fav })
+      if (!r.ready || !r.qrUrl) throw new Error('公众号关注二维码暂不可用')
+      setOfficialQrUrl(r.qrUrl)
     } catch (e) { flash('err', e.message) }
     setBusy(false)
   }
+
+  // 关注/扫码事件由公众号服务器异步回调；二维码显示期间每三秒查询一次绑定结果。
+  useEffect(() => {
+    if (!officialQrUrl) return
+    let active = true
+    const check = async () => {
+      try {
+        const r = await api.officialWechatStatus()
+        if (active && r.bound && r.token) {
+          onSubscribed(r.token)
+          setOfficialQrUrl('')
+          setShowModal(false)
+          flash('ok', '公众号已绑定，模板消息提醒已开启')
+        }
+      } catch { /* 网络波动时继续等待，二维码本身仍有效 */ }
+    }
+    check()
+    const timer = window.setInterval(check, 3000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [officialQrUrl])
 
   // 已订阅态：显示订阅信息 + 取消
   const handleUnsubscribe = async () => {
@@ -484,15 +534,18 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
   }
 
   // 开关点击：开通订阅属于会员权益 → 未登录先去注册/登录（成功后自动返回本页）
-  const requireUser = () => { if (!user && onRequireLogin) { onRequireLogin(); return true } return false }
+  const requireReminderMember = () => {
+    if (!user) { onRequireLogin?.(); return true }
+    if (!reminderMember) { onUpgrade?.(); return true }
+    return false
+  }
 
   // 开关点击：已订阅则关闭；未订阅则弹出"选择提醒方式"弹层
   const handleSwitchClick = () => {
-    if (requireUser()) return
-    const isOn = !!subToken || !!pref.notify
+    if (requireReminderMember()) return
+    const isOn = !!subToken
     if (isOn) {
       if (subToken) handleUnsubscribe()
-      if (pref.notify) setPref(prev => ({ ...prev, notify: false }))
       setShowModal(false)
       flash('ok', '已关闭每日提醒')
       return
@@ -506,7 +559,7 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
       {!user && (
         <div className="hl-sub-login">
           <span className="hl-sub-login-ic" aria-hidden>🔒</span>
-          <span className="hl-sub-login-txt">登录后可保存提醒设置，并按你选定的时段接收每日黄历</span>
+          <span className="hl-sub-login-txt">注册或登录后，可绑定手机号或关注公众号，按所选时段接收每日黄历</span>
           <button className="hl-sub-login-btn" onClick={() => onRequireLogin && onRequireLogin()}>注册 / 登录</button>
         </div>
       )}
@@ -518,24 +571,26 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
           <span className="hl-sub-title">每日黄历提醒</span>
           <span className="hl-sub-tip">
             {!user
-              ? '登录后可保存设置'
+              ? '注册或登录后可开通凡者会员'
+              : (!reminderMember
+                ? '凡者会员起可用'
               : (serverOk
-                ? (subToken ? '已开启 · 按所选时段推送' : '支持短信或微信扫码 · 按时段推送')
-                : '当前使用浏览器通知')}
+                ? (subToken ? '已开启 · 按所选时段推送' : '绑定手机号或关注公众号 · 按时段推送')
+                : '提醒服务暂不可用'))}
           </span>
         </div>
         <button
-          className={`hl-switch ${(subToken || pref.notify) ? 'on' : ''}`}
+          className={`hl-switch ${subToken ? 'on' : ''}`}
           onClick={handleSwitchClick}
-          aria-pressed={!!(subToken || pref.notify)}
-          title={subToken || pref.notify ? '点击关闭每日提醒' : '点击开通每日提醒'}
+          aria-pressed={!!subToken}
+          title={subToken ? '点击关闭每日提醒' : '点击开通每日提醒'}
         >
           <span className="hl-switch-knob" />
         </button>
       </div>
 
       {/* 已订阅且连接后端：显示偏好管理 */}
-      {serverOk && subToken ? (
+      {reminderMember && serverOk && subToken ? (
         <>
           <div className="hl-sub-ok">
             <span className="hl-sub-ok-ic">✅</span>
@@ -554,32 +609,31 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
             ))}
           </div>
         </>
+      ) : !user ? null : !reminderMember ? (
+        <div className="hl-sub-prompt hl-sub-member-gate">
+          <div className="hl-sub-prompt-txt">
+            <div className="hl-sub-prompt-h">凡者会员专享每日黄历提醒</div>
+            <div className="hl-sub-prompt-s">开通凡者及以上会员后，可选择手机短信或公众号模板消息接收。</div>
+          </div>
+          <button className="hl-sub-prompt-btn" onClick={() => onUpgrade?.()}>
+            ✦ 开通凡者会员
+          </button>
+        </div>
       ) : serverOk ? (
         <>
           {/* 未订阅：简短提示 + 触发弹层 */}
           <div className="hl-sub-prompt">
             <div className="hl-sub-prompt-txt">
               <div className="hl-sub-prompt-h">把每日黄历送到你手边</div>
-              <div className="hl-sub-prompt-s">选择短信或微信扫码，并设定你方便查看的时段</div>
+              <div className="hl-sub-prompt-s">绑定手机号接收短信，或关注公众号接收模板消息</div>
             </div>
-            <button className="hl-sub-prompt-btn" onClick={() => { if (requireUser()) return; setShowModal(true) }}>
+            <button className="hl-sub-prompt-btn" onClick={() => { if (requireReminderMember()) return; setShowModal(true) }}>
               ✦ 设置提醒
             </button>
           </div>
         </>
       ) : (
-        <div className="hl-sub-local">
-          <div className="hl-sub-ok-txt">当前使用浏览器通知；关闭页面或清理站点数据后，设置可能失效。</div>
-          <div className="hl-sub-times-row" style={{ marginTop: 10 }}>
-            {TIMES.map(t => (
-              <button key={t.k} className={`hl-sub-time ${pref.time === t.k ? 'active' : ''}`} onClick={() => setPref(prev => ({ ...prev, time: t.k }))}>
-                <span className="hl-sub-time-ic">{t.icon}</span>
-                <span className="hl-sub-time-lbl">{t.label}</span>
-                <small>{t.sub}</small>
-              </button>
-            ))}
-          </div>
-        </div>
+        <div className="hl-sub-unavailable">提醒服务暂不可用，请稍后重试。</div>
       )}
 
       {/* 关注生肖 */}
@@ -625,27 +679,25 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
               <button className="hl-modal-close" onClick={() => setShowModal(false)} aria-label="关闭">×</button>
             </div>
 
-            {(smsMock || wechatMock) && (
+            <p className="hl-sub-modal-intro">凡者及以上会员可开通提醒。选择一种接收方式，再设定方便查看的时段。</p>
+            {smsMock && (
               <div className="hl-modal-dev-note">
                 <span className="hl-modal-dev-ic">🛠️</span>
                 <span>
-                  <b>当前为本地降级模式：</b>短信 / 微信通道尚未配置真实凭证，订阅仅在本机生效。
+                  <b>当前为本地短信联调：</b>验证码仅用于开发测试，正式上线需接入真实短信服务。
                 </span>
               </div>
             )}
-            {wechatResult === 'ok' && <div className="hl-modal-dev-note">✅ 微信订阅已开通</div>}
-            {wechatResult === 'failed' && <div className="hl-modal-dev-note">⚠️ 微信授权失败，请重试</div>}
-            {wechatResult === 'state_invalid' && <div className="hl-modal-dev-note">⚠️ 授权链接已失效，请重新发起扫码</div>}
-
             <div className="hl-sub-methods">
-              <button className={`hl-sub-method ${tab === 'sms' ? 'active' : ''}`} onClick={() => setTab('sms')}>📱 手机短信</button>
-              <button className={`hl-sub-method ${tab === 'wechat' ? 'active' : ''}`} onClick={() => setTab('wechat')}>💬 微信扫码</button>
+              <button className={`hl-sub-method ${tab === 'sms' ? 'active' : ''}`} onClick={() => setTab('sms')}>📱 绑定手机号</button>
+              <button className={`hl-sub-method ${tab === 'wechat' ? 'active' : ''}`} onClick={() => setTab('wechat')}>💬 关注公众号</button>
             </div>
 
             {tab === 'sms' ? (
               <div className="hl-sub-sms">
+                <div className="hl-wechat-tip">绑定后，黄历将以短信发送到该手机号。</div>
                 <div className="hl-sub-row">
-                  <input className="hl-input" inputMode="numeric" placeholder="手机号" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} />
+                  <input className="hl-input" inputMode="numeric" placeholder="请输入手机号" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} />
                 </div>
                 <div className="hl-sub-row">
                   <input className="hl-input" inputMode="numeric" placeholder="验证码" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
@@ -657,16 +709,26 @@ function SubscribeBar({ pref, setPref, onToggleNotify, chart, subToken, onSubscr
                   <div className="hl-dev-code">本地降级模式验证码：<b>{devCode}</b></div>
                 )}
                 <button className="hl-sub-btn" onClick={handleSmsSubscribe} disabled={busy}>
-                  {busy ? '提交中…' : '✦ 立即订阅'}
+                  {busy ? '绑定中…' : '✦ 绑定并开启提醒'}
                 </button>
               </div>
             ) : (
               <div className="hl-sub-wechat">
-                <div className="hl-wechat-tip">使用微信“扫一扫”，确认后即可按所选时段接收当日黄历。</div>
-                <button className="hl-sub-btn wx" onClick={handleWechat} disabled={busy}>
-                  {busy ? '处理中…' : '💬 打开微信扫码订阅'}
+                {officialQrUrl ? (
+                  <>
+                    <img className="hl-official-qr" src={officialQrUrl} alt="微信公众号关注二维码" />
+                    <div className="hl-wechat-tip">请使用微信扫码关注公众号，并在公众号内完成账号绑定；绑定成功后，将按所选时段收到黄历模板消息。</div>
+                  </>
+                ) : (
+                  <div className="hl-wechat-tip">
+                    {wechatReady
+                      ? '使用微信扫码关注公众号，关注后在公众号内完成账号绑定，即可接收每日黄历模板消息。'
+                      : '公众号模板消息正在接入中。需配置公众号二维码、消息模板和公网回调后才能开通。'}
+                  </div>
+                )}
+                <button className="hl-sub-btn wx" onClick={handleWechat} disabled={busy || !wechatReady}>
+                  {busy ? '加载中…' : officialQrUrl ? '💬 重新显示关注二维码' : '💬 扫码关注公众号'}
                 </button>
-                {wechatMock && <div className="hl-dev-code">本地降级模式：点击后直接生成模拟微信订阅</div>}
               </div>
             )}
 

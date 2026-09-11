@@ -1,18 +1,80 @@
 // 元氣 AI · dsh 基座版：只做渲染与流式接管，编排/工具/记忆全在服务端 dsh
 import { useEffect, useRef, useState } from 'react'
 import { createAgentApi } from '../api/agent.js'
+import { reportApi } from '../api/reports.js'
 import { buildChart } from '../engine/bazi.js'
 import { listCollection, saveToCollection, removeFromCollection } from '../engine/chartCollection.js'
 import { refreshSession } from '../data/users.js'
-import { canAfford, nextPlanKey } from '../engine/membership.js'
-import { loadQuota, addAgentTokens, tokensToCredits, isAgentOverQuota } from '../engine/freeQuota.js'
+import { AGENT_CONSULTATION, canAfford, nextPlanKey } from '../engine/membership.js'
 import { renderMarkdown } from '../utils/markdown.jsx'
 import { ThinkBlock, ToolCallsBlock, CopyButton, renderAiText, timeNow, fmtSessionTime, QUICK, isNearScrollBottom } from './agent/ChatParts.jsx'
 
 const api = createAgentApi()
 const ROUTE_KEY = 'genki-agent-route'
+const ROUTE_PREF_PREFIX = 'v2:'
 const OPENING = ['我是「三门先生」，一位玄学大师。八字、紫微、六爻、奇门、黄历、塔罗、取名、风水，心有所问，尽管开口。', '把出生年月日时和性别告诉我，我先为你排盘；也可以直接问今年运势、事业、姻缘。']
 const SHI_CHEN = ['子', '丑', '丑', '寅', '寅', '卯', '卯', '辰', '辰', '巳', '巳', '午', '午', '未', '未', '申', '申', '酉', '酉', '戌', '戌', '亥', '亥', '子']
+
+// v1 只存一个裸路由名，历史用户曾因此被永久锁在 MiniMax。v2 仅保存用户主动点选的
+// 路由；所有旧裸值一律交回默认 Flash，保留之后手动选择深度模型的能力。
+export function resolveAgentRoute(stored, fallback = 'deepseek-flash', available = null) {
+  if (typeof stored !== 'string' || !stored.startsWith(ROUTE_PREF_PREFIX)) return fallback
+  const route = stored.slice(ROUTE_PREF_PREFIX.length)
+  if (!route) return fallback
+  return Array.isArray(available) && available.length && !available.includes(route) ? fallback : route
+}
+
+export function serializeAgentRoute(route) {
+  return `${ROUTE_PREF_PREFIX}${route}`
+}
+
+// 思考条展示的是用户可理解的执行阶段，而不是模型原始推理。这样既能让等待过程有
+// 反馈，也不会泄漏 Skill、系统提示、工具参数或模型自言自语。
+export function safeThinkStep(type, toolName = '') {
+  if (type === 'start') return '正在理解你的问题…'
+  if (type === 'reasoning') return '正在梳理问题要点…'
+  const key = String(toolName || '')
+  const calls = {
+    bazi: '正在排出四柱与大运…',
+    ziwei: '正在排布紫微命盘…',
+    qimen: '正在起局核对格局…',
+    liuyao: '正在起卦并核对动爻…',
+    huangli: '正在核对日期与宜忌…',
+    tarot: '正在整理牌阵信息…',
+    fengshui: '正在分析空间信息…',
+    name: '正在核对姓名结构…',
+    wuyunliuqi: '正在整理养生要点…',
+  }
+  const results = {
+    bazi: '四柱与大运已核对，正在组织解读…',
+    ziwei: '紫微命盘已核对，正在组织解读…',
+    qimen: '格局已核对，正在组织解读…',
+    liuyao: '卦象已核对，正在组织解读…',
+    huangli: '日期宜忌已核对，正在组织建议…',
+    tarot: '牌阵已整理，正在组织解读…',
+    fengshui: '空间信息已核对，正在组织建议…',
+    name: '姓名结构已核对，正在组织建议…',
+    wuyunliuqi: '养生要点已整理，正在组织建议…',
+  }
+  if (type === 'tool_result') return results[key] || '所需信息已核对，正在组织答复…'
+  return calls[key] || '正在查询所需信息…'
+}
+
+export function appendSafeThinkStep(message, step) {
+  const next = String(step || '').trim()
+  const current = String(message?.reasoning || '').trim()
+  if (!next || current.split('\n').map(item => item.trim()).includes(next)) return message
+  return { ...message, reasoning: current ? `${current}\n${next}` : next }
+}
+
+function readAgentRoutePreference() {
+  try {
+    const stored = localStorage.getItem(ROUTE_KEY)
+    const route = resolveAgentRoute(stored)
+    if (stored && !stored.startsWith(ROUTE_PREF_PREFIX)) localStorage.removeItem(ROUTE_KEY)
+    return route
+  } catch { return 'deepseek-flash' }
+}
 
 // hour 缺失表示「时辰未知」，不能悄悄补成 12 点：服务端会把它当成确定的午时写进
 // 命盘行，模型据此排出的时柱是编的，用户却看不出来。原样传 null，由服务端与人设
@@ -31,35 +93,64 @@ function sessionTitle(s) {
   }
   return chartLabel({ year: +year, month: +month, day: +day, hour: h, gender })
 }
+function consultationLabel(consultation, user) {
+  if (!consultation) return user
+    ? '开启一个咨询主题：5 点 · 含 8 次具体问题解读 · 72 小时有效'
+    : `客者免费体验 ${AGENT_CONSULTATION.guestRounds} 次具体问题解读 · 注册后可认领当前主题`
+  const expiry = consultation.expiresAt ? new Date(consultation.expiresAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
+  return `${consultation.kind === 'guest' ? '免费体验' : '当前主题'} · 具体问题解读 ${consultation.remainingRounds}/${consultation.totalRounds} 次可用${expiry ? ` · ${expiry} 前有效` : ''}`
+}
 
-export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequireLogin, onUpgrade, onUserChange }) {
+function canRestoreSession(session) {
+  // 即使一轮主题已到期或用尽，也应恢复这段完整咨询：用户可以在原会话中续问，
+  // 不能因为额度状态变化就把昨天的记忆藏起来、逼用户另开一个空白会话。
+  return Boolean(session?.id)
+}
+
+export default function AgentChatDsh({ chart: chartProp, seedQuery, user, reportId, initialSessionId, onRequireLogin, onUpgrade, onUserChange }) {
   const [messages, setMessages] = useState(() => OPENING.map((text, i) => ({ id: `boot-${i}`, role: 'ai', text, time: timeNow(), _counted: true })))
   const [input, setInput] = useState('')
   const [typing, setTyping] = useState(false)
   const [activeChart, setActiveChart] = useState(() => chartProp || null)
   const [sessionId, setSessionId] = useState(null)
   const [activeSession, setActiveSession] = useState(null)
+  const [consultation, setConsultation] = useState(null)
+  const [renewal, setRenewal] = useState(null)
   const [sessions, setSessions] = useState([])
   const [showHistory, setShowHistory] = useState(false)
   const [collection, setCollection] = useState(() => listCollection())
   const [showCollection, setShowCollection] = useState(false)
   const [models, setModels] = useState({ routes: [], default: null })
-  const [route, setRoute] = useState(() => { try { return localStorage.getItem(ROUTE_KEY) || null } catch { return null } })
+  const [route, setRoute] = useState(readAgentRoutePreference)
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [agentTokens, setAgentTokens] = useState(0)
-  const [quotaDismissed, setQuotaDismissed] = useState(false)
-  // 服务端判定的游客额度耗尽（按 IP 记账，权威）。本地那份 agentTokens 只是估算，
-  // 清掉站点数据就会归零 —— 两者不一致时以这个为准。
-  const [guestBlocked, setGuestBlocked] = useState('')
-  // 登录之后游客那道闸门就不适用了，清掉阻断状态，别让弹窗一直挂着
-  useEffect(() => { if (user) setGuestBlocked('') }, [user])
   const scrollRef = useRef(null)
   const followScrollRef = useRef(true)
   const abortRef = useRef(null)
   const booted = useRef(false)
+  const autoResumeAttempted = useRef(false)
+  // 报告和会话的关联只需建立一次。重复 SSE session 事件或 React 重渲染都不能
+  // 让同一条咨询在报告详情里重复出现。
+  const linkedReportSessions = useRef(new Set())
 
-  useEffect(() => { setAgentTokens(loadQuota().agentTokens || 0) }, [])
-  useEffect(() => { api.listModels().then(m => setModels({ routes: m.routes || [], default: m.default })).catch(() => {}) }, [])
+  useEffect(() => {
+    let cancelled = false
+    api.listModels().then(m => {
+      if (cancelled) return
+      const routes = m.routes || []
+      const available = routes.map(item => item.key)
+      const fallback = m.default || 'deepseek-flash'
+      setModels({ routes, default: fallback })
+      setRoute(current => {
+        if (available.includes(current)) return current
+        try { localStorage.removeItem(ROUTE_KEY) } catch { /* 私密模式下无需持久化 */ }
+        // 可用模型列表只决定「下一段新会话」的默认路由。已有会话的真实路由由
+        // 服务端 session 记录决定；这里清 sessionId 会让用户下一次发言创建新会话，
+        // 于是出现“历史还显示着，Agent 却忘了”的假续聊。
+        return fallback
+      })
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
   useEffect(() => {
     const el = scrollRef.current
     if (el && followScrollRef.current) el.scrollTop = el.scrollHeight
@@ -71,9 +162,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
     return () => { clearTimeout(t); document.removeEventListener('click', close) }
   }, [pickerOpen])
 
-  // 计费：登录用户的每轮扣分**已经在服务端 /api/agent/chat 里完成**
-  // （客户端扣分意味着改 localStorage 就能白嫖，且没产出时无法自动退还）。
-  // 这里只负责把服务端的最新余额同步到界面。游客仍按 token 估算走本地免费配额。
+  // 计费和主题轮数都由服务端确认。客户端只同步服务端返还的余额和主题状态。
   useEffect(() => {
     const last = messages[messages.length - 1]
     if (!last || last.role !== 'ai' || last.streaming || last._counted || !last.text) return
@@ -81,13 +170,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
       setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, _counted: true } : m))
       return
     }
-    if (user) {
-      refreshSession().then(u => { if (u) onUserChange && onUserChange(u) })
-    } else {
-      const n = addAgentTokens(Math.ceil(last.text.length / 3))
-      setAgentTokens(n)
-      if (isAgentOverQuota(n)) setQuotaDismissed(false)
-    }
+    if (user) refreshSession().then(u => { if (u) onUserChange && onUserChange(u) })
     setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, _counted: true } : m))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, user])
@@ -102,36 +185,40 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
   const patchLast = fn => setMessages(prev => prev.map((m, i) => i === prev.length - 1 && m.role === 'ai' && m.streaming ? fn(m) : m))
   const handleChatScroll = event => { followScrollRef.current = isNearScrollBottom(event.currentTarget) }
 
-  const send = async (text) => {
+  const send = async (text, { renew = false } = {}) => {
     const q = (text || input).trim()
     if (!q || typing) return
-    // 额度必须在发请求之前拦。此前是「先聊完再扣、扣不动只弹个可关闭的窗」，
-    // 游客关掉弹窗就能接着无限聊，登录用户余额为 0 也照样能把请求打到付费模型上。
-    if (user) {
-      if (!canAfford(user, 'agent.chat')) { onUpgrade && onUpgrade(nextPlanKey(user.plan)); return }
-    } else if (isAgentOverQuota(agentTokens)) {
-      setQuotaDismissed(false)
-      return
-    }
+    if (!consultation && user && !canAfford(user, 'agent.topic')) { onUpgrade && onUpgrade(nextPlanKey(user.plan)); return }
     followScrollRef.current = true
+    setRenewal(null)
     setInput('')
     setTyping(true)
-    setMessages(prev => [...prev, { id: `u-${Date.now()}`, role: 'user', text: q, time: timeNow() }, { id: `a-${Date.now()}`, role: 'ai', text: '', reasoning: '', tools: [], streaming: true, time: timeNow() }])
+    setMessages(prev => [...prev, { id: `u-${Date.now()}`, role: 'user', text: q, time: timeNow() }, { id: `a-${Date.now()}`, role: 'ai', text: '', reasoning: safeThinkStep('start'), tools: [], streaming: true, time: timeNow() }])
     const ac = new AbortController()
     abortRef.current = ac
     try {
       await api.streamChat({
-        sessionId, text: q, chart: chartMeta(activeChart), route: route || models.default || undefined, signal: ac.signal,
+        sessionId, text: q, chart: chartMeta(activeChart), route: route || models.default || undefined, renew, signal: ac.signal,
         onEvent: e => {
           switch (e.type) {
             case 'session':
               if (!sessionId) setSessionId(e.sessionId)
               setActiveSession(prev => prev?.id === e.sessionId ? prev : { id: e.sessionId, title: q.slice(0, 14) })
+              if (e.consultation) setConsultation(e.consultation)
+              if (reportId && e.sessionId && !linkedReportSessions.current.has(e.sessionId)) {
+                linkedReportSessions.current.add(e.sessionId)
+                // 关联失败不影响本轮回答；下次收到 session 事件时允许重试。
+                reportApi.linkSession(reportId, e.sessionId).then(result => {
+                  if (!result.ok) linkedReportSessions.current.delete(e.sessionId)
+                }).catch(() => linkedReportSessions.current.delete(e.sessionId))
+              }
               break
+            case 'consultation': setConsultation(e.consultation || null); break
             case 'text': patchLast(m => ({ ...m, text: m.text + e.delta })); break
-            case 'reasoning': patchLast(m => ({ ...m, reasoning: (m.reasoning || '') + e.delta })); break
-            case 'tool_call': patchLast(m => ({ ...m, tools: [...m.tools, e.name] })); break
+            case 'reasoning': patchLast(m => appendSafeThinkStep(m, safeThinkStep('reasoning'))); break
+            case 'tool_call': patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('tool_call', e.name)), tools: [...m.tools, e.name] })); break
             case 'tool_result':
+              patchLast(m => appendSafeThinkStep(m, safeThinkStep('tool_result', e.name)))
               if (e.kind === 'report') {
                 // 报告卡片插在流式气泡之前
                 setMessages(prev => { const last = prev[prev.length - 1]; return [...prev.slice(0, -1), { id: `r-${Date.now()}`, role: 'ai', kind: 'report', report: { title: (e.text.match(/^# (.+)$/m) || [])[1] || '测算报告', markdown: e.text }, time: timeNow(), _counted: true }, last] })
@@ -148,13 +235,18 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
     } catch (err) {
       // 服务端说积分不足（402）。本地的 canAfford 是拿镜像算的，可能偏旧或被改过，
       // 服务端才是权威 —— 这里把那一条空气泡撤掉并引导升级，而不是给用户看一句报错。
-      // 游客的免费额度用完了（服务端按 IP 记账，权威）。本地那份估算只是即时提示，
-      // 清掉站点数据能重置它，但服务端不认 —— 所以这里必须按服务端说的办。
-      if (err && err.reason === 'guest_quota') {
+      if (err && err.reason === 'guest_limit') {
         setMessages(prev => prev.slice(0, -2))
         setInput(q)
-        setQuotaDismissed(false)
-        setGuestBlocked(err.message || '今日免费体验额度已用完，注册后可继续对话')
+        onRequireLogin && onRequireLogin('agent')
+        return
+      }
+      if (err && (err.reason === 'topic_exhausted' || err.reason === 'topic_expired')) {
+        setMessages(prev => prev.slice(0, -2))
+        setInput(q)
+        // 主题轮数结束不等于对话记忆结束。保留同一个 sessionId，让用户明确确认
+        // 后以新的八轮主题继续问；服务端会继续把同一 DSH 会话作为上下文。
+        setRenewal({ text: q, reason: err.reason })
         return
       }
       if (err && (err.reason === 'insufficient' || err.status === 402)) {
@@ -201,6 +293,8 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
     if (abortRef.current) abortRef.current.abort()
     setSessionId(null)
     setActiveSession(null)
+    setConsultation(null)
+    setRenewal(null)
     setActiveChart(null)
     setShowHistory(false)
     setInput('')
@@ -227,19 +321,53 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
     setHistoryErr('')
     try {
       const r = await api.loadMessages(s.id)
+      const restored = r.session || s
       setMessages((r.messages || []).map((m, i) => m.kind === 'report'
         ? { id: `h-${i}`, role: 'ai', kind: 'report', report: { title: (m.text.match(/^# (.+)$/m) || [])[1] || '测算报告', markdown: m.text }, time: m.time, _counted: true }
         : { id: `h-${i}`, role: m.role, text: m.text, time: m.time, _counted: true }))
-      setSessionId(s.id)
-      setActiveSession({ id: s.id, title: sessionTitle(s) })
+      setSessionId(restored.id)
+      setActiveSession({ id: restored.id, title: sessionTitle(restored) })
+      setConsultation(restored.consultation || null)
+      setRenewal(null)
       setActiveChart(null)
-      if (s.chartKey) { const [y, mo, d, h, g] = s.chartKey.split('-'); try { setActiveChart(buildChart(+y, +mo, +d, +h, g)) } catch { /* 命盘键格式异常：不影响正文恢复 */ } }
+      if (restored.chartKey) { const [y, mo, d, h, g] = restored.chartKey.split('-'); try { setActiveChart(buildChart(+y, +mo, +d, +h, g)) } catch { /* 命盘键格式异常：不影响正文恢复 */ } }
       setShowHistory(false)
     } catch (e) {
       // 会话在服务端已不存在（被淘汰/删除）→ 从列表里摘掉，不要让用户反复点一个死条目
       setSessions(prev => prev.filter(x => x.id !== s.id))
       setHistoryErr('该会话已不存在或加载失败')
     }
+  }
+
+  // 从「我的报告」打开一段关联咨询时，直接恢复原会话，而不是只跳到空白聊天页。
+  useEffect(() => {
+    if (initialSessionId) restore({ id: initialSessionId })
+    // restore 是当前组件内的稳定业务动作；只在目标会话变化时恢复一次。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSessionId])
+
+  // 重新进入 Agent 时默认接回最新仍可继续的主题。此前 sessionId 只存在组件内存：
+  // 页面一卸载就丢，用户没有主动打开“会话历史”便直接续问时，会被悄悄创建成新会话。
+  // 主动点“新会话”仍是唯一明确开始新话题的入口；带 initialSessionId 的报告咨询则优先
+  // 恢复指定会话，绝不被自动恢复覆盖。
+  useEffect(() => {
+    if (initialSessionId || autoResumeAttempted.current) return
+    autoResumeAttempted.current = true
+    let cancelled = false
+    api.listSessions().then(r => {
+      if (cancelled) return
+      const candidate = (r.sessions || []).find(session => canRestoreSession(session))
+      if (candidate) restore(candidate)
+    }).catch(() => { /* 首屏不因历史加载失败打断新咨询 */ })
+    return () => { cancelled = true }
+    // 只在本次页面挂载时寻找一次“最近主题”；restore 内部会接住服务端最新快照。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSessionId])
+
+  const continueTopic = () => {
+    const q = (renewal?.text || input).trim()
+    if (!q || typing) return
+    send(q, { renew: true })
   }
 
   const del = async (id) => {
@@ -271,7 +399,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
   // 用户以为它「突然失忆」。直接开一段新对话，语义才是一致的。
   const pickRoute = (key) => {
     setRoute(key)
-    try { localStorage.setItem(ROUTE_KEY, key) } catch { /* 忽略 */ }
+    try { localStorage.setItem(ROUTE_KEY, serializeAgentRoute(key)) } catch { /* 忽略 */ }
     setPickerOpen(false)
     if (key !== route) newChat()
   }
@@ -293,6 +421,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
               : activeSession ? <div className="current-session-chip" title={activeSession.title}><span className="current-session-label">会话</span><span className="current-session-title">{activeSession.title}</span></div>
                 : <div className="name"><span className="agent-name-full">三门先生</span><span className="agent-name-short">三门</span></div>}
           </div>
+          <div className={`agent-topic-status ${consultation?.kind || 'new'}`}>{consultationLabel(consultation, user)}</div>
         </div>
         <div className="agent-head-actions">
           <button className="agent-btn" onClick={newChat} title="新会话" aria-label="新会话">
@@ -368,7 +497,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
                 <ToolCallsBlock names={m.text} />
               ) : (
                 <div className={`bubble ${m.streaming ? 'bubble-streaming' : ''}`}>
-                  {m.reasoning ? <ThinkBlock content={m.reasoning} streaming={!!m.streaming && !m.text} /> : null}
+                  {m.reasoning ? <ThinkBlock content={m.reasoning} streaming={!!m.streaming} collapseWhenStreamingText={Boolean(m.text)} /> : null}
                   {m.tools && m.tools.length > 0 ? <ToolCallsBlock names={m.tools.join('、')} /> : null}
                   {m.streaming && !m.text ? (
                     <span className="typing"><i /><i /><i /></span>
@@ -389,6 +518,16 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
         </div>
       </div>
 
+      {renewal && (
+        <div className="agent-renewal" role="status">
+          <div className="agent-renewal-copy">
+            <strong>{renewal.reason === 'topic_expired' ? '这段咨询已到期' : '这段咨询已完成 8 次具体问题解读'}</strong>
+            <span>续问仍沿用这段对话与命盘上下文。</span>
+          </div>
+          <button type="button" onClick={continueTopic}>继续本话题 · 5 点</button>
+        </div>
+      )}
+
       <div className="chat-input-bar">
         <textarea className="chat-input" rows={1} placeholder="问三门先生任何问题…" value={input}
           onChange={e => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 110) + 'px' }}
@@ -402,7 +541,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
                 <button key={r.key} type="button" className={`model-picker-item ${r.key === (route || models.default) ? 'active' : ''}`} onClick={() => pickRoute(r.key)}>
                   <span className={`model-picker-dot ${r.key === (route || models.default) ? 'on' : ''}`} />
                   <span className="model-picker-name">{r.label}</span>
-                  <span className="model-picker-model">{r.model}</span>
+                  <span className="model-picker-model">{r.hint || r.model}</span>
                 </button>
               ))}
             </div>
@@ -420,21 +559,6 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, onRequ
         )}
       </div>
 
-      {!user && (guestBlocked || isAgentOverQuota(agentTokens)) && !quotaDismissed && (
-        // 服务端判定的额度耗尽不给「我知道了」——关掉也发不出去，留着那个按钮
-        // 只会让用户反复试。本地估算触发的仍可关闭（它可能偏保守）。
-        <div className="quota-modal-mask" onClick={() => !guestBlocked && setQuotaDismissed(true)}>
-          <div className="quota-modal" onClick={e => e.stopPropagation()}>
-            <div className="qm-icon">💎</div>
-            <h3>免费额度已用完 · 注册后继续对话</h3>
-            <p>{guestBlocked || `游客已累计消耗 ${tokensToCredits(agentTokens).toFixed(1)} / 100 积分。注册/登录成为会员，即可继续对话。`}</p>
-            <div className="qm-actions">
-              <button className="qm-btn primary" onClick={() => onRequireLogin && onRequireLogin('agent')}>立即注册 / 登录</button>
-              {!guestBlocked && <button className="qm-btn ghost" onClick={() => setQuotaDismissed(true)}>我知道了</button>}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

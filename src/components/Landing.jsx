@@ -2,14 +2,12 @@ import { useState } from 'react'
 import { ARTICLES, CATEGORIES } from '../data/articles.js'
 import { PLANS } from '../engine/membership.js'
 
-// 测算分类（门类筛选）
-const CATS = [
-  { key: 'all', icon: '✧', label: '全部', en: 'All' },
-  { key: 'mingli', icon: '☯', label: '命理排盘', en: 'Mingli' },
-  { key: 'yunshi', icon: '☽', label: '运势预测', en: 'Fortune' },
-  { key: 'zhanbu', icon: '◈', label: '决策占卜', en: 'Divination' },
-  { key: 'huanjing', icon: '⛩', label: '环境家居', en: 'Space' }
-]
+const CALCULATOR_CATEGORY_LABELS = {
+  mingli: '命理排盘',
+  yunshi: '运势预测',
+  zhanbu: '决策占卜',
+  huanjing: '环境家居',
+}
 
 // 八卡片·元氣测算矩阵
 // 每张卡片有三种跳转：page（路由到独立页面）/ agent（带 seed 打开元氣AI）/ ask（带预设问题）
@@ -87,7 +85,7 @@ const CALCULATORS = [
     cat: 'zhanbu',
     icon: '☽',
     aiTag: '牌阵',  // 本地引擎出报告，未调用模型
-    freeTag: '免费 10 次',
+    freeTag: '免费 8 次',
     title: '塔罗占卜',
     desc: '融合 78 张塔罗牌的神秘象征体系，依你的问题与所抽牌阵，逐位给出正逆位牌意与整体指引。',
     tags: ['多种牌阵', '正逆位解读', '牌意详解'],
@@ -101,7 +99,6 @@ const CALCULATORS = [
     cat: 'zhanbu',
     icon: '◈',
     aiTag: '排盘',  // 本地引擎出报告，未调用模型
-    freeTag: '免费 10 次',
     title: '奇门遁甲',
     desc: '时家奇门排盘，九宫、八门、九星、八神完整布局，解读当下格局，给出方位与时机上的参考。',
     tags: ['九宫排盘', '八门九星', '方位指引'],
@@ -124,13 +121,55 @@ const CALCULATORS = [
   }
 ]
 
+// 首页高频入口：Agent 类入口直接带着问题进入会话；已有测算页则复用原路由，避免做空壳测试页。
+const POPULAR_TESTS = [
+  {
+    key: 'love',
+    icon: '♡',
+    eyebrow: '关系小测',
+    title: '感情测试',
+    desc: '想知道桃花、暧昧或相处节奏？先说说你在意的那个人。',
+    cta: '问问元氣 AI',
+    route: 'agent',
+    seed: '我想做一次感情与桃花小测，看看最近适合怎样经营关系。'
+  },
+  {
+    key: 'wealth',
+    icon: '¥',
+    eyebrow: '财运小测',
+    title: '财源测试',
+    desc: '从近期财运与赚钱节奏出发，理清适合先做什么。',
+    cta: '看看财运',
+    route: 'agent',
+    seed: '我想做一次财运与赚钱方向小测，看看近期该怎样安排。'
+  },
+  {
+    key: 'tarot-love',
+    icon: '☾',
+    eyebrow: '心动占卜',
+    title: '爱情塔罗',
+    desc: '为一段关系抽牌，把心里的犹豫换成更清楚的提示。',
+    cta: '开始抽牌',
+    route: 'page',
+    target: 'tarot'
+  },
+  {
+    key: 'desk-fengshui',
+    icon: '⌂',
+    eyebrow: '学习与办公',
+    title: '书桌风水',
+    desc: '从座位与书桌方位开始，看看怎么让空间更顺手、安心。',
+    cta: '调整书桌',
+    route: 'page',
+    target: 'fengshui'
+  }
+]
+
 // 会员方案 · PLANS 已统一自 src/engine/membership.js
 const FEATURED = ARTICLES.slice(0, 3)
 
 export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, user }) {
-  const [cat, setCat] = useState('all')
   const [agentQuery, setAgentQuery] = useState('')
-  const list = CALCULATORS.filter(c => cat === 'all' || c.cat === cat)
 
   const handleClick = (card) => {
     if (card.route === 'agent') {
@@ -191,6 +230,33 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
         </div>
       </section>
 
+      {/* 大家都在测：用真实已有入口承接高频、轻量的首次探索 */}
+      <section className="container popular-tests rise" aria-labelledby="popular-tests-title">
+        <div className="popular-tests-head">
+          <div>
+            <p className="popular-tests-kicker">Popular picks</p>
+            <h2 id="popular-tests-title">大家都在测</h2>
+          </div>
+          <p>从一件最近在意的小事开始，也能慢慢找到答案。</p>
+        </div>
+        <div className="popular-tests-grid">
+          {POPULAR_TESTS.map((test, index) => (
+            <button
+              key={test.key}
+              type="button"
+              className={`popular-test-card popular-test-${test.key} rise rise-${index + 1}`}
+              onClick={() => handleClick(test)}
+            >
+              <span className="popular-test-icon" aria-hidden="true">{test.icon}</span>
+              <span className="popular-test-eyebrow">{test.eyebrow}</span>
+              <span className="popular-test-title">{test.title}</span>
+              <span className="popular-test-desc">{test.desc}</span>
+              <span className="popular-test-cta">{test.cta} <span aria-hidden="true">→</span></span>
+            </button>
+          ))}
+        </div>
+      </section>
+
       {/* 元氣测算 · 八卡矩阵 */}
       <section className="container">
         <div className="yc-head rise">
@@ -202,23 +268,8 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
           </div>
         </div>
 
-        {/* 测算分类筛选 */}
-        <div className="cat-row yc-cat-row rise rise-1">
-          {CATS.map(c => (
-            <button
-              key={c.key}
-              className={`cat-chip ${cat === c.key ? 'active' : ''}`}
-              onClick={() => setCat(c.key)}
-            >
-              <span className="ce" aria-hidden="true">{c.icon}</span>
-              <span className="cl">{c.label}</span>
-              <span className="ce en">{c.en}</span>
-            </button>
-          ))}
-        </div>
-
         <div className="yc-grid rise">
-          {list.map((c, i) => (
+          {CALCULATORS.map((c, i) => (
             <div
               key={c.key}
               className={`yc-card ${c.cls} rise rise-${(i % 4) + 1}`}
@@ -226,7 +277,7 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
               role="button"
               tabIndex={0}
             >
-              <span className="yc-cat-label">{CATS.find(x => x.key === c.cat)?.label}</span>
+              <span className="yc-cat-label">{CALCULATOR_CATEGORY_LABELS[c.cat]}</span>
               <span className="yc-icon" aria-hidden="true">{c.icon}</span>
               <div className="yc-title">
                 <span className="yc-ai">{c.aiTag}</span>
@@ -234,7 +285,7 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
               </div>
               <p className="yc-desc">{c.desc}</p>
               {!user && c.freeTag && (
-                <span className="yc-free">🎁 游客 {c.freeTag}</span>
+                <span className="yc-free">🎁 客者 {c.freeTag}</span>
               )}
               <div className="yc-tags">
                 {c.tags.map(t => <span key={t} className="yc-tag-chip">{t}</span>)}
@@ -242,9 +293,6 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
               <span className="yc-cta">{c.cta} <span aria-hidden="true">→</span></span>
             </div>
           ))}
-          {list.length === 0 && (
-            <p className="yc-empty">该分类暂无可用的测算，敬请期待。</p>
-          )}
         </div>
       </section>
 

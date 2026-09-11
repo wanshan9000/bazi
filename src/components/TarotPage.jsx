@@ -60,14 +60,14 @@ function SpreadPreview({ spread, drawn = 0 }) {
 
 export default function TarotPage({ onBack, onStart, history, user, onRequireLogin, onUpgrade, onUserChange }) {
   const [cat, setCat] = useState('all')
-  // 游客免费配额（塔罗 10 次含 10），注册会员不计数
+  // 客者免费配额，注册会员不计数。
   const [tarotUsed, setTarotUsed] = useState(0)
   useEffect(() => { setTarotUsed(loadQuota().tarot || 0) }, [])
   const tarotLocked = !user && isTarotOverLimit(tarotUsed)
   // 登录用户扣分结果：true 表示扣分成功；'insufficient' 表示积分不足
   const [insufficient, setInsufficient] = useState(false)
 
-  const list = SPREADS.filter(s => cat === 'all' || s.cat === cat)
+  const list = SPREADS.filter(s => (cat === 'all' || s.cat === cat) && (user || s.count === 1))
   const activeCat = SPREAD_CATS.find(c => c.k === cat)
 
   return (
@@ -84,10 +84,10 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
         </h1>
         <p className="page-sub rise rise-2">七十八张阿卡那 · 九种经典牌阵 · 一抽即明</p>
 
-        {/* 游客免费配额提示（已登录不显示） */}
+        {/* 客者免费配额提示（已登录不显示） */}
         {!user && (
           <p className="quota-hint rise rise-2">
-            游客免费 <b>{FREE_LIMIT}</b> 次抽牌 · 已用 <b>{tarotUsed}</b> / {FREE_LIMIT}{tarotLocked ? ' · 已用完 · 登录后可继续' : ''}
+            客者可免费体验 <b>{FREE_LIMIT}</b> 次单牌 · 已用 <b>{tarotUsed}</b> / {FREE_LIMIT}{tarotLocked ? ' · 已用完 · 登录后可继续' : ''}
           </p>
         )}
         {user && (
@@ -125,7 +125,7 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
           ))}
         </div>
 
-        {/* 牌阵卡片网格：游客 10 次用尽后展示解锁卡，引导登录 */}
+        {/* 牌阵卡片网格：客者额度用尽后展示解锁卡，引导登录 */}
         {tarotLocked ? (
           <div className="rise rise-3" style={{ marginTop: 16 }}>
             <ReportLock
@@ -133,9 +133,9 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
               onRequireLogin={onRequireLogin}
               backView="tarot"
               icon="🃏"
-              eyebrow="塔罗占卜 · 游客免费 10 次"
-              title="免费 10 次抽牌已用完"
-              desc="游客每抽 1 次牌计 1 次免费配额，累计 10 次后需注册/登录成为会员，即可继续无限制抽牌解读。"
+              eyebrow={`塔罗单牌体验 · 客者免费 ${FREE_LIMIT} 次`}
+              title={`${FREE_LIMIT} 次单牌体验已用完`}
+              desc="登录后可使用永久积分或会员月度积分，继续体验完整牌阵与深度解读。"
               note={`已累计抽牌 ${tarotUsed} 次 · 注册/登录后即可继续使用`}
             />
           </div>
@@ -198,7 +198,7 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
                       onStart(s.id)
                     }}
                   >
-                    {(!user && isTarotOverLimit(tarotUsed)) ? '登录继续解锁 →' : '抽这组牌 →'}
+                    {(!user && isTarotOverLimit(tarotUsed)) ? '登录继续解锁 →' : (user ? '抽这组牌 →' : '体验单牌 →')}
                   </button>
                 </article>
               ))}

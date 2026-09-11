@@ -7,8 +7,8 @@ const exec = { signal: new AbortController().signal }
 const tools = Object.fromEntries(TOOL_FACTORIES.map(f => { const t = f(E); return [t.name, t] }))
 const birth = { year: 1990, month: 5, day: 6, hour: 8, gender: '男' }
 
-test('注册了全部 10 个基础工具', () => {
-  assert.deepEqual(Object.keys(tools).sort(), ['bazi', 'fengshui', 'huangli', 'liuyao', 'name', 'qimen', 'report', 'tarot', 'wuyunliuqi', 'ziwei'])
+test('注册了全部 11 个基础工具', () => {
+  assert.deepEqual(Object.keys(tools).sort(), ['bazi', 'chenggu', 'fengshui', 'huangli', 'liuyao', 'name', 'qimen', 'report', 'tarot', 'wuyunliuqi', 'ziwei'])
 })
 
 test('ziwei 返回十二宫', async () => {
@@ -25,6 +25,11 @@ test('huangli 指定日期', async () => {
 })
 test('huangli 可切换幽默表达', async () => {
   assert.match(await tools.huangli.execute({ date: '2026-09-04', scenario: 'worker', tone: 'humorous' }, exec), /幽默参考/)
+})
+test('chenggu 返回传统骨重与动态八字解读', async () => {
+  const out = await tools.chenggu.execute(birth, exec)
+  assert.match(out, /骨重明细/)
+  assert.match(out, /结合八字的动态解读/)
 })
 test('tarot 三张牌', async () => {
   assert.match(await tools.tarot.execute({ spread: 'three', question: '感情' }, exec), /正位|逆位/)

@@ -15,7 +15,7 @@ import { runToolByName, TOOL_SCHEMAS } from './agentTools.js'
 
 // 工具类型归类（用于结构化结果 type 字段）
 const TOOL_TYPE = {
-  bazi: 'chart', ziwei: 'chart', liuyao: 'divine', qimen: 'chart',
+  bazi: 'chart', chenggu: 'report', ziwei: 'chart', liuyao: 'divine', qimen: 'chart',
   huangli: 'calendar', tarot: 'divine', name: 'naming', fengshui: 'fengshui',
   mangpai_report: 'report', hehun_report: 'report'
 }

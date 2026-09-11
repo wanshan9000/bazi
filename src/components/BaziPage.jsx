@@ -18,6 +18,7 @@ import { shiftDate } from '../utils/solarTime.js'
 import { consumeCredit } from '../data/users.js'
 import { hasPaid, markPaid } from '../engine/entitlements.js'
 import { getMonthlyCredits, planByKey, nextPlanKey } from '../engine/membership.js'
+import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx'
 
 const SHICHEN = [
   ['子时', '23-01'], ['丑时', '01-03'], ['寅时', '03-05'], ['卯时', '05-07'],
@@ -27,7 +28,7 @@ const SHICHEN = [
 const SHICHEN_HOUR = { 子: 0, 丑: 2, 寅: 4, 卯: 6, 辰: 8, 巳: 10, 午: 12, 未: 14, 申: 16, 酉: 18, 戌: 20, 亥: 22 }
 const WX_LABEL = { 木: '木 · 仁', 火: '火 · 礼', 土: '土 · 信', 金: '金 · 义', 水: '水 · 智' }
 
-export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin, onUpgrade, onUserChange }) {
+export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin, onUpgrade, onUserChange, onAskAgent, onReportReady }) {
   const [editing, setEditing] = useState(!chart)
   const [tab, setTab] = useState('mangpai')
   // 命书扣减状态：paid=true 表示本次会话已成功扣分；reason=null 表示无错误；
@@ -98,6 +99,9 @@ export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin,
             reason={reason}
             onRequireLogin={onRequireLogin}
             onUpgrade={onUpgrade}
+            onAskAgent={onAskAgent}
+            onReportReady={onReportReady}
+            onBack={onBack}
           />
         )}
       </div>
@@ -129,6 +133,14 @@ function BirthFormComp({ onDone }) {
 
   const lunarMonths = calendar === 'lunar' ? getLunarMonths(year) : []
   const lunarMaxDay = calendar === 'lunar' ? getLunarDayCount(year, month, lunarLeap) : daysInMonth(year, month)
+  // 真太阳时必须以公历日期计算；农历输入先换成公历仅用于预览与校正，最终提交仍复用同一结果。
+  const trueSolarBase = useMemo(() => {
+    if (calendar === 'lunar') {
+      const solar = tryLunarToSolar(year, month, day, lunarLeap)
+      if (solar) return solar
+    }
+    return { year, month, day }
+  }, [calendar, year, month, day, lunarLeap])
 
   const adjustDay = (d) => setDay(Math.min(d, calendar === 'lunar' ? getLunarDayCount(year, month, lunarLeap) : daysInMonth(year, month)))
   const setM = (m, leap) => { setMonth(m); setLunarLeap(!!leap); setDay(prev => Math.min(prev, calendar === 'lunar' ? getLunarDayCount(year, m, !!leap) : daysInMonth(year, m))) }
@@ -230,9 +242,9 @@ function BirthFormComp({ onDone }) {
 
       <div className="field">
         <TrueSolarField
-          year={year}
-          month={month}
-          day={day}
+          year={trueSolarBase.year}
+          month={trueSolarBase.month}
+          day={trueSolarBase.day}
           hour={hour}
           useTrueSolar={useTrueSolar}
           onChange={({ useTrueSolar: u, trueSolarHour: ts, trueSolarDayOffset: off, placeLabel: pl }) => {
@@ -262,7 +274,7 @@ const HOUR_LABEL = (h) => {
   return { label, range }
 }
 
-function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, onUpgrade }) {
+function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, onUpgrade, onAskAgent, onReportReady, onBack }) {
   // 同上：完整命书是重计算，不能挂在渲染路径上每次重跑。
   // 依赖只有命盘与流派，两者不变则复用。
   const report = useMemo(
@@ -271,7 +283,39 @@ function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, o
   )
   const school = tab === 'ziping' ? '子平派' : '盲派'
   const reportRef = useRef(null)
+  const [archiveId, setArchiveId] = useState(null)
+  useEffect(() => {
+    if (!user?.id || !paid || !onReportReady) return
+    let alive = true
+    onReportReady({
+      type: 'bazi',
+      clientKey: `bazi:${chart.year}-${chart.month}-${chart.day}-${chart.hour ?? 12}-${chart.gender}:${tab}`,
+      title: `八字命盘 · ${chart.dayMaster || '命局'}日主 · ${school}`,
+      summary: report.sub || report.title || `${chart.dayMaster || ''}日主八字报告`,
+      result: report,
+      chart,
+      facts: [
+        `四柱：${(chart.pillars || []).map(p => `${p.gan || ''}${p.zhi || ''}`).filter(Boolean).join(' · ')}`,
+        `日主：${chart.dayMaster || '待查'}`,
+        `流派：${school}`,
+      ],
+    }).then(id => { if (alive && id) setArchiveId(id) }).catch(() => {})
+    return () => { alive = false }
+  }, [chart, onReportReady, paid, report, school, tab, user?.id])
   const handleShare = () => reportRef.current?.share?.()
+  const handleAskAgent = () => onAskAgent?.({
+    chart,
+    reportId: archiveId,
+    prompt: buildReportAgentPrompt({
+      reportName: school,
+      facts: [
+        `四柱：${(chart.pillars || []).map(p => `${p.gan || ''}${p.zhi || ''}`).filter(Boolean).join(' · ')}`,
+        `日主：${chart.dayMaster || '待查'} · 喜 ${chart.favorable?.join('、') || '待查'} · 忌 ${chart.avoid?.join('、') || '待查'}`,
+        `当前流派：${school}`,
+      ],
+      report,
+    }),
+  })
 
   // 分享完整命书仅限登录用户。
   const actionsEl = user ? (
@@ -283,6 +327,7 @@ function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, o
   ) : null
 
   return (
+    <>
     <div className="rise bz-unified">
       {/* 命盘主体 */}
       <div className="rise">
@@ -315,7 +360,10 @@ function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, o
           />
         )}
       </div>
+
     </div>
+    <ReportAgentFooter onAskAgent={handleAskAgent} onBack={onBack} />
+    </>
   )
 }
 

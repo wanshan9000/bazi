@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { DshPool, ROUTES, DEFAULT_ROUTE, buildChildEnv } from '../pool.js'
+import { DshPool, ROUTES, DEFAULT_ROUTE, buildChildEnv, availableRoutes, resolveDefaultRoute } from '../pool.js'
 
 const ev = (sid, type, data) => ({ method: 'session.event', params: { sessionId: sid, event: { type, seq: 1, time: 0, data } } })
 const idle = sid => ({ method: 'session.status', params: { sessionId: sid, status: 'idle' } })
@@ -24,10 +24,10 @@ function fakeClient(script = () => []) {
   const pump = () => { while (queue.length && waiters.length) waiters.shift().resolve(queue.shift()) }
   const failAll = () => { while (waiters.length) waiters.shift().reject(closedError()) }
   return {
-    calls: { init: 0, prompts: [] },
+    calls: { init: 0, initializations: [], prompts: [] },
     push(n) { queue.push(n); pump() },
     async start() {},
-    async initialize() { this.calls.init++; return { serverInfo: { name: 'deepseek-harness-sdk-runtime', version: '0.0.1' } } },
+    async initialize(params) { this.calls.init++; this.calls.initializations.push(params); return { serverInfo: { name: 'deepseek-harness-sdk-runtime', version: '0.0.1' } } },
     async prompt(sessionId, blocks) {
       this.calls.prompts.push({ sessionId, blocks })
       const id = `msg-${++seq}`
@@ -88,6 +88,71 @@ test('未知路由报错', async () => {
 
 test('ROUTES 含默认路由', () => {
   assert.ok(ROUTES[DEFAULT_ROUTE])
+})
+
+test('预热默认路由只初始化客户端，不会占用任何用户会话', async () => {
+  const client = fakeClient(() => [])
+  const pool = new DshPool({ createClient: () => client })
+  await pool.warm('deepseek-flash')
+  assert.equal(client.calls.init, 1)
+  assert.equal(pool.busy.size, 0)
+  await pool.close()
+})
+
+test('没有 DeepSeek 凭据时默认模型回退到可用的 MiniMax，而不是指向不可用的 Flash', () => {
+  const env = { AGENT_DEFAULT_ROUTE: 'deepseek-flash', DEEPSEEK_API_KEY: '', MINIMAX_API_KEY: 'configured' }
+  assert.deepEqual(availableRoutes(env).map(([key]) => key), ['minimax'])
+  assert.equal(resolveDefaultRoute(env), 'minimax')
+})
+
+test('DeepSeek 凭据存在时仍优先使用快速默认模型', () => {
+  const env = { AGENT_DEFAULT_ROUTE: 'deepseek-flash', DEEPSEEK_API_KEY: 'configured', MINIMAX_API_KEY: 'configured' }
+  assert.equal(resolveDefaultRoute(env), 'deepseek-flash')
+})
+
+test('快速路由和深度路由按各自的生成上限初始化', async () => {
+  // 该测试会在“所有模型都给同一 8192 token 上限”时失败；那会让默认快答
+  // 无端生成过长，放大首轮等待。
+  const flash = fakeClient(sid => [idle(sid)])
+  const minimax = fakeClient(sid => [idle(sid)])
+  const pool = new DshPool({ createClient: key => key === 'minimax' ? minimax : flash })
+
+  await pool.run({ routeKey: 'deepseek-flash', sessionId: 'flash-route', text: '简要回答', onEvent: () => {} })
+  await pool.run({ routeKey: 'minimax', sessionId: 'minimax-route', text: '深度回答', onEvent: () => {} })
+
+  assert.equal(flash.calls.initializations[0].maxTokens, 3072)
+  assert.equal(minimax.calls.initializations[0].maxTokens, 3072)
+  await pool.close()
+})
+
+test('运行结果提供从握手到工具、首段正文与总耗时的分阶段指标', async () => {
+  // 若删除 timing 采集，这些字段会消失；路由层就无法记录 Agent 的实际慢点。
+  const client = fakeClient(sid => [
+    ev(sid, 'assistant/chunk', { chunk: { type: 'reasoning-delta', index: 0, text: '核对中' } }),
+    ev(sid, 'tool/call', { callId: 'call-1', name: 'bazi', arguments: '{}' }),
+    ev(sid, 'tool/result', { message: { content: [{ type: 'text', text: '盘面' }], source: { callId: 'call-1' } } }),
+    ev(sid, 'assistant/chunk', { chunk: { type: 'text-delta', index: 0, text: '正文' } }),
+    idle(sid),
+  ])
+  const pool = new DshPool({ createClient: () => client })
+  const result = await pool.run({ routeKey: DEFAULT_ROUTE, sessionId: 'timing-route', text: '测速', onEvent: () => {} })
+
+  assert.equal(typeof result.timing?.initializeMs, 'number')
+  assert.equal(typeof result.timing?.promptAcceptedMs, 'number')
+  assert.equal(typeof result.timing?.firstEventMs, 'number')
+  assert.equal(typeof result.timing?.firstReasoningMs, 'number')
+  assert.equal(typeof result.timing?.firstToolCallMs, 'number')
+  assert.equal(typeof result.timing?.firstToolResultMs, 'number')
+  assert.equal(typeof result.timing?.firstTextMs, 'number')
+  assert.equal(typeof result.timing?.totalMs, 'number')
+  assert.ok(result.timing.initializeMs <= result.timing.promptAcceptedMs)
+  assert.ok(result.timing.promptAcceptedMs <= result.timing.totalMs)
+  assert.ok(result.timing.firstEventMs <= result.timing.totalMs)
+  assert.ok(result.timing.firstReasoningMs <= result.timing.totalMs)
+  assert.ok(result.timing.firstToolCallMs <= result.timing.totalMs)
+  assert.ok(result.timing.firstToolResultMs <= result.timing.totalMs)
+  assert.ok(result.timing.firstTextMs <= result.timing.totalMs)
+  await pool.close()
 })
 
 test('回复超时：保留常驻客户端（超时不等于子进程坏了）', async () => {

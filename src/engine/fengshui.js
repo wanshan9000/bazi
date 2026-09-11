@@ -62,7 +62,13 @@ function defaultLayout() {
     kitchen: '西', // 厨房
     study: '北',   // 书房
     door: '南',    // 大门朝向
-    bedDir: '东南' // 床头
+    bedDir: '东南', // 床头
+    deskDir: '东', // 书桌/座位面向
+    seatBack: 'wall', // 背后：实墙 / 门 / 窗
+    seatFront: 'open', // 前方：开阔 / 门 / 窗 / 墙
+    seatLeft: 'solid', // 左侧：有靠 / 窗 / 高柜
+    seatRight: 'open', // 右侧：开阔 / 窗 / 高柜
+    seatHazard: 'none', // 头顶与周边：无 / 横梁 / 尖角
   }
 }
 
@@ -161,6 +167,82 @@ export function analyzeFengshui({ layout = {}, birthInfo }) {
     ? '门向与你喜用神相克（门的方向压着你的五行气），气场受到压制。可在玄关处添置木/火/水的摆件通其气。'
     : `门向属${doorWuxing}，与喜用神关系平和（不多不少、可调可改），可塑空间较大。`
 
+  // 8. 书桌 / 座位：兼看方向与形势。方向只作为加分项，背有靠、避门冲、避横梁
+  // 是更优先的现实布置原则，避免用户为了“吉向”牺牲基本使用舒适度。
+  const deskWuxing = wxOf(ll.deskDir)
+  let deskScore = 70
+  const deskTips = []
+  if (favorable.includes(deskWuxing)) {
+    deskScore += 12
+    deskTips.push(`书桌朝${ll.deskDir}，方位属${deskWuxing}，与喜用神相合，可作为学习、工作与决策的主座。`)
+  } else if (avoid.includes(deskWuxing)) {
+    deskScore -= 10
+    deskTips.push(`书桌朝${ll.deskDir}，方位属${deskWuxing}，落在忌神方；优先调到喜用方向，不能移动时用${COLOR_PALETTE[favorable[0]]?.[0] || '柔和'}色软装调和。`)
+  } else {
+    deskTips.push(`书桌朝${ll.deskDir}，与命局没有明显冲突；若条件允许，可优先取${preferredDirection(favorable[0])}方。`)
+  }
+  if (luckyDirs.includes(ll.deskDir)) {
+    deskScore += 8
+    deskTips.push(`座位落在门向对应的吉位，利于专注与人际协作。`)
+  }
+
+  if (ll.seatBack === 'wall') {
+    deskScore += 10
+    deskTips.push('背后有实墙，形成“有靠”，适合长期伏案与稳定输出。')
+  } else if (ll.seatBack === 'door') {
+    deskScore -= 14
+    deskTips.push('背后正对门或通道，容易受人流惊扰；尽量调位或加高靠背、屏风。')
+  } else {
+    deskScore -= 10
+    deskTips.push('背后是窗，属于“无靠”；建议使用高靠椅，并在窗侧加厚帘或矮柜稳定气场。')
+  }
+
+  if (ll.seatFront === 'open') {
+    deskScore += 8
+    deskTips.push('前方留有开阔视野，利于思路展开；桌前保持清爽即可。')
+  } else if (ll.seatFront === 'door') {
+    deskScore -= 12
+    deskTips.push('前方直冲门，容易分神；将桌面略偏转，避免正对门线。')
+  } else if (ll.seatFront === 'wall') {
+    deskScore -= 5
+    deskTips.push('前方紧贴实墙，视野易受限；可留出桌前距离或加一幅明亮远景画。')
+  } else {
+    deskTips.push('前方临窗采光不错，但避免直射眩光；加可调百叶帘更稳妥。')
+  }
+
+  if (ll.seatLeft === 'solid') deskScore += 5
+  else if (ll.seatLeft === 'window') {
+    deskScore -= 4
+    deskTips.push('左侧临窗，注意风直吹与反光，可用帘布或绿植作缓冲。')
+  } else {
+    deskScore -= 3
+    deskTips.push('左侧高柜贴近座位，保持边缘圆润并留出活动距离。')
+  }
+  if (ll.seatRight === 'tall') {
+    deskScore -= 6
+    deskTips.push('右侧高柜或高物压近座位，宜降低高度或移远，避免形成压迫感。')
+  } else if (ll.seatRight === 'window') {
+    deskScore -= 3
+    deskTips.push('右侧临窗时避免强光直射屏幕，可用纱帘柔化。')
+  }
+
+  if (ll.seatHazard === 'beam') {
+    deskScore -= 22
+    deskTips.push('座位上方有横梁，优先移位避开；无法调整时，以平整吊顶或高柜弱化梁感。')
+  } else if (ll.seatHazard === 'corner') {
+    deskScore -= 14
+    deskTips.push('座位附近有尖角直冲，调整桌角或用圆叶植物、圆角收纳遮缓。')
+  }
+  deskScore = Math.max(20, Math.min(100, deskScore))
+  const desk = {
+    dir: ll.deskDir,
+    wuxing: deskWuxing,
+    score: deskScore,
+    verdict: deskScore >= 78 ? '宜用' : '宜调整',
+    preferredDir: preferredDirection(favorable[0]),
+    tips: deskTips,
+  }
+
   return {
     input: ll,
     chart,
@@ -178,6 +260,7 @@ export function analyzeFengshui({ layout = {}, birthInfo }) {
       verdict: bedVerdict,
       desc: bedDesc
     },
+    desk,
     lucky,
     rooms: roomAnalysis,
     summary: [
@@ -187,6 +270,10 @@ export function analyzeFengshui({ layout = {}, birthInfo }) {
       `吉位推荐：「${lucky.生方}」生气方作主卧或客厅，是您一宅之首善之地。`
     ]
   }
+}
+
+function preferredDirection(element) {
+  return ({ 木: '东、东南', 火: '南', 土: '东北、西南', 金: '西、西北', 水: '北' })[element] || '东、东南'
 }
 
 function wxOf(dir) {

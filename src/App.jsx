@@ -1,12 +1,15 @@
-import { lazy, startTransition, Suspense, useEffect, useState } from 'react'
+import { lazy, startTransition, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import Landing from './components/Landing.jsx'
 import { buildChart } from './engine/bazi.js'
 import { loadHistory as loadTarot } from './data/tarot.js'
 import { getSession, logout as doLogout, refreshSession, consumeCredit } from './data/users.js'
 import { setUnauthorizedHandler } from './api/auth.js'
 import { loadQuota, incTarot, isTarotOverLimit } from './engine/freeQuota.js'
-import { getMonthlyCredits } from './engine/membership.js'
+import { getCreditBalance, isSuperAdmin } from './engine/membership.js'
 import { createAgentApi } from './api/agent.js'
+import { reportApi } from './api/reports.js'
+import { createArchiveDraft, legacyArchiveDrafts } from './engine/reportArchive.js'
+import { historyRouteForReport, isHistoryReportView } from './engine/reportHistoryRoute.js'
 
 // 首屏只需要首页和应用壳；具体阅读、排盘与管理页进入后才下载。
 const BaziPage = lazy(() => import('./components/BaziPage.jsx'))
@@ -25,6 +28,9 @@ const SubscribePage = lazy(() => import('./components/SubscribePage.jsx'))
 const LoginPage = lazy(() => import('./components/LoginPage.jsx'))
 const RegisterPage = lazy(() => import('./components/RegisterPage.jsx'))
 const ProfilePage = lazy(() => import('./components/ProfilePage.jsx'))
+const MyReportsPage = lazy(() => import('./components/MyReportsPage.jsx'))
+const ReportArchiveDetail = lazy(() => import('./components/MyReportsPage.jsx').then(module => ({ default: module.ReportArchiveDetail })))
+const NativeReportHistory = lazy(() => import('./components/NativeReportHistory.jsx'))
 const ReportView = lazy(() => import('./components/ReportView.jsx'))
 const MembershipModal = lazy(() => import('./components/MembershipModal.jsx'))
 
@@ -43,6 +49,12 @@ const NAV = [
   { key: 'ziwei', glyph: '⭐', label: '紫微', en: 'Zǐwēi' },
   { key: 'tarot', glyph: '🃏', label: '塔罗', en: 'Tarot' },
   { key: 'wenku', glyph: '📚', label: '文库', en: 'Library' }
+]
+
+// 「我的」只属于移动端底栏：桌面端继续用右上角的头像与积分入口，避免顶部导航变长。
+const BOTTOM_NAV = [
+  ...NAV,
+  { key: 'profile', glyph: '◉', label: '我的', en: 'Profile' },
 ]
 
 function RouteFallback() {
@@ -112,14 +124,20 @@ function TopBar({ view, onNav, user, onUser, credits }) {
   )
 }
 
-function BottomNav({ view, onNav }) {
+function BottomNav({ view, onNav, user }) {
   return (
     <nav className="bottom-nav">
-      {NAV.map(n => (
+      {BOTTOM_NAV.map(n => {
+        const destination = n.key === 'profile' ? (user ? 'profile' : 'login') : n.key
+        const isActive = view === n.key
+          || (n.key === 'profile' && view === 'login')
+          || (n.key === 'wenku' && view === 'article')
+          || (n.key === 'tarot' && view === 'tarot-reading')
+        return (
         <button
           key={n.key}
-          className={`bn-link${n.key === 'home' ? ' bn-link-home' : ''} ${view === n.key || (n.key === 'wenku' && view === 'article') || (n.key === 'tarot' && view === 'tarot-reading') ? 'active' : ''}`}
-          onClick={() => onNav(n.key)}
+          className={`bn-link${n.key === 'home' ? ' bn-link-home' : ''}${n.key === 'profile' ? ' bn-link-profile' : ''} ${isActive ? 'active' : ''}`}
+          onClick={() => onNav(destination)}
           aria-label={n.label}
           title={n.label}
         >
@@ -136,9 +154,13 @@ function BottomNav({ view, onNav }) {
                 <ellipse cx="19.6" cy="28.6" rx="2.6" ry="2" />
               </svg>
             </span>
-          ) : <span className="bl">{n.label}</span>}
+          ) : n.key === 'profile' ? (
+            <span className="bn-profile-mark" aria-hidden="true">◉</span>
+          ) : null}
+          {n.key !== 'home' && <span className="bl">{n.label}</span>}
         </button>
-      ))}
+        )
+      })}
     </nav>
   )
 }
@@ -172,6 +194,8 @@ export default function App() {
   const [spreadId, setSpreadId] = useState(null)
   const [chart, setChart] = useState(null)
   const [agentSeed, setAgentSeed] = useState(null)
+  const [agentReportId, setAgentReportId] = useState(null)
+  const [agentSessionId, setAgentSessionId] = useState(null)
   const [history, setHistory] = useState(loadHistory)
   const [tarotHistory, setTarotHistory] = useState(loadTarot)
   const [user, setUser] = useState(getSession)
@@ -180,6 +204,23 @@ export default function App() {
   const [pendingView, setPendingView] = useState(null)
   // 订阅 Modal 状态：待选档位 + 是否先进入续费方案选择。
   const [subscribeModal, setSubscribeModal] = useState(null)
+  const [archiveReportId, setArchiveReportId] = useState(null)
+  const hasAdminAccess = isSuperAdmin(user)
+  const archiveIds = useRef(new Map())
+
+  const saveReportArchive = useCallback(async (payload) => {
+    if (!user?.id) return null
+    const draft = createArchiveDraft(payload)
+    const key = `${user.id}:${draft.clientKey}`
+    if (archiveIds.current.has(key)) return archiveIds.current.get(key)
+    const result = await reportApi.save(draft)
+    if (!result.ok || !result.report?.id) {
+      console.warn('报告保存失败', result.msg || result.reason || 'unknown')
+      return null
+    }
+    archiveIds.current.set(key, result.report.id)
+    return result.report.id
+  }, [user?.id])
 
   // 启动 / 切换账号时向服务端确认登录态并拉取权威状态
   // （月度重置与到期降级都由服务端推进，这里只负责把结果同步到界面）。
@@ -189,9 +230,18 @@ export default function App() {
     refreshSession().then(u2 => {
       if (!alive) return
       if (!u2) { setUser(null); return } // token 已失效
-      if (u2.creditsUsed !== user.creditsUsed || u2.plan !== user.plan) setUser(u2)
+      if (u2.creditsUsed !== user.creditsUsed || u2.permanentCredits !== user.permanentCredits || u2.plan !== user.plan) setUser(u2)
     })
     return () => { alive = false }
+  }, [user?.id])
+
+  // 已登录用户也可能是升级前就留在浏览器里的会话；不必等下一次重新登录，
+  // 首次进入应用便把明确白名单内的旧命盘、塔罗记录迁入账号档案。服务端以账号
+  // 记录迁移声明，因此刷新或多端重复进入都不会重复创建报告。
+  useEffect(() => {
+    if (!user?.id) return
+    reportApi.migrate(legacyArchiveDrafts())
+      .catch(err => console.warn('旧报告迁移失败', err))
   }, [user?.id])
 
   // token 过期或账号被注销时，任何一次接口调用都会触发这里，把界面切回未登录。
@@ -215,7 +265,7 @@ export default function App() {
   //    （此前的 astro、fengshui、register，已补上）。
   const HASH_VIEWS = ['home', 'agent', 'bazi', 'ziwei', 'qimen', 'chenggu', 'huangli',
     'name', 'fengshui', 'astro', 'tarot', 'tarot-reading', 'wenku', 'article',
-    'profile', 'login', 'register', 'admin', 'share']
+    'profile', 'reports', 'report-detail', 'login', 'register', 'admin', 'share']
 
   // 启动时检测 URL hash：
   //   #share=...     → 完整报告直接序列化在 URL 里，解码为只读报告
@@ -260,7 +310,16 @@ export default function App() {
     } else if (hash.startsWith('#/')) {
       // 直达/恢复主视图：#/agent、#/bazi……
       const v = hash.slice(2).split('?')[0]
-      if (HASH_VIEWS.includes(v)) setView(v)
+      if (HASH_VIEWS.includes(v)) {
+        const params = new URLSearchParams(hash.split('?')[1] || '')
+        if (isHistoryReportView(v) || v === 'report-detail') setArchiveReportId(params.get('report') || null)
+        else setArchiveReportId(null)
+        const target = v === 'admin' && user && !hasAdminAccess ? 'home' : v
+        setView(target)
+        if (target !== v) {
+          try { window.history.replaceState(null, '', '#/home') } catch { /* ignore */ }
+        }
+      }
     }
   }, [])
 
@@ -270,14 +329,25 @@ export default function App() {
       const h = window.location.hash || ''
       if (h.startsWith('#/')) {
         const v = h.slice(2).split('?')[0]
-        if (HASH_VIEWS.includes(v)) setView(v)
+        if (HASH_VIEWS.includes(v)) {
+          const params = new URLSearchParams(h.split('?')[1] || '')
+          if (isHistoryReportView(v) || v === 'report-detail') setArchiveReportId(params.get('report') || null)
+          else setArchiveReportId(null)
+          const target = v === 'admin' && user && !hasAdminAccess ? 'home' : v
+          setView(target)
+          if (target !== v) {
+            try { window.history.replaceState(null, '', '#/home') } catch { /* ignore */ }
+          }
+        }
       }
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
-  }, [])
+  }, [user, hasAdminAccess])
 
   const goNav = (v, payload) => {
+    // 管理控制台不是会员权益；普通登录用户即使手动改地址也回首页。
+    if (v === 'admin' && user && !hasAdminAccess) v = 'home'
     // 懒加载页面时保留当前界面，弱网下不会因一次点击突然退回到空白载入态。
     startTransition(() => {
       if (v === 'wenku') {
@@ -292,10 +362,13 @@ export default function App() {
       } else if (v !== 'agent') {
         setAgentSeed(null)
       }
+      if (payload && typeof payload === 'object' && payload.reportId) setArchiveReportId(payload.reportId)
+      else if (!isHistoryReportView(v) && v !== 'report-detail') setArchiveReportId(null)
     })
     // 同步 URL hash（#/view），支持直达与刷新恢复；分享/文章等有独立子状态的不写
     if (HASH_VIEWS.includes(v) && v !== 'share') {
-      try { window.history.replaceState(null, '', `#/${v}`) } catch { /* ignore */ }
+      const reportQuery = (isHistoryReportView(v) || v === 'report-detail') && (payload?.reportId || archiveReportId) ? `?report=${encodeURIComponent(payload?.reportId || archiveReportId)}` : ''
+      try { window.history.replaceState(null, '', `#/${v}${reportQuery}`) } catch { /* ignore */ }
     }
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -304,7 +377,15 @@ export default function App() {
     // 首页智能体入口始终开启一段无命盘上下文的新会话。否则用户此前排过八字后，
     // App 里残留的 chart 会被带入元氣 AI，造成未提供生辰却被默认按八字解读。
     setChart(null)
+    setAgentReportId(null)
+    setAgentSessionId(null)
     goNav('agent', { seedQuery: q })
+  }
+  const openReportAgent = ({ chart: reportChart, prompt, reportId = null }) => {
+    if (reportChart) setChart(reportChart)
+    setAgentReportId(reportId)
+    setAgentSessionId(null)
+    goNav('agent', { seedQuery: prompt })
   }
 
   const openArticle = (id) => {
@@ -412,7 +493,7 @@ export default function App() {
         onNav={goNav}
         user={user}
         onUser={v => goNav(v)}
-        credits={user ? getMonthlyCredits(user) : 0}
+        credits={user ? getCreditBalance(user).total : 0}
       />
       <main className="app-main">
         <Suspense fallback={<RouteFallback />}>
@@ -425,7 +506,9 @@ export default function App() {
             user={user}
           />
         )}
-        {view === 'bazi' && (
+        {view === 'bazi' && (archiveReportId ? (
+          <NativeReportHistory view="bazi" reportId={archiveReportId} onBack={() => goNav('reports')} onAskAgent={openReportAgent} onOpenSession={sessionId => { setAgentReportId(null); setAgentSessionId(sessionId); goNav('agent') }} onDeleted={() => goNav('reports')} />
+        ) : (
           <BaziPage
             chart={chart}
             user={user}
@@ -434,17 +517,26 @@ export default function App() {
             onRequireLogin={() => requireLogin('bazi')}
             onUpgrade={openSubscribe}
             onUserChange={setUser}
+            onAskAgent={openReportAgent}
+            onReportReady={saveReportArchive}
           />
-        )}
-        {view === 'huangli' && (
+        ))}
+        {view === 'huangli' && (archiveReportId ? (
+          <NativeReportHistory view="huangli" reportId={archiveReportId} onBack={() => goNav('reports')} onAskAgent={openReportAgent} onOpenSession={sessionId => { setAgentReportId(null); setAgentSessionId(sessionId); goNav('agent') }} onDeleted={() => goNav('reports')} />
+        ) : (
           <SubscribePage
             chart={chart}
             onBack={() => goNav('home')}
             user={user}
             onRequireLogin={() => requireLogin('huangli')}
+            onUpgrade={() => openSubscribe('earth')}
+            onAskAgent={openReportAgent}
+            onReportReady={saveReportArchive}
           />
-        )}
-        {view === 'ziwei' && (
+        ))}
+        {view === 'ziwei' && (archiveReportId ? (
+          <NativeReportHistory view="ziwei" reportId={archiveReportId} onBack={() => goNav('reports')} onAskAgent={openReportAgent} onOpenSession={sessionId => { setAgentReportId(null); setAgentSessionId(sessionId); goNav('agent') }} onDeleted={() => goNav('reports')} />
+        ) : (
           <ZiweiPage
             chart={chart}
             onBack={() => goNav('home')}
@@ -453,37 +545,57 @@ export default function App() {
             onRequireLogin={() => requireLogin('ziwei')}
             onUpgrade={openSubscribe}
             onUserChange={setUser}
+            onAskAgent={openReportAgent}
+            onReportReady={saveReportArchive}
           />
-        )}
-        {view === 'chenggu' && (
-          <ChengguPage onBack={() => goNav('home')} />
-        )}
-        {view === 'name' && (
+        ))}
+        {view === 'chenggu' && (archiveReportId ? (
+          <NativeReportHistory view="chenggu" reportId={archiveReportId} onBack={() => goNav('reports')} onAskAgent={openReportAgent} onOpenSession={sessionId => { setAgentReportId(null); setAgentSessionId(sessionId); goNav('agent') }} onDeleted={() => goNav('reports')} />
+        ) : (
+          <ChengguPage user={user} onBack={() => goNav('home')} onAskAgent={openReportAgent} onReportReady={saveReportArchive} />
+        ))}
+        {view === 'name' && (archiveReportId ? (
+          <NativeReportHistory view="name" reportId={archiveReportId} onBack={() => goNav('reports')} onAskAgent={openReportAgent} onOpenSession={sessionId => { setAgentReportId(null); setAgentSessionId(sessionId); goNav('agent') }} onDeleted={() => goNav('reports')} />
+        ) : (
           <NamePage
             chart={chart}
             onBack={() => goNav('home')}
             onChart={handleChart}
+            onAskAgent={openReportAgent}
+            user={user}
+            onReportReady={saveReportArchive}
           />
-        )}
-        {view === 'astro' && (
-          <HoroscopePage onBack={() => goNav('home')} />
-        )}
-        {view === 'qimen' && (
+        ))}
+        {view === 'astro' && (archiveReportId ? (
+          <NativeReportHistory view="astro" reportId={archiveReportId} onBack={() => goNav('reports')} onAskAgent={openReportAgent} onOpenSession={sessionId => { setAgentReportId(null); setAgentSessionId(sessionId); goNav('agent') }} onDeleted={() => goNav('reports')} />
+        ) : (
+          <HoroscopePage user={user} onBack={() => goNav('home')} onAskAgent={openReportAgent} onReportReady={saveReportArchive} />
+        ))}
+        {view === 'qimen' && (archiveReportId ? (
+          <NativeReportHistory view="qimen" reportId={archiveReportId} onBack={() => goNav('reports')} onAskAgent={openReportAgent} onOpenSession={sessionId => { setAgentReportId(null); setAgentSessionId(sessionId); goNav('agent') }} onDeleted={() => goNav('reports')} />
+        ) : (
           <QimenPage
             onBack={() => goNav('home')}
             user={user}
             onRequireLogin={() => requireLogin('qimen')}
             onUserChange={setUser}
             onUpgrade={openSubscribe}
+            onAskAgent={openReportAgent}
+            onReportReady={saveReportArchive}
           />
-        )}
-        {view === 'fengshui' && (
+        ))}
+        {view === 'fengshui' && (archiveReportId ? (
+          <NativeReportHistory view="fengshui" reportId={archiveReportId} onBack={() => goNav('reports')} onAskAgent={openReportAgent} onOpenSession={sessionId => { setAgentReportId(null); setAgentSessionId(sessionId); goNav('agent') }} onDeleted={() => goNav('reports')} />
+        ) : (
           <FengshuiPage
             chart={chart}
             onBack={() => goNav('home')}
             onChart={handleChart}
+            onAskAgent={openReportAgent}
+            user={user}
+            onReportReady={saveReportArchive}
           />
-        )}
+        ))}
         {view === 'tarot' && (
           <TarotPage
             onBack={() => goNav('home')}
@@ -495,14 +607,20 @@ export default function App() {
             onUserChange={setUser}
           />
         )}
-        {view === 'tarot-reading' && (
+        {view === 'tarot-reading' && (archiveReportId ? (
+          <NativeReportHistory view="tarot-reading" reportId={archiveReportId} onBack={() => goNav('reports')} onAskAgent={openReportAgent} onOpenSession={sessionId => { setAgentReportId(null); setAgentSessionId(sessionId); goNav('agent') }} onDeleted={() => goNav('reports')} />
+        ) : (
           <TarotReading
             spreadId={spreadId}
             onBack={() => goNav('tarot')}
             onReading={setTarotHistory}
             onCharge={chargeTarotReading}
+            onAskAgent={openReportAgent}
+            onHome={() => goNav('home')}
+            user={user}
+            onReportReady={saveReportArchive}
           />
-        )}
+        ))}
         {view === 'agent' && (
           <AgentPage
             chart={chart}
@@ -512,6 +630,8 @@ export default function App() {
             onRequireLogin={() => requireLogin('agent')}
             onUpgrade={openSubscribe}
             onUserChange={setUser}
+            reportId={agentReportId}
+            initialSessionId={agentSessionId}
           />
         )}
         {view === 'wenku' && (
@@ -524,7 +644,7 @@ export default function App() {
             onOpen={openArticle}
           />
         )}
-        {view === 'admin' && (
+        {view === 'admin' && (!user || hasAdminAccess) && (
           <AdminPage onBack={() => goNav('home')} />
         )}
         {view === 'login' && (
@@ -550,9 +670,36 @@ export default function App() {
             onLogout={handleLogout}
             onUpdate={setUser}
             onSubscribe={openSubscribe}
+            onReports={() => goNav('reports')}
+            onAskAgent={() => goNav('agent')}
           />
         )}
-        {view === 'profile' && !user && (
+        {view === 'reports' && user && (
+          <MyReportsPage user={user} onBack={() => goNav('profile')} onOpenReport={report => {
+            const target = historyRouteForReport(report)
+            if (target) goNav(target, { reportId: report.id })
+          }} />
+        )}
+        {view === 'report-detail' && user && archiveReportId && (
+          <ReportArchiveDetail
+            reportId={archiveReportId}
+            onBack={() => goNav('reports')}
+            onAskAgent={openReportAgent}
+            onOpenSession={sessionId => {
+              setAgentReportId(null)
+              setAgentSessionId(sessionId)
+              goNav('agent')
+            }}
+            onDeleted={() => goNav('reports')}
+          />
+        )}
+        {view === 'report-detail' && user && !archiveReportId && (
+          <MyReportsPage user={user} onBack={() => goNav('profile')} onOpenReport={report => {
+            const target = historyRouteForReport(report)
+            if (target) goNav(target, { reportId: report.id })
+          }} />
+        )}
+        {(view === 'profile' || view === 'reports' || view === 'report-detail') && !user && (
           <LoginPage
             onBack={() => goNav('home')}
             onSwitch={() => goNav('login')}
@@ -576,8 +723,8 @@ export default function App() {
         )}
         </Suspense>
       </main>
-      <BottomNav view={view} onNav={goNav} />
-      <TailBand onNav={goNav} hideOnMobile={view === 'share'} />
+      <BottomNav view={view} onNav={goNav} user={user} />
+      <TailBand onNav={goNav} hideOnMobile={view === 'share'} user={user} />
 
       {/* 全局订阅 Modal（会员方案 · 三重境界） */}
       {subscribeModal && (
@@ -607,7 +754,7 @@ function loadHistory() {
 
 // onUpgrade 由调用处传入（App 里绑的是 openSubscribe），此前没解构也没往下传，
 // 于是元氣 AI 里积分不足的分支永远拿不到回调，用户点了没有任何反应。
-function AgentPage({ chart, onBack, seedQuery, user, onRequireLogin, onUpgrade, onUserChange }) {
+function AgentPage({ chart, onBack, seedQuery, user, onRequireLogin, onUpgrade, onUserChange, reportId, initialSessionId }) {
   return (
     <section className="agent-page page-shell">
       <button className="page-back" onClick={onBack} aria-label="返回首页">
@@ -621,7 +768,7 @@ function AgentPage({ chart, onBack, seedQuery, user, onRequireLogin, onUpgrade, 
         <span className="page-subtitle">问三门 · 八字 · 紫微，两门通晓</span>
       </h1>
       <div className="agent-page-card">
-        <AgentChatImpl key={seedQuery || 'fresh'} chart={chart} seedQuery={seedQuery} user={user} onRequireLogin={onRequireLogin} onUpgrade={onUpgrade} onUserChange={onUserChange} />
+        <AgentChatImpl key={`${seedQuery || 'fresh'}:${reportId || initialSessionId || 'general'}`} chart={chart} seedQuery={seedQuery} user={user} reportId={reportId} initialSessionId={initialSessionId} onRequireLogin={onRequireLogin} onUpgrade={onUpgrade} onUserChange={onUserChange} />
       </div>
     </section>
   )
@@ -634,7 +781,7 @@ const PRIVACY_URL = import.meta.env.VITE_LEGAL_PRIVACY_URL || ''
 const TERMS_URL = import.meta.env.VITE_LEGAL_TERMS_URL || ''
 const CONTACT_EMAIL = import.meta.env.VITE_CONTACT_EMAIL || ''
 
-function TailBand({ onNav, hideOnMobile }) {
+function TailBand({ onNav, hideOnMobile, user }) {
   return (
     <footer className={`tail-band${hideOnMobile ? ' tail-band-share-sm' : ''}`}>
       <div className="tail-inner">
@@ -684,7 +831,7 @@ function TailBand({ onNav, hideOnMobile }) {
               {PRIVACY_URL && <li><a href={PRIVACY_URL} target="_blank" rel="noreferrer">隐私政策</a></li>}
               {TERMS_URL && <li><a href={TERMS_URL} target="_blank" rel="noreferrer">用户协议</a></li>}
               {CONTACT_EMAIL && <li><a href={`mailto:${CONTACT_EMAIL}`}>联系我们</a></li>}
-              <li><a onClick={() => onNav('admin')}>管理控制台</a></li>
+              {isSuperAdmin(user) && <li><a onClick={() => onNav('admin')}>管理控制台</a></li>}
             </ul>
           </div>
         </div>

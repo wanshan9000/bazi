@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { PROVINCES, DEFAULT_PLACE, findCity } from '../data/cities.js'
+import { CITY_COUNT, PROVINCES, DEFAULT_PLACE, findCity } from '../data/cities.js'
 import { trueSolarToShichen } from '../utils/solarTime.js'
 
 const pad = (n) => String(n).padStart(2, '0')
@@ -77,16 +77,17 @@ export default function TrueSolarField({ year, month, day, hour, useTrueSolar, o
         出生地 · 太阳真时
         <span className="tsf-title-hint">（可选）换算精确时辰</span>
       </label>
+      <p className="tsf-place-note">按出生地城市中心经度换算 · 已补足 {CITY_COUNT} 个地级市／自治州／地区</p>
       <div className="tsf-places">
         <div className="select-wrap">
-          <select value={province} onChange={(e) => changeProvince(e.target.value)}>
+          <select aria-label="出生省级地区" value={province} onChange={(e) => changeProvince(e.target.value)}>
             {PROVINCES.map((p) => (
               <option key={p.name} value={p.name}>{p.name}</option>
             ))}
           </select>
         </div>
         <div className="select-wrap">
-          <select value={city} onChange={(e) => setCity(e.target.value)}>
+          <select aria-label="出生地级市或地区" value={city} onChange={(e) => setCity(e.target.value)}>
             {cities.map((c) => (
               <option key={c.name} value={c.name}>{c.name}</option>
             ))}
@@ -104,7 +105,7 @@ export default function TrueSolarField({ year, month, day, hour, useTrueSolar, o
           <div className="tsf-calc-chain">
             <span>钟表 {pad(hour)}:00</span>
             <b className="tsf-arrow">→</b>
-            <span>经度 {fmtSigned(calc.solar.lonAdjust)}</span>
+            <span>{province} · {city} · 经度 {fmtSigned(calc.solar.lonAdjust)}</span>
             <b className="tsf-arrow">→</b>
             <span>均时差 {fmtSigned(calc.solar.eot)}</span>
             <b className="tsf-arrow">→</b>
