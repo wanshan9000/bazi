@@ -3801,6 +3801,37 @@ select option { background: var(--paper-light); color: var(--ink); }
   box-shadow: none;
 }
 
+/* 八字原生报告已由 .bz-unified 承担整页阅读容器，子平正文不再重复套一层大卡。
+   只作用于八字页，Agent 聊天与其他报告仍沿用各自的报告外壳。 */
+.bz-unified .bazi-report.br-ziping {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  overflow: visible;
+}
+.bz-unified .bazi-report.br-ziping::before { display: none; }
+
+/* 盲派与子平共享八字页的同一阅读层，不再重复套报告大卡。 */
+.bz-unified .bazi-report.br-mangpai {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  overflow: visible;
+}
+.bz-unified .bazi-report.br-mangpai::before { display: none; }
+
+/* 手机端不再额外缩窄子平正文；留白统一交给外层报告容器，导航贴合章节起点。 */
+@media (max-width: 640px) {
+  .bz-unified .bazi-report.br-ziping { padding: 0; }
+  .bz-unified .bazi-report.br-ziping .br-nav { margin-top: 0; }
+  .bz-unified .bazi-report.br-mangpai { padding: 0; }
+  .bz-unified .bazi-report.br-mangpai .br-nav { margin-top: 0; }
+}
+
 .report-sec { margin-bottom: 14px; text-align: left; }
 .report-sec h3 { display: flex; align-items: center; gap: 9px; font-size: 15.5px; letter-spacing: 0.12em; margin-bottom: 9px; color: var(--cinnabar-deep); }
 .report-sec h3 .ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-size: 14px; background: var(--cinnabar-soft); border: 1px solid rgba(224, 92, 133, 0.35); }

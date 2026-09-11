@@ -23,3 +23,20 @@ test('八字报告卡的标题与摘要不会把摘要压成竖排', () => {
   assert.match(tag, /-webkit-line-clamp:\s*3;/)
   assert.match(tag, /overflow:\s*hidden;/)
 })
+
+test('原生八字页的子平报告移除重复外框，章节内容仍由统一容器留出阅读边距', () => {
+  const shell = cssBlock('\\.bz-unified \\.bazi-report\\.br-ziping')
+
+  assert.match(shell, /background:\s*transparent;/)
+  assert.match(shell, /border:\s*0;/)
+  assert.match(shell, /border-radius:\s*0;/)
+  assert.match(shell, /box-shadow:\s*none;/)
+  assert.match(shell, /padding:\s*0;/)
+  assert.match(css, /\.bz-unified \.bazi-report\.br-ziping::before\s*\{[^}]*display:\s*none;/)
+})
+
+test('原生八字页的盲派报告与子平一致移除重复外框', () => {
+  assert.match(css, /\.bz-unified \.bazi-report\.br-mangpai\s*\{[\s\S]*?background:\s*transparent;/)
+  assert.match(css, /\.bz-unified \.bazi-report\.br-mangpai\s*\{[\s\S]*?border:\s*0;/)
+  assert.match(css, /\.bz-unified \.bazi-report\.br-mangpai::before\s*\{[^}]*display:\s*none;/)
+})

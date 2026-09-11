@@ -1773,7 +1773,7 @@ const main = (s.data.items || []).filter(it => it.sub || it.desc)
   }
 
   return (
-    <div className={`bazi-report${report?.type === 'bazi' ? ' br-ziping' : ''}${report?.type === 'ziwei' ? ' br-ziwei' : ''}`} style={style}>
+    <div className={`bazi-report${report?.type === 'bazi' ? ' br-ziping' : ''}${report?.type === 'mangpai' ? ' br-mangpai' : ''}${report?.type === 'ziwei' ? ' br-ziwei' : ''}`} style={style}>
       {!hideLead && !readonly && (lead ? cloneElement(lead, { actions: (
         <div className="br-actions">
           <button className="br-btn" onClick={copy}>{copied ? '已复制 ✓' : '⧉ 复制'}</button>
