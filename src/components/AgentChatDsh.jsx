@@ -7,7 +7,7 @@ import { listCollection, saveToCollection, removeFromCollection } from '../engin
 import { refreshSession } from '../data/users.js'
 import { canAfford, nextPlanKey } from '../engine/membership.js'
 import { renderMarkdown } from '../utils/markdown.jsx'
-import { ThinkBlock, ToolCallsBlock, CopyButton, renderAiText, timeNow, fmtSessionTime, QUICK, isNearScrollBottom } from './agent/ChatParts.jsx'
+import { ThinkBlock, ToolCallsBlock, CopyButton, renderAiText, timeNow, fmtSessionTime, quickQuestionsForConversation, isNearScrollBottom } from './agent/ChatParts.jsx'
 
 const api = createAgentApi()
 const ROUTE_KEY = 'genki-agent-route'
@@ -390,6 +390,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     e.preventDefault()
     send()
   }
+  const quick = quickQuestionsForConversation(messages, { hasChart: Boolean(activeChart) })
   return (
     <div className="agent-page-inner">
       <div className="agent-head">
@@ -463,7 +464,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
         {messages.map(m => (
           <div key={m.id} className={`msg ${m.role}`}>
             <div className="avatar">{m.role === 'ai' ? '三' : m.role === 'tool' ? '🔧' : '我'}</div>
-            <div style={{ maxWidth: '100%' }}>
+            <div className="msg-content">
               {m.kind === 'report' ? (
                 <>
                   <div className="bubble bubble-report-md">
@@ -492,8 +493,8 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
 
       <div className="quick-grid">
         <div className="quick-block">
-          <div className="quick-label">快捷问答</div>
-          <div className="quick-row">{QUICK.map(q => <button key={q} className="quick-chip quick-ask" onClick={() => send(q)}>{q}</button>)}</div>
+          <div className="quick-label">{quick.label}</div>
+          <div className="quick-row" data-quick-topic={quick.topic}>{quick.questions.map(q => <button key={q} className="quick-chip quick-ask" onClick={() => send(q)}>{q}</button>)}</div>
         </div>
       </div>
 

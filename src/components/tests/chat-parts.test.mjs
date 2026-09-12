@@ -128,11 +128,11 @@ test('实时阶段进度存在时隐藏模型原始 think 的重复条', () => {
   r.unmount()
 })
 
-test('盲派与子平报告在聊天气泡中使用命书卡片，而不影响普通对话', () => {
-  // 若标题识别正则失效，报告仍会退回普通标题+列表，用户会重新面对一整堵长正文。
+test('盲派与子平报告在聊天气泡中使用统一文本版式，不再套命书卡片', () => {
   const r = render(AiTextFixture, {
     text: '## 盘面核对\n- **四柱**：甲子 · 丙寅 · 辛酉 · 戊戌\n\n## 格局法\n- **月令**：先看藏干透出与救应。',
   })
-  assert.equal(r.container.querySelectorAll('section.agent-report-section').length, 2)
+  assert.equal(r.container.querySelectorAll('section.agent-report-section').length, 0)
+  assert.deepEqual(Array.from(r.container.querySelectorAll('.md-h')).map(el => el.textContent), ['盘面核对', '格局法'])
   r.unmount()
 })

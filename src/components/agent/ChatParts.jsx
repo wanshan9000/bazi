@@ -111,8 +111,6 @@ export function ThinkBlock({ content, streaming = false, collapseWhenStreamingTe
 // 模型正文里的 <think> 不是面向用户的解释：历史中已经出现过 Skill、工具调用和
 // 内部工作流。无论来自旧会话还是新流，都只呈现稳定、可理解的进度语，正文结论不受影响。
 const PUBLIC_THINK_CONTENT = '已完成命盘与要点核对。'
-const AGENT_REPORT_HEADINGS = /(^|\n)##\s*(?:盘面核对|做功主线|根基与关系|当前大运|事业与关系|行动建议|格局法|用神法|结构与应期|主题判断|综合建议)(?=\s|$)/m
-
 function publicThinkContent(content) {
   return String(content || '').trim() ? PUBLIC_THINK_CONTENT : ''
 }
@@ -179,7 +177,7 @@ export function renderAiText(text, streaming = false, { suppressThinkBlocks = fa
     const streamKey = `t${closedCount * 2 + 1}`
     return (
       <>
-        {before && <div className="md-block">{renderMarkdown(before, { variant: AGENT_REPORT_HEADINGS.test(before) ? 'agent-report' : 'default' })}</div>}
+        {before && <div className="md-block">{renderMarkdown(before)}</div>}
         {!suppressThinkBlocks && <ThinkBlock key={streamKey} content={publicThinkContent(thinkOpen)} streaming={streaming} />}
       </>
     )
@@ -209,7 +207,7 @@ export function renderAiText(text, streaming = false, { suppressThinkBlocks = fa
     // 跳过空段落：split 在文本开头/结尾或连续 <think>…</think> 处会产生空串，
     // 直接渲染会多出"啥都没有"的空框
     if (!clean.trim()) return
-    nodes.push(<div key={`p${i}`} className="md-block">{renderMarkdown(clean, { variant: AGENT_REPORT_HEADINGS.test(clean) ? 'agent-report' : 'default' })}</div>)
+    nodes.push(<div key={`p${i}`} className="md-block">{renderMarkdown(clean)}</div>)
   })
   // 防御：流式已结束但正文"只有标题没有内容"——通常是 token 截断 / 网络中断导致只输出了
   // ### 一、xxx 之类的章节标题，没有正文。这种情况下视觉上是一个"几乎空"的框，
@@ -233,12 +231,22 @@ export function renderAiText(text, streaming = false, { suppressThinkBlocks = fa
   return nodes
 }
 
-// 快捷问答（常规对话，不出报告）
-export const QUICK = [
+// 新会话没有足够上下文时，展示全站都能接住的入口。它不能假定用户已给出生辰。
+export const QUICK_DEFAULT = [
+  '八字排盘',
+  '紫微斗数',
+  '感情咨询',
+  '工作方向',
+  '测财运',
+  '事业发展',
+  '人际关系',
+  '抽张塔罗',
+]
+
+export const QUICK_BAZI = [
   '今年运势',
   '合适的工作',
   '正缘何时来',
-  '抽张塔罗',
   '盲派报告',
   '子平报告',
   '健康',
@@ -247,6 +255,50 @@ export const QUICK = [
   '人际关系',
   '感情',
 ]
+
+export const QUICK_DATE_SELECTION = [
+  '搬家择日',
+  '约会择日',
+  '相亲择日',
+  '结婚择日',
+  '领证择日',
+  '开业择日',
+  '出行择日',
+  '今天宜忌',
+]
+
+// 兼容仍在使用旧常量的调用方；实际聊天页应通过 quickQuestionsForConversation
+// 选择与当前会话相符的追问，避免把八字按钮固定塞进所有话题。
+export const QUICK = QUICK_DEFAULT
+
+const DATE_SELECTION_TERMS = /(?:黄历|择日|吉日|宜忌|冲煞|建除|搬家|入宅|约会|相亲|结婚|婚礼|领证|开业|出行|签约|动土|装修)/
+const BAZI_TERMS = /(?:八字|命盘|四柱|大运|流年|流月|盲派|子平|日主|十神|喜用神|格局)/
+const OTHER_DIVINATION_TERMS = /(?:紫微|斗数|塔罗|奇门|遁甲|六爻|风水|姓名|取名|五运六气)/
+const PERSONAL_BAZI_TERMS = /(?:今年|明年|当下|目前|运势|工作|职业|事业|财运|感情|婚姻|正缘|健康|人际关系)/
+
+/**
+ * 只读取缘主已发送的文字来判断快捷追问，模型生成内容不参与分类，避免一段
+ * 误判的回复把会话按钮带偏。倒序寻找最近有主题的提问，使“继续”这类短句也
+ * 能沿用刚才的八字或择吉语境。
+ */
+export function quickQuestionsForConversation(messages = [], { hasChart = false } = {}) {
+  const userTurns = (Array.isArray(messages) ? messages : [])
+    .filter(message => message?.role === 'user')
+    .map(message => String(message.text || '').trim())
+    .filter(Boolean)
+    .slice(-8)
+
+  for (let i = userTurns.length - 1; i >= 0; i -= 1) {
+    const text = userTurns[i]
+    if (DATE_SELECTION_TERMS.test(text)) return { label: '择吉参考', questions: QUICK_DATE_SELECTION, topic: 'date-selection' }
+    if (BAZI_TERMS.test(text)) return { label: '八字追问', questions: QUICK_BAZI, topic: 'bazi' }
+    // 用户刚切到其它术数时，不能因为曾排过八字就继续显示八字追问。
+    if (OTHER_DIVINATION_TERMS.test(text)) return { label: '快捷问答', questions: QUICK_DEFAULT, topic: 'general' }
+    if (hasChart && PERSONAL_BAZI_TERMS.test(text)) return { label: '八字追问', questions: QUICK_BAZI, topic: 'bazi' }
+  }
+
+  return { label: '快捷问答', questions: QUICK_DEFAULT, topic: 'general' }
+}
 
 
 export function timeNow() {

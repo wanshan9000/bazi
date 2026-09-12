@@ -58,7 +58,7 @@ function headingOf(line) {
  * 解析 markdown 文本为 React 元素数组
  * @param {string} text
  * @returns {Array<{type:string, ...props}>}
- *   type: 'table' | 'list' | 'p' | 'h' | 'blank'
+ *   type: 'table' | 'list' | 'p' | 'h' | 'hr' | 'blank'
  */
 export function parseMarkdown(text) {
   const lines = String(text || '').split('\n')
@@ -70,6 +70,13 @@ export function parseMarkdown(text) {
 
     // 空行：跳过，作为段落分隔
     if (!trimmed) { i += 1; continue }
+
+    // 分隔线：长回复用它切开“解释”和“方案/建议”，避免信息一直堆在同一段里。
+    if (/^(?:---+|\*\*\*+|___+)$/.test(trimmed)) {
+      blocks.push({ type: 'hr' })
+      i += 1
+      continue
+    }
 
     // 模型有时把「## 二、标题」和表头写在同一行：
     // `## 二、标题 | 项目 | 状态 | 说明 |`。先拆出标题，再按其余单元格建表，
@@ -108,7 +115,7 @@ export function parseMarkdown(text) {
       continue
     }
 
-    // 列表（- 或 * 或 • 开头）
+    // 无序列表（- 或 * 或 • 开头）
     if (/^[-*•]\s+/.test(trimmed)) {
       const items = []
       while (i < lines.length) {
@@ -173,6 +180,7 @@ function renderMarkdownBlock(b, i) {
       </ul>
     )
   }
+  if (b.type === 'hr') return <hr className="md-divider" key={`md-${i}`} />
   if (b.type === 'h') {
     const Tag = `h${Math.min(b.level + 2, 4)}` // 报告里 H3 起，避免过大
     return <Tag key={`md-${i}`} className="md-h" dangerouslySetInnerHTML={{ __html: inline(b.text) }} />

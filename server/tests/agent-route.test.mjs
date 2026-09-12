@@ -466,9 +466,8 @@ test('完整出生信息首次进入会话时，提示模型先校盘再在同�
     assert.match(captured[0], /三合\/三会必须三支齐全/)
     assert.match(captured[0], /公历9月/)
     assert.match(captured[0], /同一轮继续回答用户这次的具体问题/)
-    assert.match(captured[0], /标题必须独占一行/)
-    assert.match(captured[0], /不得使用 Markdown 表格/)
-    assert.match(captured[0], /不得输出.*think/)
+    assert.match(captured[0], /先列出生口径、四柱、起运日期\/年龄与当前大运/)
+    assert.doesNotMatch(captured[0], /【面向用户的排版协议】/)
     assert.match(captured[0], /今年适合换工作吗？/)
   } finally { srv.close() }
 })

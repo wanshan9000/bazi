@@ -101,22 +101,25 @@ test('八字流派路由 skill 负责默认流派、术语确认与双派分章'
   const doc = readSkillDoc('bazi-router')
   assert.match(doc, /默认加载 `mangpai`/)
   assert.match(doc, /你是想按子平派做报告吗/)
-  assert.match(doc, /## 子平派分析/)
-  assert.match(doc, /## 盲派分析/)
+  assert.match(doc, /\*\*子平派分析\*\*/)
+  assert.match(doc, /\*\*盲派分析\*\*/)
+  assert.match(doc, /出生年月日时（尽量精确，公历还是农历）、性别/)
+  assert.match(doc, /普通咨询默认用一至两段自然短句/)
+  assert.match(doc, /固定的“结论／依据／建议”模板/)
 })
 
-test('八字报告技能统一要求短章节、独立标题且不使用 Markdown 表格', () => {
+test('八字报告技能统一使用加粗段首与短条目，不使用表格', () => {
   const router = readSkillDoc('bazi-router')
   const mangpai = readSkillDoc('mangpai')
   const ziping = readSkillDoc('yixue-taishan')
 
   for (const doc of [router, mangpai, ziping]) {
-    assert.match(doc, /标题必须独占一行/)
-    assert.match(doc, /不得使用 Markdown 表格/)
+    assert.match(doc, /段首用独立的加粗标题/)
+    assert.match(doc, /Markdown 表格/)
     assert.match(doc, /不得(?:使用|输出).*think/i)
   }
-  assert.match(mangpai, /最多六个小节/)
-  assert.match(ziping, /最多六个小节/)
+  assert.match(mangpai, /最多六个信息组/)
+  assert.match(ziping, /最多六个信息组/)
 })
 
 test('管理后台技能同步到 _admin', () => {

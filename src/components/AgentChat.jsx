@@ -25,7 +25,7 @@ import { listCollection, saveToCollection, removeFromCollection, isInCollection 
 import ReportView from './ReportView.jsx'
 import { renderMarkdown } from '../utils/markdown.jsx'
 import { canAfford, nextPlanKey } from '../engine/membership.js'
-import { ThinkBlock, ToolCallsBlock, FeedbackBar, CopyButton, renderAiText, timeNow, fmtSessionTime, QUICK, isNearScrollBottom } from './agent/ChatParts.jsx'
+import { ThinkBlock, ToolCallsBlock, FeedbackBar, CopyButton, renderAiText, timeNow, fmtSessionTime, quickQuestionsForConversation, isNearScrollBottom } from './agent/ChatParts.jsx'
 
 // 报告类型 → 技能 key（反馈→进化信号关联）。子平→易学-泰山、盲派→盲派；合婚归姻缘、择日归黄历
 const REPORT_SKILL = {
@@ -1804,12 +1804,17 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
 
       <div className="quick-grid">
         <div className="quick-block">
-          <div className="quick-label">快捷问答</div>
-          <div className="quick-row">
-            {QUICK.map(q => (
+          {(() => {
+            const quick = quickQuestionsForConversation(messages, { hasChart: Boolean(activeChart) })
+            return <>
+              <div className="quick-label">{quick.label}</div>
+              <div className="quick-row" data-quick-topic={quick.topic}>
+                {quick.questions.map(q => (
               <button key={q} className="quick-chip quick-ask" onClick={() => send(q)}>{q}</button>
-            ))}
-          </div>
+                ))}
+              </div>
+            </>
+          })()}
         </div>
       </div>
 
