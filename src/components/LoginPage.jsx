@@ -79,10 +79,10 @@ export default function LoginPage({ onBack, onSwitch, onSuccess }) {
           <p className="auth-wish-copy">登录后，命盘、报告与咨询记录都会安稳地留在这里。</p>
           <div className="auth-wish-note"><span aria-hidden="true">✦</span> 注册即可开始一段自己的探索</div>
           <div className="auth-credit-balance">
-            <span>注册赠 20 点永久积分</span>
+            <span>注册赠 20 积分</span>
             <strong>20<small>点</small></strong>
           </div>
-          <p className="auth-credit-copy">可用于 4 次标准解读，或开启 4 个元气 Agent 咨询主题；每个主题含 8 次具体问题解读。</p>
+          <p className="auth-credit-copy">1 积分 = 19,000 Token；元气 Agent 按实际用量结算，积分永久有效。</p>
           <div className="auth-credit-tags" aria-label="注册后可用权益"><span>命盘留存</span><span>报告同步</span><span>咨询元气 Agent</span></div>
         </aside>
 

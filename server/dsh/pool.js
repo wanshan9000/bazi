@@ -23,7 +23,7 @@ import { DSH_HOME, PROFILE_DIR, SKILLS_DIR, ENGINES_FILE, PERSONA_FILE } from '.
 export const ROUTES = {
   // 首轮咨询优先给足“看懂一张命盘”的篇幅，而不是沿用 8192 的长文预算。
   // 深度模型仍可手动选择，保留略高上限给多轮论证与复杂问题。
-  'deepseek-flash': { provider: 'deepseek-official', model: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', hint: '推荐 · 快速', maxTokens: 3072 },
+  'deepseek-flash': { provider: 'deepseek-official', model: 'deepseek-flash', label: 'DeepSeek Flash', hint: '推荐 · 快速', maxTokens: 3072 },
   'deepseek-pro': { provider: 'deepseek-official', model: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', hint: '深度模式 · 较慢', maxTokens: 4096 },
   'minimax': { provider: 'minimax', model: 'MiniMax-M2.7', label: 'MiniMax M2.7', hint: '深度模式 · 较慢', maxTokens: 3072 },
 }

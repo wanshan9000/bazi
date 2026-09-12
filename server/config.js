@@ -8,6 +8,8 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // 加载 server/.env（若有）
 dotenv.config({ path: path.join(__dirname, '.env') })
+// 本机凭据覆盖层：与 .env 一样受 Git 忽略，便于本地密钥不混入共享配置。
+dotenv.config({ path: path.join(__dirname, '.env.local') })
 
 const env = process.env
 

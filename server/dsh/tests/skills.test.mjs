@@ -69,6 +69,10 @@ test('盲派 skill 先校盘大运，并在同一轮回答缘主的具体问题'
   assert.match(doc, /后续普通问答：只答当前问题/)
   assert.match(doc, /完整报告：仅明确请求时触发/)
   assert.match(doc, /正印.*偏印.*正财.*偏财.*正官.*七杀/)
+  assert.match(doc, /三合\/三会必须三支齐全/)
+  assert.match(doc, /公历9月/)
+  assert.match(doc, /逐项回应/)
+  assert.match(doc, /不得用“青少年期”等泛称替代/)
 })
 
 test('盲派运行 skill 保持可执行的短上下文，不把教学手册整篇注入首轮', () => {
@@ -87,6 +91,10 @@ test('子平运行 skill 与盲派一样保持短上下文，避免完整报告�
   assert.match(doc, /用神/)
   assert.match(doc, /调候/)
   assert.match(doc, /当前大运/)
+  assert.match(doc, /三合\/三会必须三支齐全/)
+  assert.match(doc, /公历9月/)
+  assert.match(doc, /逐项回应/)
+  assert.match(doc, /不得用“青少年期”等泛称替代/)
 })
 
 test('八字流派路由 skill 负责默认流派、术语确认与双派分章', () => {

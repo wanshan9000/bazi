@@ -14,13 +14,13 @@ function mkStore() {
   return { store: createAccountStore(path.join(dir, 'accounts.json')), dir, file: path.join(dir, 'accounts.json') }
 }
 
-test('新注册客者获得 20 点永久积分，且不泄漏口令散列', async () => {
+test('新注册游客获得 20 永久积分，且不泄漏口令散列', async () => {
   const { store } = mkStore()
   const raw = await store.create({ account: 'alice', password: 'secret123', nickname: '小明' })
   const u = store.publicUser(raw)
   assert.equal(typeof u.creditsUsed, 'number')
   assert.equal(typeof u.monthlyCreditsUsed, 'number')
-  assert.equal(u.permanentCredits, 20, '注册赠点必须进入永久钱包')
+  assert.equal(u.permanentCredits, 20, '注册赠送积分必须进入永久钱包')
   assert.equal(typeof u.planCreditsResetAt, 'number')
   assert.equal(u.plan, FREE_PLAN.key, '新用户应从免费档开始')
   assert.deepEqual(getCreditBalance(u), { monthly: 0, permanent: 20, total: 20 })
@@ -29,7 +29,7 @@ test('新注册客者获得 20 点永久积分，且不泄漏口令散列', asyn
   assert.equal(u.password, undefined)
 })
 
-test('旧账号只补发一次新增的 10 点客者欢迎积分', () => {
+test('旧账号首次读取时按历史模型额度迁移为积分', () => {
   const { store, file } = mkStore()
   fs.writeFileSync(file, JSON.stringify({ users: [{
     id: 'legacy-user', account: 'legacy', nickname: '老用户', plan: 'free',
@@ -37,10 +37,25 @@ test('旧账号只补发一次新增的 10 点客者欢迎积分', () => {
     planCreditsResetAt: Date.now() + 86400000, planExpiresAt: 0,
   }] }))
 
-  assert.equal(store.get('legacy-user').permanentCredits, 20)
-  assert.equal(store.get('legacy-user').permanentCredits, 20, '重复读取不能重复补发')
+  assert.equal(store.get('legacy-user').permanentCredits, 2)
+  assert.equal(store.get('legacy-user').permanentCredits, 2, '重复读取不能重复迁移')
   const saved = JSON.parse(fs.readFileSync(file, 'utf8')).users[0]
   assert.equal(saved.welcomeCreditPolicyVersion, 2)
+  assert.equal(saved.creditPolicyVersion, 4)
+})
+
+test('1,000 Token/积分时期的余额升至 Flash 换算比例后保留实际额度', () => {
+  const { store, file } = mkStore()
+  fs.writeFileSync(file, JSON.stringify({ users: [{
+    id: 'v2-user', account: 'v2', nickname: '旧积分用户', plan: 'free',
+    creditsUsed: 0, monthlyCreditsUsed: 0, permanentCredits: 20,
+    welcomeCreditPolicyVersion: 2, tokenCreditPolicyVersion: 1, creditPolicyVersion: 2,
+    planCreditsResetAt: Date.now() + 86400000, planExpiresAt: 0,
+  }] }))
+
+  assert.equal(store.get('v2-user').permanentCredits, 2)
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8')).users[0]
+  assert.equal(saved.creditPolicyVersion, 4)
 })
 
 test('月度积分优先扣减；月度不足时由永久积分补足', async () => {
@@ -82,6 +97,57 @@ test('退还积分：按原扣款来源退还，且不会重复发放', async ()
   assert.equal(store.get(u.id).permanentCredits, 20)
   store.refundCredit(u.id, 'bazi.full', paid.charge)
   assert.equal(store.get(u.id).permanentCredits, 20, '同一笔退款不得重复发放永久积分')
+})
+
+test('Agent 按实际 Token 用量折算积分，并保留审计字段', async () => {
+  const { store } = mkStore()
+  const u = await store.create({ account: 'agent-points', password: 'secret123', nickname: '小明' })
+  const paid = store.consumeTokens(u.id, 1201)
+  assert.equal(paid.ok, true)
+  assert.equal(paid.actualTokens, 1201)
+  assert.equal(paid.billedPoints, 1)
+  assert.equal(paid.user.permanentCredits, 19)
+  const charge = store.get(u.id).creditCharges.at(-1)
+  assert.deepEqual(
+    { actualTokens: charge.actualTokens, billedPoints: charge.billedPoints },
+    { actualTokens: 1201, billedPoints: 1 },
+  )
+})
+
+test('高阶术数由服务端按会员档位拦截，不能仅靠积分绕过', async () => {
+  const { store } = mkStore()
+  const guest = await store.create({ account: 'feature-guest', password: 'secret123', nickname: '游客' })
+  const earth = await store.create({ account: 'feature-earth', password: 'secret123', nickname: '凡者', plan: 'earth' })
+  const heaven = await store.create({ account: 'feature-heaven', password: 'secret123', nickname: '玄者', plan: 'heaven' })
+
+  const guestDenied = store.consumeCredit(guest.id, 'ziwei.full')
+  assert.deepEqual({ ok: guestDenied.ok, reason: guestDenied.reason, requiredPlan: guestDenied.requiredPlan }, { ok: false, reason: 'plan_required', requiredPlan: 'heaven' })
+  assert.equal(store.get(guest.id).permanentCredits, 20, '档位未开放不能消耗赠送积分')
+  assert.equal(store.consumeCredit(earth.id, 'qimen.reading').reason, 'plan_required')
+
+  const unlocked = store.consumeCredit(heaven.id, 'qimen.reading')
+  assert.equal(unlocked.ok, true)
+  assert.equal(unlocked.cost, 5)
+})
+
+test('凡者每月含十次塔罗单牌解读，第十一次才开始扣积分', async () => {
+  const { store } = mkStore()
+  const u = await store.create({ account: 'tarot-earth', password: 'secret123', nickname: '凡者', plan: 'earth' })
+  for (let i = 0; i < 10; i++) {
+    const included = store.consumeCredit(u.id, 'tarot.single')
+    assert.equal(included.ok, true)
+    assert.equal(included.included, true)
+    assert.equal(included.cost, 0)
+  }
+  assert.equal(store.get(u.id).monthlyFeatureUsage['tarot.single'], 10)
+  assert.equal(store.get(u.id).permanentCredits, 20, '附赠次数不得挤占积分')
+
+  const extra = store.consumeCredit(u.id, 'tarot.single')
+  assert.equal(extra.ok, true)
+  assert.equal(extra.included, undefined)
+  assert.equal(extra.cost, 2)
+  assert.equal(store.get(u.id).permanentCredits, 20)
+  assert.equal(store.get(u.id).monthlyCreditsUsed, 2, '第十一次优先使用月度积分')
 })
 
 test('续费在原到期时间之上顺延；换档从当下重算', async () => {

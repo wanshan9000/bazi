@@ -9,7 +9,7 @@ import { getLunarMonths, getLunarDayCount, tryLunarToSolar } from '../utils/luna
 import { shiftDate } from '../utils/solarTime.js'
 import { consumeCredit } from '../data/users.js'
 import { hasPaid, markPaid } from '../engine/entitlements.js'
-import { getMonthlyCredits, planByKey, nextPlanKey } from '../engine/membership.js'
+import { FEATURE_COSTS, getMonthlyCredits, planByKey, nextPlanKey, requiredPlanForFeature } from '../engine/membership.js'
 import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx'
 
 const SHICHEN = [
@@ -68,9 +68,9 @@ export default function ZiweiPage({ chart, onBack, onChart, user, onRequireLogin
         setReason(null)
         // 扣分后把最新的用户对象抛回 App，否则顶栏/个人中心的积分余额一直是旧值
         if (res.user) onUserChange && onUserChange(res.user)
-      } else if (res.reason === 'insufficient') {
+      } else if (res.reason === 'insufficient' || res.reason === 'plan_required') {
         setPaid(false)
-        setReason('insufficient')
+        setReason(res.reason)
       }
     })
     return () => { alive = false }
@@ -388,6 +388,7 @@ function ZiweiBoard({ chart, user, paid, reason, onRequireLogin, onUpgrade, onAs
   const star = WX_STAR[chart.dayMasterWx]
   const reportRef = useRef(null)
   const handleShare = () => reportRef.current?.share?.()
+  const requiredPlan = requiredPlanForFeature('ziwei.full')
 
   // 完整报告生成后：登录用户看全部；游客只读「盘面/宫位/星曜」免费章节，详批章节显示解锁引导
   // ⚠ 组件每次渲染（滚动、按钮点击、任何 state 变化）都会重跑一遍完整排盘与报告生成。
@@ -460,17 +461,19 @@ function ZiweiBoard({ chart, user, paid, reason, onRequireLogin, onUpgrade, onAs
             icon="🌟"
             eyebrow="紫微斗数 · 详批全章节"
             title="命宫三方四正 · 逐宫详批 · 大限流年"
-            desc="上方十二宫盘面、星曜概览已为你免费排定；命宫解析、三方四正、十二宫逐宫详批与当下大限流年，登录后即可完整展开。"
+            desc="上方十二宫盘面、星曜概览已为你免费排定；命宫解析、三方四正、十二宫逐宫详批与当下大限流年开放给玄者及以上会员。"
             lockedCount={lockedCount}
           />
         </div>
-      ) : reason === 'insufficient' ? (
+      ) : (reason === 'insufficient' || reason === 'plan_required') ? (
         <UpgradePrompt
           featureName="紫微完整报告"
-          cost={8}
+          cost={FEATURE_COSTS['ziwei.full']}
           remaining={getMonthlyCredits(user)}
           planLabel={planByKey(user.plan).name}
-          onUpgrade={onUpgrade ? () => onUpgrade(nextPlanKey(user.plan)) : null}
+          lockedByPlan={reason === 'plan_required'}
+          requiredPlanLabel={planByKey(requiredPlan).name}
+          onUpgrade={onUpgrade ? () => onUpgrade(reason === 'plan_required' ? requiredPlan : nextPlanKey(user.plan)) : null}
         />
       ) : null}
 

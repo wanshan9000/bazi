@@ -5,7 +5,7 @@ export const BIRTH_PARAMS = {
   day: { type: 'integer', required: true, description: '出生日 1-31' },
   hour: { type: 'integer', description: '出生小时 0-23；用户只知道时辰时取时辰中点（如午时→12）。**完全不知道时辰就不要传这个参数**，工具会按未知处理并在结果里标注时柱为估算——不要自己编一个 12 冒充确定值' },
   gender: { type: 'string', required: true, enum: ['男', '女'], description: '性别' },
-  calendar: { type: 'string', enum: ['solar', 'lunar'], description: '年月日是公历(solar)还是农历(lunar)，默认公历' },
+  calendar: { type: 'string', enum: ['solar', 'lunar'], description: '年月日是公历(solar)还是农历(lunar)。用户未明确说农历/阴历时必须传 solar；不能把“9月”擅自理解为农历九月' },
   leapMonth: { type: 'boolean', description: '农历闰月时为 true' },
 }
 

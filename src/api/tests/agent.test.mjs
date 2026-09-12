@@ -13,8 +13,7 @@ test('忽略非 JSON 行', () => {
   assert.deepEqual(p.feed(': ping\n\n'), [])
 })
 
-test('续问当前主题时把 renew 标记传给服务端', async () => {
-  // 没有这个字段时，服务端只能把已结束主题拒掉，前端只能另开会话，导致上下文断裂。
+test('持续追问只传同一会话 id，不再传主题续问标记', async () => {
   const originalFetch = globalThis.fetch
   let requestBody = null
   globalThis.fetch = async (_url, init) => {
@@ -23,9 +22,9 @@ test('续问当前主题时把 renew 标记传给服务端', async () => {
   }
   try {
     await createAgentApi().streamChat({
-      sessionId: 'same-session', text: '继续问', renew: true, onEvent() {},
+      sessionId: 'same-session', text: '继续问', onEvent() {},
     })
-    assert.equal(requestBody.renew, true)
+    assert.equal(requestBody.renew, undefined)
     assert.equal(requestBody.sessionId, 'same-session')
   } finally {
     globalThis.fetch = originalFetch

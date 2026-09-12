@@ -5,7 +5,7 @@ import ReportView from './ReportView';
 import ReportLock from './ReportLock.jsx';
 import UpgradePrompt from './UpgradePrompt.jsx';
 import { consumeCredit } from '../data/users.js';
-import { getMonthlyCredits, planByKey, nextPlanKey } from '../engine/membership.js';
+import { FEATURE_COSTS, getMonthlyCredits, planByKey, nextPlanKey, requiredPlanForFeature } from '../engine/membership.js';
 import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx';
 
 const SHICHEN = [
@@ -66,6 +66,7 @@ export default function QimenPage({ user, onBack, onRequireLogin, onUpgrade, onU
   // 积分不足时展示升级卡。这个 state 此前漏声明，而渲染分支里直接读 `insufficient`，
   // ES 模块是严格模式 → 已登录用户一打开奇门页就 ReferenceError 整页白屏。
   const [insufficient, setInsufficient] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [archiveId, setArchiveId] = useState(null);
 
   useEffect(() => {
@@ -103,15 +104,17 @@ export default function QimenPage({ user, onBack, onRequireLogin, onUpgrade, onU
     if (user) {
       const res = await consumeCredit(user.id, 'qimen.reading')
       if (!res.ok) {
-        if (res.reason === 'insufficient') {
-          setError('可用点数不足，开通会员或购买永久点数后可继续起盘解读')
+        if (res.reason === 'insufficient' || res.reason === 'plan_required') {
+          setError(res.reason === 'plan_required' ? '奇门遁甲完整解读开放给玄者及以上会员' : '积分不足，开通会员或购买永久积分后可继续起盘解读')
           setInsufficient(true)
+          setAccessDenied(res.reason === 'plan_required')
         } else {
           setError(res.msg || '扣减积分失败，请稍后再试')
         }
         return
       }
       setInsufficient(false)
+      setAccessDenied(false)
       if (res.user) onUserChange && onUserChange(res.user)
     }
     setLoading(true);
@@ -196,11 +199,13 @@ export default function QimenPage({ user, onBack, onRequireLogin, onUpgrade, onU
           <div className="qimen-board" style={{ padding: '24px' }}>
             <UpgradePrompt
               featureName="奇门遁甲完整解读"
-              cost={5}
+              cost={FEATURE_COSTS['qimen.reading']}
               remaining={getMonthlyCredits(user)}
               planLabel={planByKey(user.plan).name}
-              onUpgrade={onUpgrade ? () => onUpgrade(nextPlanKey(user.plan)) : null}
-              onClose={() => setInsufficient(false)}
+              lockedByPlan={accessDenied}
+              requiredPlanLabel={planByKey(requiredPlanForFeature('qimen.reading')).name}
+              onUpgrade={onUpgrade ? () => onUpgrade(accessDenied ? requiredPlanForFeature('qimen.reading') : nextPlanKey(user.plan)) : null}
+              onClose={() => { setInsufficient(false); setAccessDenied(false) }}
             />
           </div>
         ) : !user ? (
@@ -212,8 +217,8 @@ export default function QimenPage({ user, onBack, onRequireLogin, onUpgrade, onU
               icon="◈"
               eyebrow="奇门遁甲 · 登录后解读"
               title="登录后查看奇门完整解读"
-              desc="奇门起局与解读会消耗 5 点积分；注册即送 20 点永久积分可先体验。"
-              note="登录后可使用会员月度积分或永久点数"
+              desc="奇门起局与完整解读开放给玄者及以上会员，并按次消耗积分。"
+              note="登录后可浏览基础内容；升级玄者即可起局解读"
             />
           </div>
         ) : (
@@ -228,7 +233,7 @@ export default function QimenPage({ user, onBack, onRequireLogin, onUpgrade, onU
           </header>
           {user && (
             <p className="quota-hint">
-              {planByKey(user.plan).name}会员 · 每次起盘消耗 <b>5</b> 积分 · 本月剩余 <b>{getMonthlyCredits(user)}</b>
+              {planByKey(user.plan).name}会员 · 每次起盘消耗 <b>{FEATURE_COSTS['qimen.reading'].toLocaleString('zh-CN')}</b> 积分 · 本月剩余 <b>{getMonthlyCredits(user).toLocaleString('zh-CN')}</b> 积分
             </p>
           )}
 

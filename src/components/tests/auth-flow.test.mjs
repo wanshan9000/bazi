@@ -78,11 +78,11 @@ test('登录失败：显示服务端的提示，不调用 onSuccess', async () =
   r.unmount()
 })
 
-test('登录页清楚告知注册赠送 20 点永久积分可开启四个咨询主题', async () => {
+test('登录页清楚告知注册赠送积分与兑换规则', async () => {
   const r = render(LoginPage, { onBack: () => {}, onSwitch: () => {}, onSuccess: () => {} })
   const text = r.text()
-  assert.ok(text.includes('注册赠 20 点永久积分'), `没有注册赠点说明：${text.slice(0, 300)}`)
-  assert.ok(text.includes('4 个元气 Agent 咨询主题'), `没有说明注册后可持续咨询：${text.slice(0, 300)}`)
+  assert.ok(text.includes('注册赠 20 积分'), `没有注册赠积分说明：${text.slice(0, 300)}`)
+  assert.ok(text.includes('1 积分 = 19,000 Token'), `没有积分兑换规则：${text.slice(0, 300)}`)
   r.unmount()
 })
 
@@ -130,7 +130,7 @@ test('订阅弹窗：续费入口先展示会员选择，选档后进入扫码�
   r.unmount()
 })
 
-test('订阅弹窗：同时提供永久点数包，并清楚标记为永久有效', async () => {
+test('订阅弹窗：同时提供永久积分包，并清楚标记为永久有效', async () => {
   stubFetch({})
   localStorage.setItem('genki-token', 'jwt-abc')
   const r = render(MembershipModal, {
@@ -138,12 +138,12 @@ test('订阅弹窗：同时提供永久点数包，并清楚标记为永久有�
     onClose: () => {}, onRequireLogin: () => {},
   })
   await flush()
-  assert.ok(r.text().includes('永久点数包'), `没有永久点数包：${r.text().slice(0, 300)}`)
-  assert.ok(r.text().includes('360 点'), `没有完整点数包：${r.text().slice(0, 300)}`)
+  assert.ok(r.text().includes('永久积分包'), `没有永久积分包：${r.text().slice(0, 300)}`)
+  assert.ok(r.text().includes('360 积分'), `没有完整积分包：${r.text().slice(0, 300)}`)
   r.unmount()
 })
 
-test('订阅弹窗：会员可切换月付、季付和年付，并说明元气 Agent 主题额度', async () => {
+test('订阅弹窗：会员可切换月付、季付和年付，并说明积分兑换规则', async () => {
   stubFetch({})
   localStorage.setItem('genki-token', 'jwt-abc')
   const r = render(MembershipModal, {
@@ -154,7 +154,7 @@ test('订阅弹窗：会员可切换月付、季付和年付，并说明元气 A
   const text = r.text()
   assert.ok(text.includes('月付') && text.includes('季付') && text.includes('年付'), `缺少订阅周期：${text.slice(0, 500)}`)
   assert.ok(text.includes('95 折') && text.includes('83 折'), `缺少周期优惠：${text.slice(0, 500)}`)
-  assert.ok(text.includes('12 个咨询主题') && text.includes('96 次具体问题解读'), `没有突出元气 Agent 顾问额度：${text.slice(0, 700)}`)
+  assert.ok(text.includes('60 积分/月') && text.includes('1 积分 = 19,000 Token'), `没有突出积分额度与兑换规则：${text.slice(0, 700)}`)
   r.unmount()
 })
 

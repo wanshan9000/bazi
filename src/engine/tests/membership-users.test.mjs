@@ -27,7 +27,7 @@ function installStorage(name) {
 const ls = installStorage('localStorage')
 installStorage('sessionStorage')
 
-const { getCreditBalance, getMonthlyCredits, getMonthlyProgress, planByKey, FREE_PLAN, SUPER_PLAN, PLANS, AGENT_CONSULTATION, agentConsultationAllowance, isPlanExpired, canAfford, canUseHuangliReminder } = await import('../membership.js')
+const { getCreditBalance, getMonthlyCredits, getMonthlyProgress, planByKey, FREE_PLAN, SUPER_PLAN, PLANS, AGENT_TOKEN_BILLING, TOKENS_PER_POINT, tokensToPoints, isPlanExpired, canAfford, canUseFeature, featureAllowanceStatus, requiredPlanForFeature, canUseHuangliReminder } = await import('../membership.js')
 const { localKey } = await import('../userScope.js')
 const { remapScopedKeys } = await import('../../data/legacyMigrate.js')
 const { setAuth, clearAuth } = await import('../../api/auth.js')
@@ -62,16 +62,44 @@ test('free 档本身不会过期', () => {
   assert.equal(isPlanExpired(null), false)
 })
 
-test('会员额度：客者与三档会员按翻倍后的产品策略展示', () => {
-  assert.equal(FREE_PLAN.name, '客者')
-  assert.equal(FREE_PLAN.perks.some(item => item.includes('10 次具体问题解读')), true)
-  assert.equal(FREE_PLAN.perks.some(item => item.includes('20 点')), true)
+test('会员额度：游客与三档会员按积分产品策略展示', () => {
+  assert.equal(FREE_PLAN.name, '游客')
+  assert.equal(FREE_PLAN.perks.some(item => item.includes('体验积分')), true)
+  assert.equal(FREE_PLAN.perks.some(item => item.includes('20 积分')), true)
   assert.deepEqual(PLANS.map(plan => [plan.key, plan.credits]), [
     ['earth', 60], ['heaven', 200], ['oracle', 520],
   ])
-  assert.equal(AGENT_CONSULTATION.guestRounds, 10)
-  assert.deepEqual(agentConsultationAllowance(60), { topics: 12, rounds: 96 })
+  assert.equal(AGENT_TOKEN_BILLING.minimumBalance, 1)
+  assert.equal(TOKENS_PER_POINT, 19000)
   assert.equal(SUPER_PLAN.name, '尊者')
+})
+
+test('模型实际用量向上换算为积分', () => {
+  assert.equal(tokensToPoints(0), 0)
+  assert.equal(tokensToPoints(1), 1)
+  assert.equal(tokensToPoints(19000), 1)
+  assert.equal(tokensToPoints(19001), 2)
+})
+
+test('非 Agent 模块按会员档位开放，积分不能绕过高阶模块限制', () => {
+  const now = Date.now()
+  const active = plan => ({ plan, planExpiresAt: plan === 'free' ? 0 : now + 86400000 })
+  assert.equal(requiredPlanForFeature('ziwei.full'), 'heaven')
+  assert.equal(canUseFeature(active('free'), 'bazi.full'), true)
+  assert.equal(canUseFeature(active('free'), 'tarot.reading'), false)
+  assert.equal(canUseFeature(active('earth'), 'tarot.single'), true)
+  assert.equal(canUseFeature(active('earth'), 'tarot.reading'), false)
+  assert.equal(canUseFeature(active('earth'), 'qimen.reading'), false)
+  assert.equal(canUseFeature(active('heaven'), 'ziwei.full'), true)
+  assert.equal(canUseFeature(active('oracle'), 'fengshui.ai'), true)
+  assert.equal(canUseFeature({ role: 'super_admin', plan: 'free' }, 'qimen.reading'), true)
+  assert.equal(canUseFeature({ plan: 'heaven', planExpiresAt: now - 1 }, 'ziwei.full'), false)
+})
+
+test('凡者的每月十次塔罗单牌解读不计入积分消费', () => {
+  const user = { plan: 'earth', planExpiresAt: Date.now() + 86400000, monthlyFeatureUsage: { 'tarot.single': 4 } }
+  assert.deepEqual(featureAllowanceStatus(user, 'tarot.single'), { limit: 10, used: 4, remaining: 6 })
+  assert.deepEqual(featureAllowanceStatus({ ...user, monthlyFeatureUsage: { 'tarot.single': 10 } }, 'tarot.single'), { limit: 10, used: 10, remaining: 0 })
 })
 
 test('每日黄历提醒仅限凡者及以上的有效会员', () => {
@@ -90,7 +118,7 @@ test('尊者拥有无限额度且不会因会员有效期到期降级', () => {
   assert.equal(isPlanExpired(superAdmin), false)
   assert.equal(getMonthlyCredits(superAdmin), Infinity)
   assert.equal(getMonthlyProgress(superAdmin), 0)
-  assert.equal(canAfford(superAdmin, 'agent.topic'), true)
+  assert.equal(canAfford(superAdmin, 'agent.chat'), true)
 })
 
 test('planByKey 认识 free，但它不在可购买的 PLANS 里', async () => {
@@ -103,7 +131,7 @@ test('canAfford 以余额为准；未计价的功能一律放行', () => {
   const now = Date.now()
   const poor = { plan: 'earth', planExpiresAt: now + 86400000, planCreditsResetAt: now + 86400000, monthlyCreditsUsed: 59, permanentCredits: 0 }
   assert.equal(canAfford(poor, 'bazi.full'), false) // 需 5 分，只剩 1
-  assert.equal(canAfford(poor, 'agent.topic'), false) // 需 5 分
+  assert.equal(canAfford(poor, 'agent.chat'), true) // 还有积分即可开始，实际用量由服务端结算
   assert.equal(canAfford(poor, 'huangli.daily'), true, '未列入积分表的功能视为免费')
 })
 

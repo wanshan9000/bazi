@@ -5,7 +5,7 @@ import { reportApi } from '../api/reports.js'
 import { buildChart } from '../engine/bazi.js'
 import { listCollection, saveToCollection, removeFromCollection } from '../engine/chartCollection.js'
 import { refreshSession } from '../data/users.js'
-import { AGENT_CONSULTATION, canAfford, nextPlanKey } from '../engine/membership.js'
+import { canAfford, nextPlanKey } from '../engine/membership.js'
 import { renderMarkdown } from '../utils/markdown.jsx'
 import { ThinkBlock, ToolCallsBlock, CopyButton, renderAiText, timeNow, fmtSessionTime, QUICK, isNearScrollBottom } from './agent/ChatParts.jsx'
 
@@ -28,43 +28,50 @@ export function serializeAgentRoute(route) {
   return `${ROUTE_PREF_PREFIX}${route}`
 }
 
-// 思考条展示的是用户可理解的执行阶段，而不是模型原始推理。这样既能让等待过程有
+// 解读进度展示的是用户可理解的执行阶段，而不是模型原始推理。这样既能让等待过程有
 // 反馈，也不会泄漏 Skill、系统提示、工具参数或模型自言自语。
 export function safeThinkStep(type, toolName = '') {
-  if (type === 'start') return '正在理解你的问题…'
-  if (type === 'reasoning') return '正在梳理问题要点…'
+  if (type === 'start') return '已接收咨询，正在识别本次解读主题…'
+  if (type === 'session_ready') return '已建立本次咨询会话，正在接入解读引擎…'
+  if (type === 'context_ready') return '已同步本轮会话上下文与可用资料…\n正在确认本次问题是否需要命盘或历史报告辅助判断…'
+  if (type === 'engine_requested') return '已将咨询主题与上下文提交给解读引擎…\n正在等待模型返回首个推断片段…'
+  if (type === 'reasoning') return '模型已开始推断，正在梳理命盘关系与问题重点…\n正在对照已有资料，检查关键信息是否一致…\n正在提取与本次问题最相关的判断依据…\n正在交叉核验信息之间的关联…'
+  if (type === 'answering') return '已收到模型正文，正在整理核心判断…\n正在把判断转成清晰、可执行的建议…\n正在检查结论是否直接回应本次问题…'
+  if (type === 'completed') return '本次解读已完成，结论与建议已整理。\n本轮实时输出已结束，可继续追问相关细节。'
   const key = String(toolName || '')
   const calls = {
-    bazi: '正在排出四柱与大运…',
-    ziwei: '正在排布紫微命盘…',
-    qimen: '正在起局核对格局…',
-    liuyao: '正在起卦并核对动爻…',
-    huangli: '正在核对日期与宜忌…',
-    tarot: '正在整理牌阵信息…',
-    fengshui: '正在分析空间信息…',
-    name: '正在核对姓名结构…',
-    wuyunliuqi: '正在整理养生要点…',
+    bazi: '正在请求八字排盘计算…\n正在复核出生时间、性别与起运方向…',
+    ziwei: '正在请求紫微命盘计算…\n正在核对十二宫与主星落位…',
+    qimen: '正在起局并核对格局…\n正在整理与提问相关的宫位信息…',
+    liuyao: '正在起卦并核对动爻…\n正在整理卦象与变卦关系…',
+    huangli: '正在核对日期与宜忌…\n正在整理与当前场景相关的时间信息…',
+    tarot: '正在整理牌阵信息…\n正在核对牌位与问题主题的对应关系…',
+    fengshui: '正在分析空间信息…\n正在核对方位、动线与个人命盘的关系…',
+    name: '正在核对姓名结构…\n正在整理笔画、五行与音形信息…',
+    wuyunliuqi: '正在整理养生要点…\n正在核对节气与体质相关信息…',
   }
   const results = {
-    bazi: '四柱与大运已核对，正在组织解读…',
-    ziwei: '紫微命盘已核对，正在组织解读…',
-    qimen: '格局已核对，正在组织解读…',
-    liuyao: '卦象已核对，正在组织解读…',
-    huangli: '日期宜忌已核对，正在组织建议…',
-    tarot: '牌阵已整理，正在组织解读…',
-    fengshui: '空间信息已核对，正在组织建议…',
-    name: '姓名结构已核对，正在组织建议…',
-    wuyunliuqi: '养生要点已整理，正在组织建议…',
+    bazi: '四柱与大运计算已返回…\n正在校验排盘结果能否用于本轮解读…\n正在提取与当前问题相关的命盘信息…',
+    ziwei: '紫微命盘计算已返回…\n正在校验宫位与主星信息的对应关系…',
+    qimen: '奇门格局已返回…\n正在校验用神与问事方向的关联…',
+    liuyao: '卦象计算已返回…\n正在校验动爻、变卦与问题重点的关系…',
+    huangli: '日期宜忌已核对…\n正在转化为适合当前场景的建议…',
+    tarot: '牌阵信息已整理…\n正在结合牌位关系形成解读…',
+    fengshui: '空间信息已核对…\n正在转化为可执行的布局建议…',
+    name: '姓名结构已核对…\n正在整理与问题相关的判断要点…',
+    wuyunliuqi: '养生要点已整理…\n正在组织日常可执行的提醒…',
   }
-  if (type === 'tool_result') return results[key] || '所需信息已核对，正在组织答复…'
-  return calls[key] || '正在查询所需信息…'
+  if (type === 'tool_result') return results[key] || '所需信息已返回，正在校验是否适用于本轮解读…\n正在组织答复…'
+  return calls[key] || '正在查询所需信息…\n正在等待结果返回…'
 }
 
 export function appendSafeThinkStep(message, step) {
-  const next = String(step || '').trim()
+  const nextSteps = String(step || '').split('\n').map(item => item.trim()).filter(Boolean)
   const current = String(message?.reasoning || '').trim()
-  if (!next || current.split('\n').map(item => item.trim()).includes(next)) return message
-  return { ...message, reasoning: current ? `${current}\n${next}` : next }
+  const currentSteps = current.split('\n').map(item => item.trim()).filter(Boolean)
+  const additions = nextSteps.filter(item => !currentSteps.includes(item))
+  if (!additions.length) return message
+  return { ...message, reasoning: [...currentSteps, ...additions].join('\n') }
 }
 
 function readAgentRoutePreference() {
@@ -93,17 +100,8 @@ function sessionTitle(s) {
   }
   return chartLabel({ year: +year, month: +month, day: +day, hour: h, gender })
 }
-function consultationLabel(consultation, user) {
-  if (!consultation) return user
-    ? '开启一个咨询主题：5 点 · 含 8 次具体问题解读 · 72 小时有效'
-    : `客者免费体验 ${AGENT_CONSULTATION.guestRounds} 次具体问题解读 · 注册后可认领当前主题`
-  const expiry = consultation.expiresAt ? new Date(consultation.expiresAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
-  return `${consultation.kind === 'guest' ? '免费体验' : '当前主题'} · 具体问题解读 ${consultation.remainingRounds}/${consultation.totalRounds} 次可用${expiry ? ` · ${expiry} 前有效` : ''}`
-}
-
 function canRestoreSession(session) {
-  // 即使一轮主题已到期或用尽，也应恢复这段完整咨询：用户可以在原会话中续问，
-  // 不能因为额度状态变化就把昨天的记忆藏起来、逼用户另开一个空白会话。
+  // 积分余额与会话独立；只要会话存在，就应能恢复完整上下文。
   return Boolean(session?.id)
 }
 
@@ -114,8 +112,6 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
   const [activeChart, setActiveChart] = useState(() => chartProp || null)
   const [sessionId, setSessionId] = useState(null)
   const [activeSession, setActiveSession] = useState(null)
-  const [consultation, setConsultation] = useState(null)
-  const [renewal, setRenewal] = useState(null)
   const [sessions, setSessions] = useState([])
   const [showHistory, setShowHistory] = useState(false)
   const [collection, setCollection] = useState(() => listCollection())
@@ -162,7 +158,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     return () => { clearTimeout(t); document.removeEventListener('click', close) }
   }, [pickerOpen])
 
-  // 计费和主题轮数都由服务端确认。客户端只同步服务端返还的余额和主题状态。
+  // 积分扣减由服务端根据模型 usage 换算。回答完成后刷新一次账户镜像即可。
   useEffect(() => {
     const last = messages[messages.length - 1]
     if (!last || last.role !== 'ai' || last.streaming || last._counted || !last.text) return
@@ -185,12 +181,11 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
   const patchLast = fn => setMessages(prev => prev.map((m, i) => i === prev.length - 1 && m.role === 'ai' && m.streaming ? fn(m) : m))
   const handleChatScroll = event => { followScrollRef.current = isNearScrollBottom(event.currentTarget) }
 
-  const send = async (text, { renew = false } = {}) => {
+  const send = async (text) => {
     const q = (text || input).trim()
     if (!q || typing) return
-    if (!consultation && user && !canAfford(user, 'agent.topic')) { onUpgrade && onUpgrade(nextPlanKey(user.plan)); return }
+    if (user && !canAfford(user, 'agent.chat')) { onUpgrade && onUpgrade(nextPlanKey(user.plan)); return }
     followScrollRef.current = true
-    setRenewal(null)
     setInput('')
     setTyping(true)
     setMessages(prev => [...prev, { id: `u-${Date.now()}`, role: 'user', text: q, time: timeNow() }, { id: `a-${Date.now()}`, role: 'ai', text: '', reasoning: safeThinkStep('start'), tools: [], streaming: true, time: timeNow() }])
@@ -198,13 +193,12 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     abortRef.current = ac
     try {
       await api.streamChat({
-        sessionId, text: q, chart: chartMeta(activeChart), route: route || models.default || undefined, renew, signal: ac.signal,
+        sessionId, text: q, chart: chartMeta(activeChart), route: route || models.default || undefined, signal: ac.signal,
         onEvent: e => {
           switch (e.type) {
             case 'session':
               if (!sessionId) setSessionId(e.sessionId)
               setActiveSession(prev => prev?.id === e.sessionId ? prev : { id: e.sessionId, title: q.slice(0, 14) })
-              if (e.consultation) setConsultation(e.consultation)
               if (reportId && e.sessionId && !linkedReportSessions.current.has(e.sessionId)) {
                 linkedReportSessions.current.add(e.sessionId)
                 // 关联失败不影响本轮回答；下次收到 session 事件时允许重试。
@@ -213,8 +207,11 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
                 }).catch(() => linkedReportSessions.current.delete(e.sessionId))
               }
               break
-            case 'consultation': setConsultation(e.consultation || null); break
-            case 'text': patchLast(m => ({ ...m, text: m.text + e.delta })); break
+            case 'usage':
+              if (user) refreshSession().then(u => { if (u) onUserChange && onUserChange(u) })
+              break
+            case 'progress': patchLast(m => appendSafeThinkStep(m, safeThinkStep(e.stage))); break
+            case 'text': patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('answering')), text: m.text + e.delta })); break
             case 'reasoning': patchLast(m => appendSafeThinkStep(m, safeThinkStep('reasoning'))); break
             case 'tool_call': patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('tool_call', e.name)), tools: [...m.tools, e.name] })); break
             case 'tool_result':
@@ -227,7 +224,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
             // 追加而不是二选一：模型已经吐了半截又报错时，丢掉已渲染的文字
             // 会让用户看着内容凭空消失；把错误接在后面，两样都留住。
             case 'error': patchLast(m => ({ ...m, text: (m.text ? m.text + '\n\n' : '') + `⚠️ ${e.message}`, streaming: false, _failed: true })); break
-            case 'done': patchLast(m => ({ ...m, streaming: false })); break
+            case 'done': patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('completed')), streaming: false })); break
             default: break
           }
         },
@@ -235,18 +232,10 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     } catch (err) {
       // 服务端说积分不足（402）。本地的 canAfford 是拿镜像算的，可能偏旧或被改过，
       // 服务端才是权威 —— 这里把那一条空气泡撤掉并引导升级，而不是给用户看一句报错。
-      if (err && err.reason === 'guest_limit') {
+      if (err && err.reason === 'guest_tokens_exhausted') {
         setMessages(prev => prev.slice(0, -2))
         setInput(q)
         onRequireLogin && onRequireLogin('agent')
-        return
-      }
-      if (err && (err.reason === 'topic_exhausted' || err.reason === 'topic_expired')) {
-        setMessages(prev => prev.slice(0, -2))
-        setInput(q)
-        // 主题轮数结束不等于对话记忆结束。保留同一个 sessionId，让用户明确确认
-        // 后以新的八轮主题继续问；服务端会继续把同一 DSH 会话作为上下文。
-        setRenewal({ text: q, reason: err.reason })
         return
       }
       if (err && (err.reason === 'insufficient' || err.status === 402)) {
@@ -293,8 +282,6 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     if (abortRef.current) abortRef.current.abort()
     setSessionId(null)
     setActiveSession(null)
-    setConsultation(null)
-    setRenewal(null)
     setActiveChart(null)
     setShowHistory(false)
     setInput('')
@@ -327,8 +314,6 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
         : { id: `h-${i}`, role: m.role, text: m.text, time: m.time, _counted: true }))
       setSessionId(restored.id)
       setActiveSession({ id: restored.id, title: sessionTitle(restored) })
-      setConsultation(restored.consultation || null)
-      setRenewal(null)
       setActiveChart(null)
       if (restored.chartKey) { const [y, mo, d, h, g] = restored.chartKey.split('-'); try { setActiveChart(buildChart(+y, +mo, +d, +h, g)) } catch { /* 命盘键格式异常：不影响正文恢复 */ } }
       setShowHistory(false)
@@ -346,7 +331,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSessionId])
 
-  // 重新进入 Agent 时默认接回最新仍可继续的主题。此前 sessionId 只存在组件内存：
+  // 重新进入 Agent 时默认接回最新会话。此前 sessionId 只存在组件内存：
   // 页面一卸载就丢，用户没有主动打开“会话历史”便直接续问时，会被悄悄创建成新会话。
   // 主动点“新会话”仍是唯一明确开始新话题的入口；带 initialSessionId 的报告咨询则优先
   // 恢复指定会话，绝不被自动恢复覆盖。
@@ -363,12 +348,6 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     // 只在本次页面挂载时寻找一次“最近主题”；restore 内部会接住服务端最新快照。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSessionId])
-
-  const continueTopic = () => {
-    const q = (renewal?.text || input).trim()
-    if (!q || typing) return
-    send(q, { renew: true })
-  }
 
   const del = async (id) => {
     setHistoryErr('')
@@ -421,7 +400,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
               : activeSession ? <div className="current-session-chip" title={activeSession.title}><span className="current-session-label">会话</span><span className="current-session-title">{activeSession.title}</span></div>
                 : <div className="name"><span className="agent-name-full">三门先生</span><span className="agent-name-short">三门</span></div>}
           </div>
-          <div className={`agent-topic-status ${consultation?.kind || 'new'}`}>{consultationLabel(consultation, user)}</div>
+          <div className="agent-topic-status">{user ? '按实际用量结算 · 可持续追问' : '赠送体验积分 · 用完后订阅'}</div>
         </div>
         <div className="agent-head-actions">
           <button className="agent-btn" onClick={newChat} title="新会话" aria-label="新会话">
@@ -502,7 +481,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
                   {m.streaming && !m.text ? (
                     <span className="typing"><i /><i /><i /></span>
                   ) : (
-                    <>{renderAiText(m.text, !!m.streaming)}{m.streaming && <span className="stream-cursor">▍</span>}</>
+                    <>{renderAiText(m.text, !!m.streaming, { suppressThinkBlocks: Boolean(m.reasoning) })}{m.streaming && <span className="stream-cursor">▍</span>}</>
                   )}
                 </div>
               )}
@@ -517,16 +496,6 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
           <div className="quick-row">{QUICK.map(q => <button key={q} className="quick-chip quick-ask" onClick={() => send(q)}>{q}</button>)}</div>
         </div>
       </div>
-
-      {renewal && (
-        <div className="agent-renewal" role="status">
-          <div className="agent-renewal-copy">
-            <strong>{renewal.reason === 'topic_expired' ? '这段咨询已到期' : '这段咨询已完成 8 次具体问题解读'}</strong>
-            <span>续问仍沿用这段对话与命盘上下文。</span>
-          </div>
-          <button type="button" onClick={continueTopic}>继续本话题 · 5 点</button>
-        </div>
-      )}
 
       <div className="chat-input-bar">
         <textarea className="chat-input" rows={1} placeholder="问三门先生任何问题…" value={input}

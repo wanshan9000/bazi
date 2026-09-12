@@ -11,14 +11,25 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { promisify } from 'node:util'
 import { config } from './config.js'
-import { getCreditBalance, planByKey, FEATURE_COSTS, nextResetAt, FREE_PLAN, SUPER_PLAN, isPlanExpired, isSuperAdmin } from '../src/engine/membership.js'
+import { getCreditBalance, planByKey, FEATURE_COSTS, nextResetAt, FREE_PLAN, SUPER_PLAN, isPlanExpired, isSuperAdmin, tokensToPoints, canUseFeature, requiredPlanForFeature, featureAllowanceStatus } from '../src/engine/membership.js'
 
 const scrypt = promisify(crypto.scrypt)
 
 const MONTH_MS = 30 * 86400000
 const MAX_CUSTOM_AVATAR_BYTES = 96 * 1024
+// 用户侧只保存和展示积分；一积分对应 19,000 Token。旧的 Token 余额在首次读取时
+// 换算成积分，旧版按轮次的余额先迁成 Token 再换算，以完整保留购买价值。
 const WELCOME_CREDITS = 20
 const WELCOME_CREDIT_POLICY_VERSION = 2
+const TOKEN_CREDIT_POLICY_VERSION = 1
+const POINT_CREDIT_POLICY_VERSION = 4
+const LEGACY_CREDIT_SCALE = 1000
+const V2_TOKENS_PER_POINT = 1000
+const V3_TOKENS_PER_POINT = 10000
+
+function rebasePoints(value, fromTokensPerPoint, toTokensPerPoint) {
+  return Math.ceil(Math.max(0, Number(value) || 0) * fromTokensPerPoint / toTokensPerPoint)
+}
 
 /* ---- 口令散列：scrypt ----
  * 参数取 Node 默认档（N=16384, r=8, p=1），单次约 50~100ms，足以让离线爆破不划算，
@@ -115,19 +126,68 @@ export function createAccountStore(file) {
       u.monthlyCreditsUsed = Math.max(0, Number(u.creditsUsed || 0))
       changed = true
     }
+    // 这是历史上仅按轮次计量的欢迎额度。先补足当时承诺的 20 点，再进入
+    // Token/积分迁移，避免把旧用户的 10 点直接当成今天的 20 点。
     if (!Number.isFinite(u.permanentCredits)) {
       u.permanentCredits = WELCOME_CREDITS
       u.welcomeCreditPolicyVersion = WELCOME_CREDIT_POLICY_VERSION
       changed = true
     } else if (Number(u.welcomeCreditPolicyVersion || 0) < WELCOME_CREDIT_POLICY_VERSION) {
-      // 从 10 点欢迎积分升级到 20 点：已注册账号只补发这新增的 10 点一次，
-      // 不覆盖他们已消费或购买得到的永久点数。
       u.permanentCredits += WELCOME_CREDITS - 10
       u.welcomeCreditPolicyVersion = WELCOME_CREDIT_POLICY_VERSION
       changed = true
     }
+    if (Number(u.tokenCreditPolicyVersion || 0) < TOKEN_CREDIT_POLICY_VERSION) {
+      u.monthlyCreditsUsed = Math.max(0, Number(u.monthlyCreditsUsed || 0)) * LEGACY_CREDIT_SCALE
+      u.creditsUsed = u.monthlyCreditsUsed
+      u.permanentCredits = Math.max(0, Number(u.permanentCredits || 0)) * LEGACY_CREDIT_SCALE
+      u.creditCharges = (Array.isArray(u.creditCharges) ? u.creditCharges : []).map(charge => ({
+        ...charge,
+        monthly: Math.max(0, Number(charge.monthly || 0)) * LEGACY_CREDIT_SCALE,
+        permanent: Math.max(0, Number(charge.permanent || 0)) * LEGACY_CREDIT_SCALE,
+      }))
+      u.tokenCreditPolicyVersion = TOKEN_CREDIT_POLICY_VERSION
+      changed = true
+    }
+    if (Number(u.creditPolicyVersion || 0) < 2) {
+      u.monthlyCreditsUsed = rebasePoints(u.monthlyCreditsUsed, 1, V2_TOKENS_PER_POINT)
+      u.creditsUsed = u.monthlyCreditsUsed
+      u.permanentCredits = rebasePoints(u.permanentCredits, 1, V2_TOKENS_PER_POINT)
+      u.creditCharges = (Array.isArray(u.creditCharges) ? u.creditCharges : []).map(charge => {
+        const monthly = rebasePoints(charge.monthly, 1, V2_TOKENS_PER_POINT)
+        const permanent = rebasePoints(charge.permanent, 1, V2_TOKENS_PER_POINT)
+        return {
+          ...charge,
+          monthly,
+          permanent,
+          actualTokens: Math.max(0, Number(charge.actualTokens ?? charge.tokens ?? 0)),
+          billedPoints: monthly + permanent,
+        }
+      })
+      u.creditPolicyVersion = 2
+      changed = true
+    }
+    if (Number(u.creditPolicyVersion || 0) < POINT_CREDIT_POLICY_VERSION) {
+      // v2 的一积分对应 1,000 Token，v3 对应 10,000 Token。每一步都向上
+      // 取整，避免旧用户因新换算率损失最后不足一积分的模型额度。
+      const fromTokensPerPoint = Number(u.creditPolicyVersion || 0) < 3 ? V2_TOKENS_PER_POINT : V3_TOKENS_PER_POINT
+      u.monthlyCreditsUsed = rebasePoints(u.monthlyCreditsUsed, fromTokensPerPoint, 19000)
+      u.creditsUsed = u.monthlyCreditsUsed
+      u.permanentCredits = rebasePoints(u.permanentCredits, fromTokensPerPoint, 19000)
+      u.creditCharges = (Array.isArray(u.creditCharges) ? u.creditCharges : []).map(charge => {
+        const monthly = rebasePoints(charge.monthly, fromTokensPerPoint, 19000)
+        const permanent = rebasePoints(charge.permanent, fromTokensPerPoint, 19000)
+        return { ...charge, monthly, permanent, billedPoints: monthly + permanent }
+      })
+      u.creditPolicyVersion = POINT_CREDIT_POLICY_VERSION
+      changed = true
+    }
     if (!Array.isArray(u.creditCharges)) {
       u.creditCharges = []
+      changed = true
+    }
+    if (!u.monthlyFeatureUsage || typeof u.monthlyFeatureUsage !== 'object' || Array.isArray(u.monthlyFeatureUsage)) {
+      u.monthlyFeatureUsage = {}
       changed = true
     }
     if (u.creditsUsed !== u.monthlyCreditsUsed) {
@@ -141,12 +201,14 @@ export function createAccountStore(file) {
       u.planExpiresAt = 0
       u.monthlyCreditsUsed = 0
       u.creditsUsed = 0
+      u.monthlyFeatureUsage = {}
       u.planCreditsResetAt = now + MONTH_MS
       changed = true
     }
     if ((u.planCreditsResetAt || 0) <= now) {
       u.monthlyCreditsUsed = 0
       u.creditsUsed = 0
+      u.monthlyFeatureUsage = {}
       u.planCreditsResetAt = now + MONTH_MS
       changed = true
     }
@@ -170,6 +232,7 @@ export function createAccountStore(file) {
       // creditsUsed 保留给旧页面；新页面使用双钱包字段。
       creditsUsed: u.monthlyCreditsUsed ?? u.creditsUsed ?? 0,
       monthlyCreditsUsed: u.monthlyCreditsUsed ?? u.creditsUsed ?? 0,
+      monthlyFeatureUsage: { ...(u.monthlyFeatureUsage || {}) },
       permanentCredits: u.permanentCredits ?? 0,
       monthlyCredits: balance.monthly,
       totalCredits: balance.total,
@@ -234,6 +297,9 @@ export function createAccountStore(file) {
       permanentCredits: WELCOME_CREDITS,
       welcomeCreditPolicyVersion: WELCOME_CREDIT_POLICY_VERSION,
       creditCharges: [],
+      monthlyFeatureUsage: {},
+      tokenCreditPolicyVersion: TOKEN_CREDIT_POLICY_VERSION,
+      creditPolicyVersion: POINT_CREDIT_POLICY_VERSION,
       planCreditsResetAt: nextResetAt(now),
       // 游客档不设到期；付费权益只能在真实支付完成后由服务端开通。
       planExpiresAt: plan === FREE_PLAN.key ? 0 : nextResetAt(now),
@@ -323,6 +389,7 @@ export function createAccountStore(file) {
     u.plan = plan.key
     u.monthlyCreditsUsed = 0
     u.creditsUsed = 0
+    u.monthlyFeatureUsage = {}
     u.planCreditsResetAt = nextResetAt(now)
     // 续费在原到期时间上顺延，否则提前续费等于白送掉剩余天数；换档从当下重新起算。
     u.planExpiresAt = nextResetAt(samePlan ? Math.max(now, u.planExpiresAt || 0) : now)
@@ -343,6 +410,7 @@ export function createAccountStore(file) {
       u.plan = FREE_PLAN.key
       u.monthlyCreditsUsed = 0
       u.creditsUsed = 0
+      u.monthlyFeatureUsage = {}
       u.planCreditsResetAt = now + MONTH_MS
       u.planExpiresAt = 0
       save()
@@ -354,6 +422,7 @@ export function createAccountStore(file) {
     u.plan = plan.key
     u.monthlyCreditsUsed = 0
     u.creditsUsed = 0
+    u.monthlyFeatureUsage = {}
     u.planCreditsResetAt = nextResetAt(now)
     u.planExpiresAt = nextResetAt(now)
     save()
@@ -363,10 +432,30 @@ export function createAccountStore(file) {
   /** 扣积分。额度与扣减都在服务端，客户端改不动。 */
   function consumeCredit(id, featureKey) {
     const cost = FEATURE_COSTS[featureKey]
-    if (cost == null) return { ok: true, cost: 0 } // 未列入积分表 = 免费
     const u = get(id)
     if (!u) return { ok: false, reason: 'no_user' }
+    if (cost == null) return { ok: true, cost: 0 } // 未列入积分表 = 免费
     if (isSuperAdmin(u)) return { ok: true, user: publicUser(u), cost: 0, remaining: Infinity, charge: { id: newId('c'), monthly: 0, permanent: 0 } }
+    if (!canUseFeature(u, featureKey)) {
+      const requiredPlan = requiredPlanForFeature(featureKey)
+      return { ok: false, reason: 'plan_required', requiredPlan, currentPlan: u.plan || FREE_PLAN.key, cost }
+    }
+    const allowance = featureAllowanceStatus(u, featureKey)
+    if (allowance.remaining > 0) {
+      u.monthlyFeatureUsage = { ...(u.monthlyFeatureUsage || {}), [featureKey]: allowance.used + 1 }
+      const charge = { id: newId('c'), feature: featureKey, monthly: 0, permanent: 0, included: true, refunded: false, createdAt: Date.now() }
+      u.creditCharges = [...(u.creditCharges || []), charge].slice(-120)
+      save()
+      return {
+        ok: true,
+        user: publicUser(u),
+        cost: 0,
+        included: true,
+        allowance: featureAllowanceStatus(u, featureKey),
+        remaining: getCreditBalance(u).total,
+        charge: { id: charge.id, monthly: 0, permanent: 0, included: true },
+      }
+    }
     const balance = getCreditBalance(u)
     if (balance.total < cost) return { ok: false, reason: 'insufficient', cost, available: balance.total, balance }
     const monthly = Math.min(balance.monthly, cost)
@@ -385,6 +474,43 @@ export function createAccountStore(file) {
       remaining: next.total,
       balance: next,
       charge: { id: charge.id, monthly, permanent },
+    }
+  }
+
+  /**
+   * 元气 Agent 专用：按上游模型返回的实际 Token usage 换算积分后扣减。
+   * 不接受浏览器传入的数值，只由服务端拿到 pool.run 的 usage 后调用。
+   */
+  function consumeTokens(id, tokens, featureKey = 'agent.chat') {
+    const actualTokens = Math.max(0, Math.floor(Number(tokens) || 0))
+    const requestedPoints = tokensToPoints(actualTokens)
+    const u = get(id)
+    if (!u) return { ok: false, reason: 'no_user' }
+    if (requestedPoints === 0) return { ok: true, cost: 0, remaining: getCreditBalance(u).total, user: publicUser(u), charge: null }
+    if (isSuperAdmin(u)) return { ok: true, user: publicUser(u), cost: 0, actualTokens, billedPoints: 0, remaining: Infinity, charge: { id: newId('c'), monthly: 0, permanent: 0 } }
+    const balance = getCreditBalance(u)
+    // usage 只能在模型回复结束后取得。若一条回复实际消耗超过剩余积分，则把
+    // 余额结清并阻止下一次请求，不能让这条已经交付的模型调用完全漏记账。
+    const billedPoints = Math.min(balance.total, requestedPoints)
+    const monthly = Math.min(balance.monthly, billedPoints)
+    const permanent = billedPoints - monthly
+    u.monthlyCreditsUsed = Math.max(0, Number(u.monthlyCreditsUsed ?? u.creditsUsed ?? 0)) + monthly
+    u.creditsUsed = u.monthlyCreditsUsed
+    u.permanentCredits = Math.max(0, Number(u.permanentCredits || 0) - permanent)
+    const charge = { id: newId('c'), feature: featureKey, monthly, permanent, actualTokens, billedPoints, refunded: false, createdAt: Date.now() }
+    u.creditCharges = [...(u.creditCharges || []), charge].slice(-120)
+    save()
+    const next = getCreditBalance(u)
+    return {
+      ok: true,
+      user: publicUser(u),
+      cost: billedPoints,
+      billedPoints,
+      actualTokens,
+      exhausted: billedPoints < requestedPoints,
+      remaining: next.total,
+      balance: next,
+      charge: { id: charge.id, monthly, permanent, billedPoints, actualTokens },
     }
   }
 
@@ -441,7 +567,7 @@ export function createAccountStore(file) {
 
   return {
     get, byAccount, byOpenid, create, checkPassword, dummyPasswordCheck,
-    touchLogin, isActive, setStatus, update, setPassword, changePlan, adminSetPlan, consumeCredit, refundCredit, remove, grantSuperAdminByAccount,
+    touchLogin, isActive, setStatus, update, setPassword, changePlan, adminSetPlan, consumeCredit, consumeTokens, refundCredit, remove, grantSuperAdminByAccount,
     publicUser, refresh,
     count: () => load().users.length,
     list: () => load().users.map(publicUser),

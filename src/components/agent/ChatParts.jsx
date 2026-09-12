@@ -49,7 +49,7 @@ export function CopyButton({ text, title = '复制结果' }) {
   )
 }
 
-// ── AI 思考块：回复中的 <think>…</think> 默认收起为一行（点击展开看推演过程） ────
+// ── AI 解读进度：回复中的 <think>…</think> 默认收起为一行（点击展开看阶段记录） ────
 // 还没有正文时可暂时展开显示进度；正文一开始流式出现就立刻收起，把首屏留给答案。
 export function ThinkBlock({ content, streaming = false, collapseWhenStreamingText = false }) {
   // 流式中默认展开；开始出正文或结束时收起，让结论成为视觉焦点。
@@ -81,7 +81,8 @@ export function ThinkBlock({ content, streaming = false, collapseWhenStreamingTe
   useLayoutEffect(() => {
     if (collapseWhenStreamingText) setOpen(false)
   }, [collapseWhenStreamingText])
-  const label = streaming ? `思考中 · ${Math.max(1, elapsed)} 秒` : elapsed ? `已思考 ${elapsed} 秒` : '思考过程'
+  const label = streaming ? `解读中 · ${Math.max(1, elapsed)} 秒` : elapsed ? `解读完成 · ${elapsed} 秒` : '解读进度'
+  const steps = String(content || '').split('\n').map(item => item.trim()).filter(Boolean)
   return (
     <div className={`think-block ${open ? 'open' : ''} ${streaming ? 'think-streaming' : ''}`}>
       <button className="think-toggle" onClick={() => setOpen(o => !o)} aria-expanded={open}>
@@ -92,7 +93,15 @@ export function ThinkBlock({ content, streaming = false, collapseWhenStreamingTe
       </button>
       {open && (
         <div className="think-body" ref={bodyRef}>
-          {String(content || '').trim() || (streaming ? <span className="think-placeholder">正在推演…</span> : '')}
+          {steps.length ? (
+            <ol className="think-steps">
+              {steps.map((step, index) => (
+                <li key={`${index}-${step}`} className={streaming && index === steps.length - 1 ? 'is-current' : ''}>
+                  <span className="think-step-index">{index + 1}</span><span>{step}</span>
+                </li>
+              ))}
+            </ol>
+          ) : (streaming ? <span className="think-placeholder">正在准备解读…</span> : '')}
         </div>
       )}
     </div>
@@ -148,7 +157,7 @@ export function ToolCallsBlock({ names }) {
 // 将 AI 文本按 <think>…</think> 拆分为普通段落与可折叠思考块
 // 普通文本走 markdown 解析器（自动把  |列1|列2|  表格转成 HTML 表格）
 // streaming=true：流式过程中默认展开思考块、自动跟随；并兼容未闭合的 <think>…（流式中常见）
-export function renderAiText(text, streaming = false) {
+export function renderAiText(text, streaming = false, { suppressThinkBlocks = false } = {}) {
   // 剥离模型流式返回时包裹的 <output>…</output> 标签（保留内容），避免 "&lt;output&gt;" 显示在页面上
   let raw = String(text || '')
   raw = raw.replace(/<\/?output[^>]*>/gi, '')
@@ -171,7 +180,7 @@ export function renderAiText(text, streaming = false) {
     return (
       <>
         {before && <div className="md-block">{renderMarkdown(before, { variant: AGENT_REPORT_HEADINGS.test(before) ? 'agent-report' : 'default' })}</div>}
-        <ThinkBlock key={streamKey} content={publicThinkContent(thinkOpen)} streaming={streaming} />
+        {!suppressThinkBlocks && <ThinkBlock key={streamKey} content={publicThinkContent(thinkOpen)} streaming={streaming} />}
       </>
     )
   }
@@ -180,13 +189,19 @@ export function renderAiText(text, streaming = false) {
   const parts = raw.split(/<think>([\s\S]*?)<\/think>/g)
   const nodes = []
   let prevThink = null
+  let renderedThink = false
   parts.forEach((part, i) => {
     if (i % 2 === 1) {
       // 防御：跳过与前一个思考块内容完全相同的块（部分模型会重复输出同一段推演，
       // 或收尾边界导致同文块出现两次），避免渲染出"两个一样的深度思考"
       if (prevThink !== null && String(part).trim() === String(prevThink).trim()) return
       prevThink = part
-      nodes.push(<ThinkBlock key={`t${i}`} content={publicThinkContent(part)} streaming={streaming} />)
+      // 一轮回复只应有一个解读过程。多段 <think> 常来自不同模型的边界切分；
+      // 对用户而言它们仍是同一轮处理，重复渲染会变成一串没有信息增量的折叠条。
+      if (!suppressThinkBlocks && !renderedThink) {
+        renderedThink = true
+        nodes.push(<ThinkBlock key={`t${i}`} content={publicThinkContent(part)} streaming={streaming} />)
+      }
       return
     }
     // 剥离段落中残留的孤立 <think> / </think> 标签（模型可能输出残缺标签），避免显示在正文里

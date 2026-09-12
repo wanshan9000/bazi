@@ -163,7 +163,7 @@ export async function consumeCredit(id, featureKey) {
     return { ok: true, user: res.user, cost: res.cost, remaining: res.remaining }
   }
   if (res.offline) return { ok: false, reason: 'offline', msg: res.msg }
-  return { ok: false, reason: res.reason || 'failed', msg: res.msg, cost: res.cost, available: res.available }
+  return { ok: false, reason: res.reason || 'failed', msg: res.msg, cost: res.cost, available: res.available, requiredPlan: res.requiredPlan }
 }
 
 /* ---- 注销账号（连坐清除服务端数据） ---- */

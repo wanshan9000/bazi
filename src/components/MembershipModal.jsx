@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import QRCode from 'qrcode'
-import { PLANS, POINT_PACKS, SUBSCRIPTION_CYCLES, agentConsultationAllowance, planByKey, subscriptionOffer } from '../engine/membership.js'
+import { PLANS, POINT_PACKS, SUBSCRIPTION_CYCLES, TOKENS_PER_POINT, planByKey, subscriptionOffer } from '../engine/membership.js'
 
 function previewPaymentPayload(user, item, kind, cycleKey = 'once') {
   return `GENKI-PAYMENT-PREVIEW|user=${user.id}|kind=${kind}|item=${item.key}|cycle=${cycleKey}|amount=${item.price}`
@@ -80,8 +80,8 @@ export default function MembershipModal({
       <div className="mm-head mm-picker-head">
         <div>
           <p className="mm-kicker">MEMBERSHIP RENEWAL</p>
-          <h3 className="mm-title">会员与点数</h3>
-          <p className="mm-sub">月度积分当月有效，购买点数永久有效</p>
+          <h3 className="mm-title">会员与积分</h3>
+          <p className="mm-sub">1 积分 = {TOKENS_PER_POINT.toLocaleString('zh-CN')} Token · 按实际用量结算</p>
         </div>
       </div>
       <div className="mm-plan-grid">
@@ -95,7 +95,6 @@ export default function MembershipModal({
         {PLANS.map(item => {
           const active = item.key === user?.plan
           const itemOffer = subscriptionOffer(item, billingCycle)
-          const allowance = agentConsultationAllowance(item.credits)
           return (
             <button key={item.key} className={`mm-plan-option ${item.featured ? 'featured' : ''}`} onClick={() => choosePlan(item.key)}>
               {item.hot && <span className="mm-plan-hot">推荐</span>}
@@ -103,7 +102,7 @@ export default function MembershipModal({
               <strong>{item.name}</strong>
               <span>{item.tag}</span>
               <b>¥{itemOffer.price}<small>/{itemOffer.label}</small></b>
-              <em>{allowance.topics} 个咨询主题 · {allowance.rounds} 次具体问题解读</em>
+              <em>{item.credits.toLocaleString('zh-CN')} 积分/月 · 当月有效</em>
               <i>{active ? '当前会员 · 续费' : `选择${item.name}`}</i>
             </button>
           )
@@ -111,7 +110,7 @@ export default function MembershipModal({
       </div>
       <div className="mm-points-head">
         <div>
-          <b>永久点数包</b>
+          <b>永久积分包</b>
           <span>不随会员到期清零</span>
         </div>
       </div>
@@ -120,7 +119,7 @@ export default function MembershipModal({
           <button key={pack.key} className={`mm-points-option ${pack.featured ? 'featured' : ''}`} onClick={() => choosePack(pack)}>
             {pack.featured && <span className="mm-plan-hot">推荐</span>}
             <strong>{pack.name}</strong>
-            <b>{pack.credits} 点</b>
+            <b>{pack.credits.toLocaleString('zh-CN')} 积分</b>
             <span>{pack.hint}</span>
             <em>¥{pack.price} · 永久有效</em>
           </button>
@@ -138,7 +137,7 @@ export default function MembershipModal({
         <div>
           <p className="mm-kicker">SCAN TO PAY</p>
           <h3 className="mm-title">{buyingPack ? `购买 ${item.name}` : `续费 ${plan.name}`}</h3>
-          <p className="mm-sub">{buyingPack ? `${item.credits} 点永久积分` : `${plan.en} · ${offer.label} · ${offer.badge}`}</p>
+          <p className="mm-sub">{buyingPack ? `${item.credits.toLocaleString('zh-CN')} 永久积分` : `${plan.en} · ${offer.label} · ${offer.badge}`}</p>
         </div>
       </div>
       {!user ? (
@@ -150,7 +149,7 @@ export default function MembershipModal({
       ) : (
         <>
           <div className="mm-payment-summary">
-            <span>{buyingPack ? `${item.credits} 点永久积分 · 永久有效` : `${plan.name}会员 · ${offer.months} 个月 · 月度积分按月发放`}</span>
+            <span>{buyingPack ? `${item.credits.toLocaleString('zh-CN')} 永久积分 · 永久有效` : `${plan.name}会员 · ${offer.months} 个月 · 月度积分按月发放`}</span>
             <b>¥{buyingPack ? item.price : offer.price}</b>
           </div>
           <div className="mm-qr-wrap">

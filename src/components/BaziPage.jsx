@@ -17,7 +17,7 @@ import { getLunarMonths, getLunarDayCount, tryLunarToSolar } from '../utils/luna
 import { shiftDate } from '../utils/solarTime.js'
 import { consumeCredit } from '../data/users.js'
 import { hasPaid, markPaid } from '../engine/entitlements.js'
-import { getMonthlyCredits, planByKey, nextPlanKey } from '../engine/membership.js'
+import { FEATURE_COSTS, getMonthlyCredits, planByKey, nextPlanKey } from '../engine/membership.js'
 import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx'
 
 const SHICHEN = [
@@ -353,7 +353,7 @@ function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, o
         ) : (
           <UpgradePrompt
             featureName={`${school}完整命书`}
-            cost={8}
+            cost={FEATURE_COSTS['bazi.full']}
             remaining={getMonthlyCredits(user)}
             planLabel={planByKey(user.plan).name}
             onUpgrade={onUpgrade ? () => onUpgrade(nextPlanKey(user.plan)) : null}

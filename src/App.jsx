@@ -4,7 +4,6 @@ import { buildChart } from './engine/bazi.js'
 import { loadHistory as loadTarot } from './data/tarot.js'
 import { getSession, logout as doLogout, refreshSession, consumeCredit } from './data/users.js'
 import { setUnauthorizedHandler } from './api/auth.js'
-import { loadQuota, incTarot, isTarotOverLimit } from './engine/freeQuota.js'
 import { getCreditBalance, isSuperAdmin } from './engine/membership.js'
 import { createAgentApi } from './api/agent.js'
 import { reportApi } from './api/reports.js'
@@ -34,10 +33,9 @@ const NativeReportHistory = lazy(() => import('./components/NativeReportHistory.
 const ReportView = lazy(() => import('./components/ReportView.jsx'))
 const MembershipModal = lazy(() => import('./components/MembershipModal.jsx'))
 
-// VITE_AGENT_BACKEND=legacy 时走旧浏览器内编排；默认 dsh 基座。
-const AgentChatImpl = import.meta.env.VITE_AGENT_BACKEND === 'legacy'
-  ? lazy(() => import('./components/AgentChat.jsx'))
-  : lazy(() => import('./components/AgentChatDsh.jsx'))
+// Agent 一律经服务端 dsh 基座：只有这里能拿到上游实际 Token usage 并安全结算。
+// 旧浏览器直连路径无法可信计量 Token，不能再作为会员计费的运行时分支。
+const AgentChatImpl = lazy(() => import('./components/AgentChatDsh.jsx'))
 
 const LS_KEY = 'sanmen-history'
 
@@ -102,9 +100,9 @@ function TopBar({ view, onNav, user, onUser, credits }) {
         <div className="topbar-user">
           {user ? (
             <>
-              <button className="credits-chip" onClick={() => onUser('profile')} title="点击查看积分明细">
+              <button className="credits-chip" onClick={() => onUser('profile')} title="查看 Token 积分余额">
                 <span className="cc-icon" aria-hidden="true">✦</span>
-                <span className="cc-num">{credits === Infinity ? '∞' : credits}</span>
+                <span className="cc-num">{credits === Infinity ? '∞' : Number(credits || 0).toLocaleString('zh-CN')}</span>
               </button>
               <button className="user-chip" onClick={() => onUser('profile')} title="我的元氣">
                 <span className={`user-chip-avatar ${/^data:image\/(?:png|jpeg|webp);base64,/i.test(String(user.avatar || '')) ? 'user-chip-avatar-image' : ''}`}>
@@ -404,18 +402,14 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // 塔罗一次解读的计费闸门：游客扣免费配额，会员扣 5 积分。
+  // 塔罗重抽也必须经过服务端：单牌优先使用会员每月内含次数，多牌阵按积分扣减。
   // 首次抽牌由 TarotPage 在跳转前扣，这里服务于解读页里的「换一批 / 重抽这组」——
   // 那两个按钮此前直接重新 drawCards，把配额与扣费彻底绕过去了。
-  const chargeTarotReading = async () => {
-    if (user) {
-      const res = await consumeCredit(user.id, 'tarot.reading')
-      if (!res.ok) return { ok: false, reason: res.reason }
-      if (res.user) setUser(res.user)
-      return { ok: true }
-    }
-    if (isTarotOverLimit(loadQuota().tarot || 0)) return { ok: false, reason: 'quota' }
-    incTarot()
+  const chargeTarotReading = async (feature = 'tarot.reading') => {
+    if (!user) return { ok: false, reason: 'plan_required' }
+    const res = await consumeCredit(user.id, feature)
+    if (!res.ok) return { ok: false, reason: res.reason }
+    if (res.user) setUser(res.user)
     return { ok: true }
   }
 

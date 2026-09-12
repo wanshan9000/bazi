@@ -4,8 +4,8 @@ import { render, flush } from '../../test/render.mjs'
 
 const { ThinkBlock, isNearScrollBottom, renderAiText } = await import('../agent/ChatParts.jsx')
 
-function AiTextFixture({ text, streaming = false }) {
-  return renderAiText(text, streaming)
+function AiTextFixture({ text, streaming = false, suppressThinkBlocks = false }) {
+  return renderAiText(text, streaming, { suppressThinkBlocks })
 }
 
 test('聊天自动跟随只在用户停留在底部时启用', () => {
@@ -13,15 +13,30 @@ test('聊天自动跟随只在用户停留在底部时启用', () => {
   assert.equal(isNearScrollBottom({ scrollHeight: 1200, scrollTop: 500, clientHeight: 480 }), false)
 })
 
-test('深度思考完成后自动收起，用户仍可手动展开', async () => {
+test('解读过程按阶段列表展示，而不是一段空白说明', () => {
+  const r = render(ThinkBlock, {
+    content: '已接收咨询，正在确认解读主题…\n正在核对已知资料与命盘信息…',
+    streaming: true,
+  })
+  try {
+    assert.equal(r.container.querySelectorAll('.think-steps li').length, 2)
+    assert.ok(r.text().includes('1'))
+    assert.ok(r.text().includes('2'))
+    assert.ok(r.$('.think-steps li.is-current'), '流式状态应标记当前正在进行的步骤')
+  } finally {
+    r.unmount()
+  }
+})
+
+test('解读进度完成后自动收起，用户仍可手动展开', async () => {
   const r = render(ThinkBlock, { content: '正在推演命盘关系', streaming: true })
-  assert.ok(r.$('.think-body'), '流式思考应默认展开')
-  assert.ok(r.text().includes('思考中'), '流式状态应显示思考耗时')
+  assert.ok(r.$('.think-body'), '流式解读进度应默认展开')
+  assert.ok(r.text().includes('解读中'), '流式状态应显示解读耗时')
 
   r.rerender({ content: '已完成命盘推演', streaming: false })
   await flush()
   assert.equal(r.$('.think-body'), null, '思考完成后应自动收起，让结论优先呈现')
-  assert.ok(r.text().includes('已思考'), '完成后应显示思考耗时')
+  assert.ok(r.text().includes('解读完成'), '完成后应显示解读耗时')
 
   r.click(r.$('.think-toggle'))
   assert.ok(r.$('.think-body'), '用户点击后仍可手动展开')
@@ -88,6 +103,28 @@ test('历史会话中的内部执行思路只显示统一思考条', () => {
   assert.equal(r.text().includes('加载 mangpai Skill'), false, '历史里的内部执行细节不应在展开后泄漏')
   assert.ok(r.text().includes('已完成命盘与要点核对'), '思考条应提供面向用户的统一状态')
   assert.ok(r.text().includes('盘面核对'), '正文结论仍应完整保留')
+  r.unmount()
+})
+
+test('同一轮中分段的模型 think 只显示一条解读过程', () => {
+  const r = render(AiTextFixture, {
+    text: '<think>第一段内部过程</think>\n结论正在整理。\n<think>第二段内部过程</think>',
+  })
+
+  assert.equal(r.container.querySelectorAll('.think-block').length, 1)
+  assert.ok(r.text().includes('结论正在整理'))
+  r.unmount()
+})
+
+test('实时阶段进度存在时隐藏模型原始 think 的重复条', () => {
+  const r = render(AiTextFixture, {
+    text: '<think>模型内部过程</think>\n这是正在流式输出的正文。',
+    streaming: true,
+    suppressThinkBlocks: true,
+  })
+
+  assert.equal(r.container.querySelectorAll('.think-block').length, 0)
+  assert.ok(r.text().includes('这是正在流式输出的正文'))
   r.unmount()
 })
 

@@ -155,9 +155,8 @@ export function TarotArchiveReading({ reading }) {
   )
 }
 
-// onCharge：由 App 注入的计费闸门（游客扣免费配额 / 会员扣积分），返回 { ok, reason }。
-// 「换一批」是一次全新解读，必须和首次抽牌走同一条闸门 —— 此前它直接重抽，
-// 等于把 10 次游客配额和 5 积分的扣费彻底绕开，无限白嫖。
+// onCharge：由 App 注入的服务端计费闸门；凡者单牌优先使用月度内含次数。
+// 「换一批」是一次全新解读，必须和首次抽牌走同一条闸门。
 export default function TarotReading({ spreadId, onBack, onReading, onCharge, onAskAgent, onHome, user, onReportReady }) {
   const spread = SPREAD_MAP[spreadId]
   const [stage, setStage] = useState(STAGES.INTRO)
@@ -189,11 +188,11 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge, on
   const passCharge = async () => {
     if (firstDrawRef.current) { firstDrawRef.current = false; return true }
     if (!onCharge) return true
-    const res = await onCharge()
+    const res = await onCharge(spread.count === 1 ? 'tarot.single' : 'tarot.reading')
     if (!res || !res.ok) {
-      setChargeErr(res && res.reason === 'quota'
-        ? '客者免费次数已用完，登录后可继续抽牌'
-        : '可用点数不足，开通会员或购买永久点数后可继续抽牌')
+      setChargeErr(res && res.reason === 'plan_required'
+        ? '该牌阵需开通对应会员档位后使用'
+        : '积分不足，开通会员或购买永久积分后可继续抽牌')
       return false
     }
     setChargeErr('')

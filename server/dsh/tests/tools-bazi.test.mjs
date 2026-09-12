@@ -42,4 +42,6 @@ test('bazi 工具默认回传紧凑校盘事实，避免把整份原始盘面塞
 test('OPTIONAL_BIRTH_PARAMS 与 BIRTH_PARAMS 同形但去掉 required', () => {
   assert.equal(OPTIONAL_BIRTH_PARAMS.year.required, undefined)
   assert.equal(BIRTH_PARAMS.year.required, true)
+  assert.match(BIRTH_PARAMS.calendar.description, /未明确说农历\/阴历时必须传 solar/)
+  assert.match(BIRTH_PARAMS.calendar.description, /不能把“9月”擅自理解为农历九月/)
 })

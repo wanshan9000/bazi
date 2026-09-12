@@ -354,6 +354,7 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
     const feature = String(req.body?.feature || '')
     const out = accounts.consumeCredit(req.uid, feature)
     if (!out.ok && out.reason === 'insufficient') return res.status(402).json(out)
+    if (!out.ok && out.reason === 'plan_required') return res.status(403).json(out)
     if (!out.ok) return res.status(400).json(out)
     res.json(out)
   })

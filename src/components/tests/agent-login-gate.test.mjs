@@ -6,7 +6,7 @@ const { default: AgentChatDsh } = await import('../AgentChatDsh.jsx')
 
 beforeEach(() => { localStorage.clear() })
 
-test('元气 Agent 首页向客者明确展示十次具体问题解读体验', async () => {
+test('元气 Agent 首页向游客明确展示赠送积分体验', async () => {
   let loginContext = null
   const r = render(AgentChatDsh, {
     user: null,
@@ -14,7 +14,7 @@ test('元气 Agent 首页向客者明确展示十次具体问题解读体验', a
     onUpgrade: () => {},
     onUserChange: () => {},
   })
-  assert.ok(r.text().includes('客者免费体验 10 次具体问题解读'), `客者额度没有清楚展示：${r.text().slice(0, 500)}`)
+  assert.ok(r.text().includes('赠送体验积分 · 用完后订阅'), `游客额度没有清楚展示：${r.text().slice(0, 500)}`)
   assert.equal(loginContext, null)
   r.unmount()
 })

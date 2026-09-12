@@ -285,7 +285,7 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
               </div>
               <p className="yc-desc">{c.desc}</p>
               {!user && c.freeTag && (
-                <span className="yc-free">🎁 客者 {c.freeTag}</span>
+                <span className="yc-free">🎁 游客 {c.freeTag}</span>
               )}
               <div className="yc-tags">
                 {c.tags.map(t => <span key={t} className="yc-tag-chip">{t}</span>)}

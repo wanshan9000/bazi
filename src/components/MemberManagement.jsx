@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client.js'
 
 const PLANS = [
-  { key: 'free', label: '客者' },
+  { key: 'free', label: '游客' },
   { key: 'earth', label: '凡者' },
   { key: 'heaven', label: '玄者' },
   { key: 'oracle', label: '天者' },
@@ -181,10 +181,10 @@ export default function MemberManagement({ token, onNotify }) {
                     <strong>{member.isSuperAdmin ? '无限权限' : member.planName}</strong>
                     <small>{member.isSuperAdmin ? '永久有效' : member.planExpiresAt ? `至 ${fmtDate(member.planExpiresAt)}` : '无有效订阅'}</small>
                   </div>
-                  <div className="am-member-credit" aria-label={`${member.nickname} 的点数余额`}>
-                    <b>{member.isSuperAdmin ? '∞' : member.totalCredits ?? Math.max(0, member.creditsTotal - member.creditsUsed)}</b>
-                    <span>{member.isSuperAdmin ? '全量权限' : '可用点数'}</span>
-                    {!member.isSuperAdmin && <small>月度 {member.monthlyCredits ?? Math.max(0, member.creditsTotal - member.creditsUsed)} · 永久 {member.permanentCredits ?? 0}</small>}
+                  <div className="am-member-credit" aria-label={`${member.nickname} 的积分余额`}>
+                    <b>{member.isSuperAdmin ? '∞' : (member.totalCredits ?? Math.max(0, member.creditsTotal - member.creditsUsed)).toLocaleString('zh-CN')}</b>
+                    <span>{member.isSuperAdmin ? '全量权限' : '可用积分'}</span>
+                    {!member.isSuperAdmin && <small>月度 {(member.monthlyCredits ?? Math.max(0, member.creditsTotal - member.creditsUsed)).toLocaleString('zh-CN')} · 永久 {(member.permanentCredits ?? 0).toLocaleString('zh-CN')}</small>}
                   </div>
                   <div className="am-member-actions">
                     <select value={member.plan} disabled={member.isSuperAdmin} onChange={event => updateSubscription(member, event.target.value)} aria-label={`调整 ${member.nickname} 的会员档位`}>

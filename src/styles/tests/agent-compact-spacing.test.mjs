@@ -18,3 +18,9 @@ test('思考折叠条保持可点击但不占用过高空间', () => {
   assert.match(thinkToggle, /min-height:\s*36px;/)
   assert.match(thinkToggle, /padding:\s*5px 14px;/)
 })
+
+test('展开的思考内容区限制为半高阅读窗口', () => {
+  const thinkBody = cssBlock('\\.think-body')
+  assert.match(thinkBody, /height:\s*110px;/)
+  assert.match(thinkBody, /overflow-y:\s*auto;/)
+})

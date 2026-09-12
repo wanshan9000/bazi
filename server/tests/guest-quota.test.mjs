@@ -109,7 +109,7 @@ function fakePool(totalTokens = 7000) {
 
 const guest = id => ({ 'content-type': 'application/json', 'x-genki-uid': `anon:${id}` })
 
-test('游客咨询元气 Agent 可免费体验一轮，且不消耗账号积分', async () => {
+test('游客咨询元气 Agent 使用赠送 Token，且不消耗账号积分', async () => {
   const pool = fakePool(7000)
   const { app } = mkApp(pool, 5000)
   const { srv, base } = await listen(app)
@@ -119,12 +119,12 @@ test('游客咨询元气 Agent 可免费体验一轮，且不消耗账号积分'
     })
     assert.equal(res.status, 200)
     const body = await res.text()
-    assert.match(body, /"consultation"/)
+    assert.match(body, /"usage"/)
     assert.equal(pool.calls(), 1)
   } finally { srv.close() }
 })
 
-test('登录新用户优先消耗注册赠送的永久点数', async () => {
+test('登录新用户按模型实际 Token 用量折算扣除注册积分', async () => {
   const pool = fakePool(7000)
   const { app, accounts } = mkApp(pool, 5000)
   const u = await accounts.create({ account: 'member', password: 'secret123', nickname: '会员' })
@@ -137,6 +137,6 @@ test('登录新用户优先消耗注册赠送的永久点数', async () => {
       body: JSON.stringify({ text: '请解读我今年的财运' }),
     })
     assert.equal(res.status, 200)
-    assert.equal(accounts.get(u.id).permanentCredits, 15, '首次成功回答开启主题，应扣 5 点注册赠送的永久积分')
+    assert.equal(accounts.get(u.id).permanentCredits, 19, '应按模型返回的 7,000 Token 折算扣除 1 积分')
   } finally { srv.close() }
 })

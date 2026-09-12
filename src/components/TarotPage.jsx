@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { SPREADS } from '../data/tarot.js'
-import { loadQuota, incTarot, FREE_LIMIT, isTarotOverLimit } from '../engine/freeQuota.js'
 import ReportLock from './ReportLock.jsx'
 import UpgradePrompt from './UpgradePrompt.jsx'
 import { consumeCredit } from '../data/users.js'
-import { getMonthlyCredits, planByKey, nextPlanKey } from '../engine/membership.js'
+import { FEATURE_COSTS, getMonthlyCredits, planByKey, nextPlanKey, requiredPlanForFeature, canUseFeature, featureAllowanceStatus } from '../engine/membership.js'
 
 // 牌阵主题分类
 const SPREAD_CATS = [
@@ -60,15 +59,39 @@ function SpreadPreview({ spread, drawn = 0 }) {
 
 export default function TarotPage({ onBack, onStart, history, user, onRequireLogin, onUpgrade, onUserChange }) {
   const [cat, setCat] = useState('all')
-  // 客者免费配额，注册会员不计数。
-  const [tarotUsed, setTarotUsed] = useState(0)
-  useEffect(() => { setTarotUsed(loadQuota().tarot || 0) }, [])
-  const tarotLocked = !user && isTarotOverLimit(tarotUsed)
   // 登录用户扣分结果：true 表示扣分成功；'insufficient' 表示积分不足
   const [insufficient, setInsufficient] = useState(false)
+  const [accessDenied, setAccessDenied] = useState(false)
 
-  const list = SPREADS.filter(s => (cat === 'all' || s.cat === cat) && (user || s.count === 1))
+  // 凡者每月含 10 次单牌解读；多牌阵自玄者开放。
+  const list = SPREADS.filter(s => {
+    if (cat !== 'all' && s.cat !== cat) return false
+    return s.count === 1 || canUseFeature(user, 'tarot.reading')
+  })
   const activeCat = SPREAD_CATS.find(c => c.k === cat)
+  const singleAllowance = featureAllowanceStatus(user, 'tarot.single')
+
+  if (!user) {
+    return (
+      <div className="page-wrap tarot-page">
+        <div className="container">
+          <div className="page-head rise"><button className="back-btn" onClick={onBack}>‹ 返回</button></div>
+          <h1 className="page-title tarot-page-title rise rise-1">塔罗门</h1>
+          <p className="page-sub rise rise-2">七十八张阿卡那 · 九种经典牌阵 · 一抽即明</p>
+          <ReportLock
+            user={user}
+            onRequireLogin={onRequireLogin}
+            backView="tarot"
+            icon="🃏"
+            eyebrow="塔罗解读 · 凡者起"
+            title="开通凡者后，塔罗每月含 10 次解读"
+            desc="玄者及以上还可使用爱情、事业、抉择等多牌阵解读。"
+            note="注册后可查看会员权益并选择适合自己的方案"
+          />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page-wrap tarot-page">
@@ -84,28 +107,22 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
         </h1>
         <p className="page-sub rise rise-2">七十八张阿卡那 · 九种经典牌阵 · 一抽即明</p>
 
-        {/* 客者免费配额提示（已登录不显示） */}
-        {!user && (
-          <p className="quota-hint rise rise-2">
-            客者可免费体验 <b>{FREE_LIMIT}</b> 次单牌 · 已用 <b>{tarotUsed}</b> / {FREE_LIMIT}{tarotLocked ? ' · 已用完 · 登录后可继续' : ''}
-          </p>
-        )}
-        {user && (
-          <p className="quota-hint rise rise-2">
-            {planByKey(user.plan).name}会员 · 每次抽牌消耗 <b>5</b> 积分 · 本月剩余 <b>{getMonthlyCredits(user)}</b>
-          </p>
-        )}
+        <p className="quota-hint rise rise-2">
+          {planByKey(user.plan).name} · 单牌解读本月剩余 <b>{singleAllowance.remaining === Infinity ? '不限' : `${singleAllowance.remaining} / ${singleAllowance.limit}`}</b> 次 · 多牌阵开放给玄者及以上
+        </p>
 
         {/* 积分不足：此前只 setInsufficient(true) 却从不渲染，用户点「抽这组牌」毫无反应 */}
         {user && insufficient && (
           <div className="rise rise-2" style={{ marginTop: 16 }}>
             <UpgradePrompt
               featureName="塔罗完整解读"
-              cost={5}
+              cost={FEATURE_COSTS['tarot.reading']}
               remaining={getMonthlyCredits(user)}
               planLabel={planByKey(user.plan).name}
-              onUpgrade={onUpgrade ? () => onUpgrade(nextPlanKey(user.plan)) : null}
-              onClose={() => setInsufficient(false)}
+              lockedByPlan={accessDenied}
+              requiredPlanLabel={planByKey(requiredPlanForFeature('tarot.reading')).name}
+              onUpgrade={onUpgrade ? () => onUpgrade(accessDenied ? requiredPlanForFeature('tarot.reading') : nextPlanKey(user.plan)) : null}
+              onClose={() => { setInsufficient(false); setAccessDenied(false) }}
             />
           </div>
         )}
@@ -125,22 +142,7 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
           ))}
         </div>
 
-        {/* 牌阵卡片网格：客者额度用尽后展示解锁卡，引导登录 */}
-        {tarotLocked ? (
-          <div className="rise rise-3" style={{ marginTop: 16 }}>
-            <ReportLock
-              user={user}
-              onRequireLogin={onRequireLogin}
-              backView="tarot"
-              icon="🃏"
-              eyebrow={`塔罗单牌体验 · 客者免费 ${FREE_LIMIT} 次`}
-              title={`${FREE_LIMIT} 次单牌体验已用完`}
-              desc="登录后可使用永久积分或会员月度积分，继续体验完整牌阵与深度解读。"
-              note={`已累计抽牌 ${tarotUsed} 次 · 注册/登录后即可继续使用`}
-            />
-          </div>
-        ) : (
-          <>
+        <>
             <div className="spread-result-head rise rise-3">
               <span className="srh-label">
                 {activeCat.icon} {activeCat.l}
@@ -178,33 +180,31 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
                   <button
                     className="btn small sc-go"
                     onClick={async () => {
-                      if (!user && isTarotOverLimit(tarotUsed)) {
-                        onRequireLogin && onRequireLogin('tarot')
-                        return
-                      }
                       if (user) {
                         // 扣分走服务端，所以必须 await —— 不等结果就 onStart 的话，
                         // 积分不足时用户已经进了抽牌页，闸门形同虚设。
-                        const res = await consumeCredit(user.id, 'tarot.reading')
+                        const feature = s.count === 1 ? 'tarot.single' : 'tarot.reading'
+                        const res = await consumeCredit(user.id, feature)
                         if (!res.ok) {
-                          if (res.reason === 'insufficient') setInsufficient(true)
+                          if (res.reason === 'insufficient' || res.reason === 'plan_required') {
+                            setInsufficient(true)
+                            setAccessDenied(res.reason === 'plan_required')
+                          }
                           return
                         }
                         setInsufficient(false)
+                        setAccessDenied(false)
                         if (res.user) onUserChange && onUserChange(res.user)
-                      } else {
-                        setTarotUsed(incTarot())
                       }
                       onStart(s.id)
                     }}
                   >
-                    {(!user && isTarotOverLimit(tarotUsed)) ? '登录继续解锁 →' : (user ? '抽这组牌 →' : '体验单牌 →')}
+                    {s.count === 1 ? '开始单牌解读 →' : '抽这组牌 →'}
                   </button>
                 </article>
               ))}
             </div>
-          </>
-        )}
+        </>
 
         {list.length === 0 && (
           <p style={{ textAlign: 'center', color: 'var(--ink-faint)', padding: 40 }}>

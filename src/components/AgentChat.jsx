@@ -24,7 +24,6 @@ import { loadSessions, getSession, upsertSession, deleteSession, clearSessions, 
 import { listCollection, saveToCollection, removeFromCollection, isInCollection } from '../engine/chartCollection.js'
 import ReportView from './ReportView.jsx'
 import { renderMarkdown } from '../utils/markdown.jsx'
-import { consumeCredit } from '../data/users.js'
 import { canAfford, nextPlanKey } from '../engine/membership.js'
 import { ThinkBlock, ToolCallsBlock, FeedbackBar, CopyButton, renderAiText, timeNow, fmtSessionTime, QUICK, isNearScrollBottom } from './agent/ChatParts.jsx'
 
@@ -641,30 +640,6 @@ export default function AgentChat({ chart: chartProp, seedQuery, user, onRequire
   const [showHistory, setShowHistory] = useState(false)
   // 长期用户画像记忆（跨会话记住称谓/职业/情感/关注）
   const [userProfile, setUserProfile] = useState(() => loadUserProfile())
-  // 监听最后一条 AI 消息落字后同步服务端扣费；同一条消息仅计费一次（_counted 标记防重）。
-  useEffect(() => {
-    const last = messages[messages.length - 1]
-    if (!last || last.role !== 'ai') return
-    if (last.streaming) return
-    if (last._counted) return
-    if (!last.text) return
-    // 出错/中断留下的半截回复不计费
-    if (last._failed) {
-      setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, _counted: true } : m))
-      return
-    }
-    if (user) {
-      // 登录用户：按对话轮次扣 1 积分（FEATURE_COSTS.agent.chat）；不足 → 弹订阅 Modal。
-      // 这是 legacy 直连路径，请求没经过服务端 /api/agent/chat，所以扣分仍由此处发起；
-      // 但扣减本身在服务端完成（consumeCredit 是接口调用），客户端改不了余额。
-      consumeCredit(user.id, 'agent.chat').then(res => {
-        if (!res.ok && res.reason === 'insufficient' && onUpgrade) onUpgrade()
-        else if (res.ok && res.user) onUserChange && onUserChange(res.user)
-      })
-    }
-    setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, _counted: true } : m))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, user])
   // 命盘收藏：多盘管理（自己/家人/朋友）
   const [collection, setCollection] = useState(() => listCollection())
   const [showCollection, setShowCollection] = useState(false)

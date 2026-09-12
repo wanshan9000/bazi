@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { PLANS, AVATARS, updateProfile, changePassword, logout } from '../data/users.js'
-import { agentConsultationAllowance, getCreditBalance, planByKey, nextPlanKey } from '../engine/membership.js'
+import { getCreditBalance, planByKey, nextPlanKey } from '../engine/membership.js'
 import { reportApi } from '../api/reports.js'
 
 const PLAN_STYLE = {
   // free 是「未订阅 / 已过期」的落点，不在可购买的 PLANS 里，但个人中心一定会
   // 渲染到它 —— 漏了这一项就是 PLAN_STYLE[plan].cls 读 undefined，
   // 过期用户一进个人中心整页白屏。
-  free: { label: '客者', cls: 'pr-free' },
+  free: { label: '游客', cls: 'pr-free' },
   earth: { label: '凡者', cls: 'pr-earth' },
   heaven: { label: '玄者', cls: 'pr-heaven' },
   oracle: { label: '天者', cls: 'pr-oracle' },
@@ -77,13 +77,12 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
   const nextPlan = nextPlanKey(plan.key)
   const balance = getCreditBalance(user)
   const remaining = balance.total
-  const agentAllowance = agentConsultationAllowance(remaining)
   const expiresAt = user.planExpiresAt || 0
   const daysLeft = expiresAt ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 86400000)) : 0
   const membershipStatus = isSuper ? '永久有效' : expiresAt ? `剩余 ${daysLeft} 天` : '未开通'
   const agentTip = isSuper
     ? '元气 Agent 可随时开启咨询与追问，适合在阅读报告时持续深入交流。'
-    : `元气 Agent 可开启 ${agentAllowance.topics} 个咨询主题、完成 ${agentAllowance.rounds} 次具体问题解读；每个主题含 8 次具体问题解读、72 小时内有效。扣点时优先使用当月积分。`
+    : `元气 Agent 按实际用量结算；当前可用 ${remaining.toLocaleString('zh-CN')} 积分，优先使用当月额度。`
   const fmtDate = (ts) => ts ? new Date(ts).toLocaleDateString('zh-CN') : '—'
 
   const flash = (text, type = 'ok') => {
@@ -231,9 +230,9 @@ export default function ProfilePage({ user, historyCount = 0, tarotCount = 0, on
               <small>查看全部记录 <i>›</i></small>
             </button>
             <div className="pr-account-tool pr-points-tool">
-              <span className="pr-tool-kicker">积分账户 · CREDITS</span>
-              <strong>{isSuper ? '∞' : remaining}<em>{isSuper ? '' : ' 点'}</em></strong>
-              <span className="pr-tool-title">{isSuper ? '全量使用权限' : '可用点数'}</span>
+              <span className="pr-tool-kicker">积分账户</span>
+              <strong>{isSuper ? '∞' : remaining.toLocaleString('zh-CN')}<em>{isSuper ? '' : ' 积分'}</em></strong>
+              <span className="pr-tool-title">{isSuper ? '全量使用权限' : '可用积分'}</span>
               <button className="pr-points-action" onClick={() => nextPlan ? upgrade(nextPlan) : onSubscribe?.(null, { selectPlan: true })}>
                 {nextPlan ? `升级至${PLAN_STYLE[nextPlan].label}` : '会员订阅管理'} <i>›</i>
               </button>

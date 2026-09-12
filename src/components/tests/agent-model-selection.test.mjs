@@ -24,21 +24,30 @@ test('已失效的显式模型偏好会回退到服务端当前可用的默认�
   assert.equal(resolveAgentRoute(saved, 'minimax', ['minimax']), 'minimax')
 })
 
-test('安全思考步骤将工具事件转换成用户可读过程，而不泄漏内部调用细节', () => {
-  assert.equal(safeThinkStep('start'), '正在理解你的问题…')
-  assert.equal(safeThinkStep('reasoning'), '正在梳理问题要点…')
-  assert.equal(safeThinkStep('tool_call', 'bazi'), '正在排出四柱与大运…')
-  assert.equal(safeThinkStep('tool_result', 'bazi'), '四柱与大运已核对，正在组织解读…')
-  assert.equal(safeThinkStep('tool_call', 'unknown-tool'), '正在查询所需信息…')
+test('解读进度将工具事件转换成用户可读阶段，而不泄漏内部调用细节', () => {
+  assert.match(safeThinkStep('start'), /识别本次解读主题/)
+  assert.match(safeThinkStep('session_ready'), /建立本次咨询会话/)
+  assert.match(safeThinkStep('context_ready'), /上下文与可用资料/)
+  assert.match(safeThinkStep('engine_requested'), /提交给解读引擎/)
+  assert.match(safeThinkStep('reasoning'), /梳理命盘关系与问题重点/)
+  assert.match(safeThinkStep('reasoning'), /交叉核验信息之间的关联/)
+  assert.match(safeThinkStep('tool_call', 'bazi'), /请求八字排盘计算/)
+  assert.match(safeThinkStep('tool_call', 'bazi'), /起运方向/)
+  assert.match(safeThinkStep('tool_result', 'bazi'), /四柱与大运计算已返回/)
+  assert.match(safeThinkStep('tool_result', 'bazi'), /校验排盘结果/)
+  assert.match(safeThinkStep('answering'), /正在整理核心判断/)
+  assert.match(safeThinkStep('answering'), /清晰、可执行的建议/)
+  assert.match(safeThinkStep('completed'), /本轮实时输出已结束/)
+  assert.match(safeThinkStep('tool_call', 'unknown-tool'), /正在查询所需信息/)
   assert.equal(safeThinkStep('tool_call', 'skill').includes('Skill'), false)
 })
 
-test('相同安全步骤只展示一次，新的阶段按顺序追加', () => {
+test('相同解读进度只展示一次，新的阶段按顺序追加', () => {
   const started = { reasoning: safeThinkStep('start') }
   const duplicate = appendSafeThinkStep(started, safeThinkStep('start'))
-  assert.equal(duplicate.reasoning, '正在理解你的问题…')
+  assert.equal(duplicate.reasoning, safeThinkStep('start'))
   const withTool = appendSafeThinkStep(duplicate, safeThinkStep('tool_call', 'bazi'))
-  assert.equal(withTool.reasoning, '正在理解你的问题…\n正在排出四柱与大运…')
+  assert.equal(withTool.reasoning, `${safeThinkStep('start')}\n${safeThinkStep('tool_call', 'bazi')}`)
 })
 
 test('模型列表晚到时不会清空已恢复的历史会话', async () => {
@@ -124,9 +133,7 @@ test('重新进入 Agent 时会自动恢复最新的可继续会话', async () =
   }
 })
 
-test('主题结束时保留原会话并提供续问入口', async () => {
-  // 主题额度结束不等于历史失效。若此处清 sessionId，用户点“继续”就会被新会话
-  // 接走，原本的排盘与对话上下文全断。
+test('历史会话不再受主题轮次状态限制', async () => {
   const originalFetch = globalThis.fetch
   globalThis.fetch = async (url, init = {}) => {
     const path = String(url)
@@ -136,14 +143,13 @@ test('主题结束时保留原会话并提供续问入口', async () => {
         ok: true,
         session: {
           id: 'topic-ended', route: 'minimax', title: '昨天的事业咨询',
-          consultation: { kind: 'paid', totalRounds: 8, remainingRounds: 0, expiresAt: Date.now() + 60_000 },
         },
         messages: [{ role: 'ai', text: '我记得昨天的事业咨询。', time: Date.now() }],
       })
     }
     if (path.endsWith('/api/agent/chat')) {
       assert.equal(JSON.parse(init.body).sessionId, 'topic-ended')
-      return json({ ok: false, reason: 'topic_exhausted', msg: '这个咨询主题的 8 次具体问题解读已完成' }, 402)
+      return json({ ok: false, reason: 'insufficient', msg: 'Token 积分已用完' }, 402)
     }
     throw new Error(`未预期的请求：${path}`)
   }
@@ -158,8 +164,8 @@ test('主题结束时保留原会话并提供续问入口', async () => {
     r.type(r.$('.chat-input'), '继续问昨天的事业选择')
     r.click(r.$('.send-btn'))
     await flush(4)
-    assert.ok(r.$('.current-session-chip'), '主题结束后仍应留在原会话')
-    assert.ok(r.findByText('继续本话题'), '应让用户显式确认续问，而不是悄悄新开会话')
+    assert.ok(r.$('.current-session-chip'), 'Token 不足时仍应保留原会话')
+    assert.equal(r.findByText('继续本话题'), null, '不应再出现按主题续问入口')
   } finally {
     r.unmount()
     globalThis.fetch = originalFetch
