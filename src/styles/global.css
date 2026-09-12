@@ -1822,7 +1822,11 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 700; }
   margin-top: 2px;
 }
 .msg.ai .avatar { background: linear-gradient(145deg, #ffb3c8, var(--cinnabar-deep)); color: #ffffff; }
-.msg.user .avatar { background: var(--ink); color: var(--paper-light); }
+.msg.user .avatar {
+  background: linear-gradient(145deg, #db6389, #b74369);
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(183, 67, 105, 0.2);
+}
 .msg-content {
   flex: 1 1 0;
   min-width: 0;
