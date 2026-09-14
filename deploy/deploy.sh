@@ -117,8 +117,13 @@ remote "set -euo pipefail; cd $STAGE_DIR
 
 # 测试门禁：没有 CI，这里是唯一一道自动化关卡。跑的是构建产物所在的同一棵树。
 if [[ $SKIP_TESTS -eq 0 ]]; then
-  log "回归测试（--skip-tests 可跳过）"
-  remote "set -euo pipefail; cd $STAGE_DIR && npm test 2>&1 | tail -25" \
+  log "回归测试（日志 /root/bazi-deploy-tests.log；--skip-tests 可跳过）"
+  # 路由单测使用 fake pool，但模型可用性仍检查环境中的凭据。
+  # 仅给测试进程传占位值，避免依赖本机 .env 或读取生产密钥。
+  remote "set -euo pipefail; cd $STAGE_DIR
+          DEEPSEEK_API_KEY=deploy-test-placeholder MINIMAX_API_KEY=deploy-test-placeholder npm test > /root/bazi-deploy-tests.log 2>&1 \
+            || { tail -80 /root/bazi-deploy-tests.log; exit 1; }
+          tail -25 /root/bazi-deploy-tests.log" \
     || die "测试未通过，已中止（线上未改动）。确需强行发布用 --skip-tests"
 fi
 
