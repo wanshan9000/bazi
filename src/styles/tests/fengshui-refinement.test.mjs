@@ -51,12 +51,12 @@ test('iPad 端将年份独占一行，其余出生字段以两列成组排列', 
   assert.match(css, /@media \(min-width: 640px\) and \(max-width: 1023px\)\s*\{[\s\S]*?\.fs-bazi-control-year\s*\{[^}]*grid-column:\s*1\s*\/\s*-1;/)
 })
 
-test('宽屏命盘引导使用精致阅读级字号，而非海报级大字', () => {
+test('宽屏命盘引导使用克制的阅读级字号，而非海报级大字', () => {
   const fengshuiStart = css.indexOf('@media (min-width: 1024px)', css.indexOf('.fs-bazi-calendar-hint'))
   const fengshuiEnd = css.indexOf('\n.fs-tip', fengshuiStart)
   const desktopRules = css.slice(fengshuiStart, fengshuiEnd)
 
-  assert.match(desktopRules, /\.fs-bazi-required \.n-h\s*\{[^}]*font-size:\s*clamp\(30px, 2\.5vw, 44px\);/)
-  assert.match(desktopRules, /\.fs-bazi-required > p\s*\{[^}]*font-size:\s*clamp\(14px, 1\.05vw, 18px\);/)
-  assert.match(desktopRules, /\.fs-bazi-control input, \.fs-bazi-control select\s*\{[^}]*min-height:\s*58px;[^}]*font-size:\s*clamp\(17px, 1\.2vw, 20px\);/)
+  assert.match(desktopRules, /\.fs-bazi-required \.n-h\s*\{[^}]*font-size:\s*clamp\(28px, 2\.1vw, 36px\);/)
+  assert.match(desktopRules, /\.fs-bazi-required > p\s*\{[^}]*font-size:\s*clamp\(13px, \.95vw, 15px\);/)
+  assert.match(desktopRules, /\.fs-bazi-control input, \.fs-bazi-control select\s*\{[^}]*min-height:\s*52px;[^}]*font-size:\s*clamp\(15px, \.95vw, 17px\);/)
 })

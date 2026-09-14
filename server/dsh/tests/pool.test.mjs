@@ -120,7 +120,7 @@ test('快速路由和深度路由按各自的生成上限初始化', async () =>
   await pool.run({ routeKey: 'deepseek-flash', sessionId: 'flash-route', text: '简要回答', onEvent: () => {} })
   await pool.run({ routeKey: 'minimax', sessionId: 'minimax-route', text: '深度回答', onEvent: () => {} })
 
-  assert.equal(flash.calls.initializations[0].maxTokens, 3072)
+  assert.equal(flash.calls.initializations[0].maxTokens, 2048)
   assert.equal(minimax.calls.initializations[0].maxTokens, 3072)
   await pool.close()
 })

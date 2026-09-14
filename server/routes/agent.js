@@ -272,6 +272,12 @@ export function agentCalendarVerificationProtocol() {
   return `【日期换算核验】涉及公历、农历、节气月、干支年或具体日期归属时，必须先调用 \`huangli\` 工具核验该具体日期。八字流年交接以节气口径为准，不能把“农历新年”“整个公历年份”或记忆中的生肖年份直接等同为八字流年；没有工具结果时只说明需要核验。`
 }
 
+function agentResponsePaceProtocol(text) {
+  // 长报告不能被“快答”规则截断；由用户明确索取时仍交付足够的推演与依据。
+  if (/(?:完整报告|完整解读|详批|详细分析|全面分析|深度报告|盲派报告|子平报告|万字)/.test(String(text || ''))) return ''
+  return `【回答长度】这是一次常规咨询。先用 1-2 句给出直接结论，再用 2-4 个短条目说明最相关的依据与建议；不要复述整张命盘、罗列未被问到的宫位或扩写成完整报告。`
+}
+
 function compactUserMessage(text) {
   return String(text || '').replace(/\s+/g, ' ').trim().slice(0, 180)
 }
@@ -721,6 +727,8 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
     // 避免无关对话被日期提示干扰。
     if (needsCurrentDateContext(q) || strictRequirement?.tool === 'bazi') promptProtocols.push(agentCurrentDateProtocol())
     if (needsCalendarVerification(q)) promptProtocols.push(agentCalendarVerificationProtocol())
+    const paceProtocol = agentResponsePaceProtocol(q)
+    if (paceProtocol) promptProtocols.push(paceProtocol)
     const memory = agentSessionMemory(session, store.listMessages(req.uid, session.id))
     if (memory) promptProtocols.push(memory)
     let prompt = promptProtocols.length ? `${promptProtocols.join('\n\n')}\n\n${q}` : q
@@ -756,6 +764,9 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
     // 这一轮是否产出了任何可交付的内容（正文或测算报告卡片）。只有成功回答才结算积分。
     let producedOutput = false
     let producedReport = false
+    // 严格测算在工具成功前不可交付正文；成功后可立即流式呈现，不必再等整轮结束。
+    let strictTextDelivered = false
+    let verifiedStreamed = ''
     // 用 res 而非 req 的 'close'：req 在请求体读完（express.json 已消费）就会触发
     // 'close'，与客户端是否断开无关；res 的 'close' 只在底层 socket 关闭时触发，
     // writableFinished 为 true 说明是我们自己 res.end() 收尾的，不是真实断开。
@@ -785,10 +796,13 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
             const safeDelta = publicTextFilter.push(e.delta)
             if (safeDelta) {
               streamed += safeDelta
-              // 对需要计算事实的请求，先等工具成功返回再交付正文。否则模型先流出
-              // 一段“我自己推的”内容，事后即使发现没调用工具也无法收回。
-              if (!strictRequirement) {
+              // 对需要计算事实的请求，先等工具成功返回再交付正文。确认成功后就可
+              // 立刻流出后续正文，既不让未经核验内容出现，也不必等整轮收尾。
+              const toolReady = strictRequirement && verifiedTools.has(strictRequirement.tool)
+              if (!strictRequirement || toolReady) {
+                if (toolReady) verifiedStreamed += safeDelta
                 producedOutput = true
+                if (toolReady) strictTextDelivered = true
                 send({ ...e, delta: safeDelta })
               }
             }
@@ -823,14 +837,17 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
       const toolVerified = !strictRequirement
         || verifiedTools.has(strictRequirement.tool)
         || (strictRequirement.tool === 'bazi' && citesBaziPreflight(streamed || result.finalText, preflight))
+      const acceptedStream = strictRequirement && verifiedTools.has(strictRequirement.tool)
+        ? verifiedStreamed
+        : streamed
       const finalText = toolVerified
-        ? (streamed || sanitizePublicText(result.finalText))
+        ? (acceptedStream || sanitizePublicText(result.finalText))
         : strictVerificationFailure(strictRequirement, verifiedChart)
       if (!toolVerified) producedOutput = false
       if (toolVerified && finalText) producedOutput = true
       // 严格测算在此时才发正文：已经确认对应工具成功执行，模型不能以未经核验
       // 的自然语言抢先形成“结论”。未通过闸门的模型文本会被上述固定提示替换。
-      if (strictRequirement && finalText) send({ type: 'text', delta: finalText })
+      if (strictRequirement && finalText && !strictTextDelivered) send({ type: 'text', delta: finalText })
       if (finalText) store.appendMessage(req.uid, session.id, { role: 'ai', text: finalText, time: timeNow() })
       streamed = ''
       // 命盘是这段会话最稳定、最容易辨认的身份。排盘成功后用其覆盖提问摘要，

@@ -518,9 +518,14 @@ test('大运追问仅在 bazi 工具成功返回后交付模型结论', async ()
       method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) },
       body: JSON.stringify({ text: '我当前大运是不是不对？', chart: { year: 1975, month: 10, day: 13, hour: 6, gender: '男' } }),
     })
-    const reply = sseFrames(await res.text()).filter(frame => frame.type === 'text').map(frame => frame.delta).join('')
+    const frames = sseFrames(await res.text())
+    const reply = frames.filter(frame => frame.type === 'text').map(frame => frame.delta).join('')
     assert.match(reply, /工具排定：庚辰大运/)
     assert.doesNotMatch(reply, /未取得可核验/)
+    assert.ok(
+      frames.findIndex(frame => frame.type === 'tool_result' && frame.name === 'bazi') < frames.findIndex(frame => frame.type === 'text'),
+      '严格测算必须在工具成功事件之后才开始流式交付正文',
+    )
   } finally { srv.close() }
 })
 
