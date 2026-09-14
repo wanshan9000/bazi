@@ -195,6 +195,34 @@ export function ToolCallsBlock({ names, tools, streaming = false, heartbeat = nu
   )
 }
 
+// 最终答案由服务端按 agentAnswer 协议校验后才会到这里。使用原生文本节点渲染，
+// 不执行模型提供的 HTML 或 Markdown，页面结构不再受模型换行、标题符号影响。
+export function StructuredAnswer({ answer }) {
+  if (!answer || typeof answer !== 'object' || !answer.summary) return null
+  const sections = Array.isArray(answer.sections) ? answer.sections : []
+  return (
+    <article className="agent-answer">
+      <p className="agent-answer-summary">{answer.summary}</p>
+      {sections.map((section, sectionIndex) => (
+        <section className="agent-answer-section" key={`${sectionIndex}-${section.title}`}>
+          <h3 className="agent-answer-title">{section.title}</h3>
+          {section.body ? <p className="agent-answer-body">{section.body}</p> : null}
+          {Array.isArray(section.items) && section.items.length > 0 ? (
+            <ul className="agent-answer-list">
+              {section.items.map((item, itemIndex) => (
+                <li key={`${itemIndex}-${item.label}`}>
+                  <strong>{item.label}</strong><span>：{item.text}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ))}
+      {answer.closing ? <p className="agent-answer-closing">{answer.closing}</p> : null}
+    </article>
+  )
+}
+
 // 将 AI 文本按 <think>…</think> 拆分为普通段落与可折叠思考块
 // 普通文本走 markdown 解析器（自动把  |列1|列2|  表格转成 HTML 表格）
 // streaming=true：流式过程中默认展开思考块、自动跟随；并兼容未闭合的 <think>…（流式中常见）

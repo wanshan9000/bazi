@@ -7,7 +7,7 @@ import { listCollection, saveToCollection, removeFromCollection } from '../engin
 import { refreshSession } from '../data/users.js'
 import { canAfford, nextPlanKey } from '../engine/membership.js'
 import { renderMarkdown } from '../utils/markdown.jsx'
-import { ThinkBlock, ToolCallsBlock, CopyButton, renderAiText, timeNow, fmtSessionTime, quickQuestionsForConversation, isNearScrollBottom } from './agent/ChatParts.jsx'
+import { ThinkBlock, ToolCallsBlock, CopyButton, StructuredAnswer, renderAiText, timeNow, fmtSessionTime, quickQuestionsForConversation, isNearScrollBottom } from './agent/ChatParts.jsx'
 
 const api = createAgentApi()
 const ROUTE_KEY = 'genki-agent-route'
@@ -161,7 +161,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
   // 积分扣减由服务端根据模型 usage 换算。回答完成后刷新一次账户镜像即可。
   useEffect(() => {
     const last = messages[messages.length - 1]
-    if (!last || last.role !== 'ai' || last.streaming || last._counted || !last.text) return
+    if (!last || last.role !== 'ai' || last.streaming || last._counted || (!last.text && !last.answer)) return
     if (last._failed) {
       setMessages(prev => prev.map((m, i) => i === prev.length - 1 ? { ...m, _counted: true } : m))
       return
@@ -224,6 +224,13 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
               }))
               break
             case 'text': patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('answering')), text: m.text + e.delta })); break
+            case 'answer':
+              patchLast(m => ({
+                ...appendSafeThinkStep(m, safeThinkStep('answering')),
+                answer: e.answer,
+                text: '',
+              }))
+              break
             case 'reasoning': patchLast(m => appendSafeThinkStep(m, safeThinkStep('reasoning'))); break
             case 'tool_call': patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('tool_call', e.name)), tools: [...m.tools, { name: e.name, status: 'pending' }] })); break
             case 'tool_result':
@@ -323,7 +330,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
       const restored = r.session || s
       setMessages((r.messages || []).map((m, i) => m.kind === 'report'
         ? { id: `h-${i}`, role: 'ai', kind: 'report', report: { title: (m.text.match(/^# (.+)$/m) || [])[1] || '测算报告', markdown: m.text }, time: m.time, _counted: true }
-        : { id: `h-${i}`, role: m.role, text: m.text, time: m.time, _counted: true }))
+        : { id: `h-${i}`, role: m.role, text: m.text, answer: m.answer, time: m.time, _counted: true }))
       setSessionId(restored.id)
       setActiveSession({ id: restored.id, title: sessionTitle(restored) })
       setActiveChart(null)
@@ -489,9 +496,9 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
                 <ToolCallsBlock names={m.text} />
               ) : (
                 <div className={`bubble ${m.streaming ? 'bubble-streaming' : ''}`}>
-                  {m.reasoning ? <ThinkBlock content={m.reasoning} streaming={!!m.streaming} collapseWhenStreamingText={Boolean(m.text)} heartbeat={m.heartbeat} /> : null}
+                  {m.reasoning ? <ThinkBlock content={m.reasoning} streaming={!!m.streaming} collapseWhenStreamingText={Boolean(m.text || m.answer)} heartbeat={m.heartbeat} /> : null}
                   {m.tools && m.tools.length > 0 ? <ToolCallsBlock tools={m.tools} streaming={!!m.streaming} heartbeat={m.heartbeat} /> : null}
-                  {m.streaming && !m.text ? (
+                  {m.answer ? <StructuredAnswer answer={m.answer} /> : m.streaming && !m.text ? (
                     <span className="typing"><i /><i /><i /></span>
                   ) : (
                     <>{renderAiText(m.text, !!m.streaming, { suppressThinkBlocks: Boolean(m.reasoning) })}{m.streaming && <span className="stream-cursor">▍</span>}</>

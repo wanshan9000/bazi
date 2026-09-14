@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { render, flush } from '../../test/render.mjs'
 
-const { ThinkBlock, ToolCallsBlock, isNearScrollBottom, renderAiText } = await import('../agent/ChatParts.jsx')
+const { ThinkBlock, ToolCallsBlock, StructuredAnswer, isNearScrollBottom, renderAiText } = await import('../agent/ChatParts.jsx')
 
 function AiTextFixture({ text, streaming = false, suppressThinkBlocks = false }) {
   return renderAiText(text, streaming, { suppressThinkBlocks })
@@ -11,6 +11,26 @@ function AiTextFixture({ text, streaming = false, suppressThinkBlocks = false })
 test('聊天自动跟随只在用户停留在底部时启用', () => {
   assert.equal(isNearScrollBottom({ scrollHeight: 1200, scrollTop: 700, clientHeight: 480 }), true)
   assert.equal(isNearScrollBottom({ scrollHeight: 1200, scrollTop: 500, clientHeight: 480 }), false)
+})
+
+test('固定字段答案由前端直接渲染，不走 Markdown 或 JSON 原文', () => {
+  const r = render(StructuredAnswer, {
+    answer: {
+      version: 1,
+      summary: '先给出直接回应。',
+      sections: [{ title: '核对重点', body: '正文说明。', items: [{ label: '依据', text: '已核验的资料。' }] }],
+      closing: '下一步可补充具体条件。',
+    },
+  })
+  try {
+    assert.equal(r.$('.agent-answer-summary').textContent, '先给出直接回应。')
+    assert.equal(r.$('.agent-answer-title').textContent, '核对重点')
+    assert.equal(r.$('.agent-answer-list li').textContent, '依据：已核验的资料。')
+    assert.ok(r.text().includes('下一步可补充具体条件。'))
+    assert.equal(r.text().includes('"version"'), false)
+  } finally {
+    r.unmount()
+  }
 })
 
 test('解读过程按阶段列表展示，而不是一段空白说明', () => {
@@ -182,10 +202,40 @@ test('新版独占加粗短标题保留信息组层级，字段强调不误作�
 })
 
 test('模型残留的分隔符与 Markdown 标题不会泄漏到聊天正文', () => {
-  const r = render(AiTextFixture, { text: '---## 子平派分析\n- **月令**：戌月本气为戊土。' })
+  const r = render(AiTextFixture, { text: '**盘面核对·出生口径**：公历1975年10月13日6时，男\n- **当前大运**：庚辰（51-60岁，即2027-2036年） ---## 子平派分析\n\n**格局与日主**\n- **月令司令**：戌月本气为戊土七杀。' })
   try {
-    assert.deepEqual(Array.from(r.container.querySelectorAll('.md-h')).map(el => el.textContent), ['子平派分析'])
+    assert.deepEqual(Array.from(r.container.querySelectorAll('.md-h')).map(el => el.textContent), ['子平派分析', '格局与日主'])
     assert.equal(r.text().includes('---##'), false)
+    assert.equal(r.container.querySelectorAll('.md-list').length, 2, '被粘住的标题之后应重新开始独立信息组')
+  } finally {
+    r.unmount()
+  }
+})
+
+test('结论与建议从盘面和依据条目中独立出来，盘面字段仍保持紧凑', () => {
+  const r = render(AiTextFixture, {
+    text: '**盘面核对**：乾造，公历1975年10月13日6时，四柱乙卯｜丙戌｜壬辰｜癸卯，当前大运辛巳（2017-2026）。**结论**：感情有落点，但需要把关系里的位次摆稳。\n\n- **夫妻宫被两处穿**：话没说透、事没分清，容易积成隔阂。\n- **缘分有落脚**：有牵绊、有牵挂，只是位置调动多。\n- **建议**：把约定、分工、底线都摊开讲明。',
+  })
+  try {
+    assert.deepEqual(Array.from(r.container.querySelectorAll('.md-h')).map(el => el.textContent), ['结论', '建议'])
+    assert.equal(r.container.querySelectorAll('.md-list').length, 1)
+    assert.ok(r.text().includes('盘面核对：乾造'), '盘面字段应保留为紧凑的行内核对信息')
+    assert.equal(r.container.querySelector('.md-list').textContent.includes('建议'), false, '建议不应继续黏在最后一条依据上')
+  } finally {
+    r.unmount()
+  }
+})
+
+test('未排盘的自然咨询把压缩资料清单与转折语恢复为易读段落', () => {
+  const r = render(AiTextFixture, {
+    text: '缘主，人际关系要落到你的命局上才断得准，不是泛泛而谈的“性格好相处”。不过眼下我还没拿到你的出生资料，无法为你排盘。请告诉我：- **出生年月日时**（公历还是农历请注明，时辰尽量精确到小时）- **性别**有了这两项，我先校盘、再专门就人际关系为你细断。若你想聊某个具体关系，也可以把事由说给我。',
+  })
+  try {
+    const list = r.container.querySelector('.md-list')
+    assert.equal(list.querySelectorAll('li').length, 2, '出生资料应恢复为两条清单')
+    assert.equal(list.textContent.includes('有了这两项'), false, '后续说明不应黏在性别字段后')
+    assert.equal(r.text().includes('请告诉我：-'), false, '提示语与清单必须换行')
+    assert.ok(r.container.querySelectorAll('.md-p').length >= 4, '长自然咨询应按转折拆成短段')
   } finally {
     r.unmount()
   }

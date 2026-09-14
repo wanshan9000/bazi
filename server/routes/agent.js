@@ -15,6 +15,7 @@ import { config } from '../config.js'
 import { generateHuangli } from '../../src/engine/cantian.js'
 import { buildChart } from '../../src/engine/bazi.js'
 import { AGENT_TOKEN_BILLING, canAfford } from '../../src/engine/membership.js'
+import { parseStructuredAgentAnswer, structuredAnswerProtocol, structuredAnswerText } from '../agentAnswer.js'
 
 const MAX_TEXT = 2000
 const RATE_LIMIT = 20 // 次/分钟/uid+IP
@@ -753,6 +754,9 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
       const strictProtocol = strictToolInstruction(strictRequirement, verifiedChart)
       prompt = `${skillInvocation}\n\n${strictProtocol ? `${strictProtocol}\n\n` : ''}${prompt}`
     }
+    // 不把视觉层级交给模型随手写的 Markdown：最终正文走固定 JSON 信封，服务端
+    // 校验成功后再交给前端组件。保留 Skill 指令作为 prompt 首行，DSH 才能识别并加载它。
+    prompt = `${prompt}\n\n${structuredAnswerProtocol()}`
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
     res.setHeader('Cache-Control', 'no-cache')
@@ -777,8 +781,7 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
     // 这一轮是否产出了任何可交付的内容（正文或测算报告卡片）。只有成功回答才结算积分。
     let producedOutput = false
     let producedReport = false
-    // 严格测算在工具成功前不可交付正文；成功后可立即流式呈现，不必再等整轮结束。
-    let strictTextDelivered = false
+    // 最终正文先在服务端聚合：模型输出的是 JSON 信封，半截内容不能直接露给用户。
     let verifiedStreamed = ''
     // 用 res 而非 req 的 'close'：req 在请求体读完（express.json 已消费）就会触发
     // 'close'，与客户端是否断开无关；res 的 'close' 只在底层 socket 关闭时触发，
@@ -810,15 +813,10 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
             const safeDelta = publicTextFilter.push(e.delta)
             if (safeDelta) {
               streamed += safeDelta
-              // 对需要计算事实的请求，先等工具成功返回再交付正文。确认成功后就可
-              // 立刻流出后续正文，既不让未经核验内容出现，也不必等整轮收尾。
+              // 严格测算只认可工具成功后的输出。无论是否严格测算，正文都先缓冲，
+              // 等完整 JSON 经服务端校验后才交给固定前端组件渲染。
               const toolReady = strictRequirement && verifiedTools.has(strictRequirement.tool)
-              if (!strictRequirement || toolReady) {
-                if (toolReady) verifiedStreamed += safeDelta
-                producedOutput = true
-                if (toolReady) strictTextDelivered = true
-                send({ ...e, delta: safeDelta })
-              }
+              if (toolReady) verifiedStreamed += safeDelta
             }
             return
           }
@@ -862,10 +860,15 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
         : strictVerificationFailure(strictRequirement, verifiedChart)
       if (!toolVerified) producedOutput = false
       if (toolVerified && finalText) producedOutput = true
-      // 严格测算在此时才发正文：已经确认对应工具成功执行，模型不能以未经核验
-      // 的自然语言抢先形成“结论”。未通过闸门的模型文本会被上述固定提示替换。
-      if (strictRequirement && finalText && !strictTextDelivered) send({ type: 'text', delta: finalText })
-      if (finalText) store.appendMessage(req.uid, session.id, { role: 'ai', text: finalText, time: timeNow() })
+      const answer = !sawError && toolVerified ? parseStructuredAgentAnswer(finalText) : null
+      const storedText = answer ? structuredAnswerText(answer) : finalText
+      // 校验通过的答案以结构事件交付；模型偶发未遵守协议时保留现有 Markdown 回退，
+      // 绝不因为一次 JSON 失败把用户留在空白气泡里。
+      if (!sawError) {
+        if (answer) send({ type: 'answer', answer })
+        else if (finalText) send({ type: 'text', delta: finalText })
+        if (storedText) store.appendMessage(req.uid, session.id, { role: 'ai', text: storedText, answer: answer || undefined, time: timeNow() })
+      }
       streamed = ''
       // 命盘是这段会话最稳定、最容易辨认的身份。排盘成功后用其覆盖提问摘要，
       // 让历史列表直接显示「乾造/坤造 · 出生日期 · 时辰」。
@@ -887,10 +890,8 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
       if (!sawError) send({ type: 'done', reason: 'completed', usage: result.usage || undefined, timing: result.timing || undefined })
     } catch (err) {
       if (!req.authed && guestLease) guestQuota.settle(req.ip, 0)
-      // 断开/失败时也要把已经流出去的正文写进镜像，否则用户回到会话只剩自己的提问。
-      if (streamed) {
-        try { store.appendMessage(req.uid, session.id, { role: 'ai', text: streamed, time: timeNow() }) } catch { /* 镜像失败不该盖掉真正的错误 */ }
-      }
+      // 正文尚未通过 JSON 校验前不会对外发送；异常时不保存半截 JSON，避免历史中
+      // 出现无法渲染的协议碎片。
       const code = err?.code || err?.name || 'ERROR'
       // 已知错误给明确文案；其余一律回笼统提示 —— err.message 可能带着文件路径、
       // 上游返回体之类的内部信息，不该原样吐给公网客户端。详情只进服务端日志。

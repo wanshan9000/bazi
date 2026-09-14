@@ -62,6 +62,39 @@ test('chat 流式返回并镜像消息', async () => {
   } finally { srv.close() }
 })
 
+test('合规 JSON 以固定 answer 事件交付并保存结构对象', async () => {
+  const answer = {
+    version: 1,
+    summary: '这是固定字段的直接回应。',
+    sections: [{ title: '行动建议', items: [{ label: '本周', text: '先完成一件可交付的事。' }] }],
+    closing: '后续可继续追问。',
+  }
+  let receivedPrompt = ''
+  const pool = {
+    isBusy: () => false,
+    async run({ text, onEvent }) {
+      receivedPrompt = text
+      const raw = JSON.stringify(answer)
+      onEvent({ type: 'text', delta: raw })
+      return { finalText: raw, usage: null, title: null }
+    },
+  }
+  const { app, store, accounts } = mkApp(pool)
+  const me = await mkUser(accounts, 'structured-answer')
+  const { srv, base } = await listen(app)
+  try {
+    const res = await fetch(`${base}/api/agent/chat`, { method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify({ text: '给我建议' }) })
+    const frames = sseFrames(await res.text())
+    const sessionId = frames.find(frame => frame.type === 'session').sessionId
+    assert.ok(receivedPrompt.includes('【最终交付格式·最高优先】'))
+    assert.deepEqual(frames.find(frame => frame.type === 'answer')?.answer, answer)
+    assert.equal(frames.some(frame => frame.type === 'text' && frame.delta.includes('"version"')), false)
+    const saved = store.listMessages(me.id, sessionId).at(-1)
+    assert.deepEqual(saved.answer, answer)
+    assert.ok(saved.text.includes('行动建议'))
+  } finally { srv.close() }
+})
+
 test('完成帧与会话只记录 Agent 耗时指标', async () => {
   // 若路由层忘了转存 pool timing，性能排查会退化成只能靠主观感受“好像慢”。
   const timing = { firstEventMs: 83, firstTextMs: 126, totalMs: 912 }
