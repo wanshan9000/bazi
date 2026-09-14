@@ -130,24 +130,37 @@ test('高阶术数由服务端按会员档位拦截，不能仅靠积分绕过',
   assert.equal(unlocked.cost, 5)
 })
 
-test('凡者每月含十次塔罗单牌解读，第十一次才开始扣积分', async () => {
+test('凡者全部牌阵共用每月二十次解读，第二十一次才开始扣积分', async () => {
   const { store } = mkStore()
   const u = await store.create({ account: 'tarot-earth', password: 'secret123', nickname: '凡者', plan: 'earth' })
-  for (let i = 0; i < 10; i++) {
-    const included = store.consumeCredit(u.id, 'tarot.single')
+  for (let i = 0; i < 20; i++) {
+    const included = store.consumeCredit(u.id, 'tarot.reading')
     assert.equal(included.ok, true)
     assert.equal(included.included, true)
     assert.equal(included.cost, 0)
   }
-  assert.equal(store.get(u.id).monthlyFeatureUsage['tarot.single'], 10)
+  assert.equal(store.get(u.id).monthlyFeatureUsage['tarot.reading'], 20)
   assert.equal(store.get(u.id).permanentCredits, 20, '附赠次数不得挤占积分')
 
-  const extra = store.consumeCredit(u.id, 'tarot.single')
+  const extra = store.consumeCredit(u.id, 'tarot.reading')
   assert.equal(extra.ok, true)
   assert.equal(extra.included, undefined)
-  assert.equal(extra.cost, 2)
+  assert.equal(extra.cost, 5)
   assert.equal(store.get(u.id).permanentCredits, 20)
-  assert.equal(store.get(u.id).monthlyCreditsUsed, 2, '第十一次优先使用月度积分')
+  assert.equal(store.get(u.id).monthlyCreditsUsed, 5, '第二十一次优先使用月度积分')
+})
+
+test('旧单牌用量并入全牌阵总额后，继续解读不会重复计数', async () => {
+  const { store } = mkStore()
+  const u = await store.create({ account: 'tarot-migrated', password: 'secret123', nickname: '凡者', plan: 'earth' })
+  store.get(u.id).monthlyFeatureUsage = { 'tarot.single': 4 }
+
+  const included = store.consumeCredit(u.id, 'tarot.reading')
+  assert.equal(included.ok, true)
+  assert.equal(included.included, true)
+  assert.deepEqual(store.get(u.id).monthlyFeatureUsage, { 'tarot.single': 4, 'tarot.reading': 1 })
+  assert.equal(included.allowance.used, 5)
+  assert.equal(included.allowance.remaining, 15)
 })
 
 test('续费在原到期时间之上顺延；换档从当下重算', async () => {

@@ -402,7 +402,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // 塔罗重抽也必须经过服务端：单牌优先使用会员每月内含次数，多牌阵按积分扣减。
+  // 塔罗重抽也必须经过服务端：全部牌阵共用会员每月内含次数，超出后按积分扣减。
   // 首次抽牌由 TarotPage 在跳转前扣，这里服务于解读页里的「换一批 / 重抽这组」——
   // 那两个按钮此前直接重新 drawCards，把配额与扣费彻底绕过去了。
   const chargeTarotReading = async (feature = 'tarot.reading') => {

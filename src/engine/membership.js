@@ -64,13 +64,13 @@ export const PLANS = [
     perks: [
       '个人黄历订阅推送（结合八字 · 晨起 / 午间 / 晚归）',
       '八字命书、称骨 / 星座 / 黄历深读',
-      '塔罗单牌 · 每月含 10 次解读',
+      '全部塔罗牌阵 · 每月合计 20 次解读',
       '月度积分当月有效，购买积分永久有效',
     ],
     featured: false,
     benefits: [
       '个人黄历订阅推送',
-      '基础深读与塔罗 10 次解读',
+      '基础深读与塔罗 20 次解读',
       '60 月度积分',
     ],
   },
@@ -88,7 +88,7 @@ export const PLANS = [
     cta: '跃升玄者',
     perks: [
       '凡者全部权益',
-      '紫微、奇门、多牌阵塔罗、风水与姓名详批',
+      '紫微、奇门、风水与姓名详批',
       '每月 200 积分',
       '历史记录与新功能优先体验',
     ],
@@ -253,7 +253,7 @@ export const FEATURE_MIN_PLAN = Object.freeze({
   'horoscope.ai': 'free',
   'huangli.ai': 'free',
   'tarot.single': 'earth',
-  'tarot.reading': 'heaven',
+  'tarot.reading': 'earth',
   'ziwei.full': 'heaven',
   'qimen.reading': 'heaven',
   'fengshui.ai': 'heaven',
@@ -263,12 +263,12 @@ export const FEATURE_MIN_PLAN = Object.freeze({
 
 const PLAN_ACCESS_RANK = Object.freeze({ free: 0, earth: 1, heaven: 2, oracle: 3, supreme: 4 })
 
-/** 随订阅周期重置的非 Agent 附赠次数；高档会员继承凡者的单牌体验额度。 */
+/** 随订阅周期重置的非 Agent 附赠次数；付费会员继承凡者的全牌阵体验额度。 */
 export const PLAN_FEATURE_ALLOWANCES = Object.freeze({
-  earth: Object.freeze({ 'tarot.single': 10 }),
-  heaven: Object.freeze({ 'tarot.single': 10 }),
-  oracle: Object.freeze({ 'tarot.single': 10 }),
-  supreme: Object.freeze({ 'tarot.single': Infinity }),
+  earth: Object.freeze({ 'tarot.reading': 20 }),
+  heaven: Object.freeze({ 'tarot.reading': 20 }),
+  oracle: Object.freeze({ 'tarot.reading': 20 }),
+  supreme: Object.freeze({ 'tarot.reading': Infinity }),
 })
 
 export function requiredPlanForFeature(featureKey) {
@@ -289,7 +289,12 @@ export function featureAllowanceStatus(user, featureKey, now = Date.now()) {
   if (isSuperAdmin(user)) return { limit: Infinity, used: 0, remaining: Infinity }
   const currentPlan = isPlanExpired(user, now) ? FREE_PLAN.key : (user.plan || FREE_PLAN.key)
   const limit = PLAN_FEATURE_ALLOWANCES[currentPlan]?.[featureKey] || 0
-  const used = Math.max(0, Number(user.monthlyFeatureUsage?.[featureKey]) || 0)
+  // 旧版把单牌与多牌阵分别记账。新方案是全牌阵共用一个月度总额，
+  // 所以历史单牌次数也必须并入，不能让切换版本的用户重复获得额度。
+  const legacySingleUsed = featureKey === 'tarot.reading'
+    ? Math.max(0, Number(user.monthlyFeatureUsage?.['tarot.single']) || 0)
+    : 0
+  const used = Math.max(0, Number(user.monthlyFeatureUsage?.[featureKey]) || 0) + legacySingleUsed
   return { limit, used, remaining: Math.max(0, limit - used) }
 }
 

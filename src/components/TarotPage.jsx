@@ -63,13 +63,13 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
   const [insufficient, setInsufficient] = useState(false)
   const [accessDenied, setAccessDenied] = useState(false)
 
-  // 凡者每月含 10 次单牌解读；多牌阵自玄者开放。
+  // 凡者起即可使用全部牌阵；每月的内含次数由统一塔罗配额结算。
   const list = SPREADS.filter(s => {
     if (cat !== 'all' && s.cat !== cat) return false
-    return s.count === 1 || canUseFeature(user, 'tarot.reading')
+    return canUseFeature(user, 'tarot.reading')
   })
   const activeCat = SPREAD_CATS.find(c => c.k === cat)
-  const singleAllowance = featureAllowanceStatus(user, 'tarot.single')
+  const tarotAllowance = featureAllowanceStatus(user, 'tarot.reading')
 
   if (!user) {
     return (
@@ -84,8 +84,8 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
             backView="tarot"
             icon="🃏"
             eyebrow="塔罗解读 · 凡者起"
-            title="开通凡者后，塔罗每月含 10 次解读"
-            desc="玄者及以上还可使用爱情、事业、抉择等多牌阵解读。"
+            title="开通凡者后，全部牌阵每月含 20 次解读"
+            desc="爱情、事业、抉择等牌阵均可使用，按月合计计算次数。"
             note="注册后可查看会员权益并选择适合自己的方案"
           />
         </div>
@@ -108,7 +108,7 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
         <p className="page-sub rise rise-2">七十八张阿卡那 · 九种经典牌阵 · 一抽即明</p>
 
         <p className="quota-hint rise rise-2">
-          {planByKey(user.plan).name} · 单牌解读本月剩余 <b>{singleAllowance.remaining === Infinity ? '不限' : `${singleAllowance.remaining} / ${singleAllowance.limit}`}</b> 次 · 多牌阵开放给玄者及以上
+          {planByKey(user.plan).name} · 塔罗解读本月剩余 <b>{tarotAllowance.remaining === Infinity ? '不限' : `${tarotAllowance.remaining} / ${tarotAllowance.limit}`}</b> 次
         </p>
 
         {/* 积分不足：此前只 setInsufficient(true) 却从不渲染，用户点「抽这组牌」毫无反应 */}
@@ -183,8 +183,7 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
                       if (user) {
                         // 扣分走服务端，所以必须 await —— 不等结果就 onStart 的话，
                         // 积分不足时用户已经进了抽牌页，闸门形同虚设。
-                        const feature = s.count === 1 ? 'tarot.single' : 'tarot.reading'
-                        const res = await consumeCredit(user.id, feature)
+                        const res = await consumeCredit(user.id, 'tarot.reading')
                         if (!res.ok) {
                           if (res.reason === 'insufficient' || res.reason === 'plan_required') {
                             setInsufficient(true)

@@ -442,7 +442,10 @@ export function createAccountStore(file) {
     }
     const allowance = featureAllowanceStatus(u, featureKey)
     if (allowance.remaining > 0) {
-      u.monthlyFeatureUsage = { ...(u.monthlyFeatureUsage || {}), [featureKey]: allowance.used + 1 }
+      // allowance.used 可能包含兼容统计的旧字段（例如旧版 tarot.single）。
+      // 落盘时只能递增当前功能自己的计数，否则旧次数会在下一次读取时被重复累加。
+      const directUsage = Math.max(0, Number(u.monthlyFeatureUsage?.[featureKey]) || 0)
+      u.monthlyFeatureUsage = { ...(u.monthlyFeatureUsage || {}), [featureKey]: directUsage + 1 }
       const charge = { id: newId('c'), feature: featureKey, monthly: 0, permanent: 0, included: true, refunded: false, createdAt: Date.now() }
       u.creditCharges = [...(u.creditCharges || []), charge].slice(-120)
       save()

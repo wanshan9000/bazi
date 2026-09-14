@@ -88,7 +88,7 @@ test('非 Agent 模块按会员档位开放，积分不能绕过高阶模块限�
   assert.equal(canUseFeature(active('free'), 'bazi.full'), true)
   assert.equal(canUseFeature(active('free'), 'tarot.reading'), false)
   assert.equal(canUseFeature(active('earth'), 'tarot.single'), true)
-  assert.equal(canUseFeature(active('earth'), 'tarot.reading'), false)
+  assert.equal(canUseFeature(active('earth'), 'tarot.reading'), true)
   assert.equal(canUseFeature(active('earth'), 'qimen.reading'), false)
   assert.equal(canUseFeature(active('heaven'), 'ziwei.full'), true)
   assert.equal(canUseFeature(active('oracle'), 'fengshui.ai'), true)
@@ -96,10 +96,10 @@ test('非 Agent 模块按会员档位开放，积分不能绕过高阶模块限�
   assert.equal(canUseFeature({ plan: 'heaven', planExpiresAt: now - 1 }, 'ziwei.full'), false)
 })
 
-test('凡者的每月十次塔罗单牌解读不计入积分消费', () => {
-  const user = { plan: 'earth', planExpiresAt: Date.now() + 86400000, monthlyFeatureUsage: { 'tarot.single': 4 } }
-  assert.deepEqual(featureAllowanceStatus(user, 'tarot.single'), { limit: 10, used: 4, remaining: 6 })
-  assert.deepEqual(featureAllowanceStatus({ ...user, monthlyFeatureUsage: { 'tarot.single': 10 } }, 'tarot.single'), { limit: 10, used: 10, remaining: 0 })
+test('凡者全部牌阵共用每月二十次塔罗解读，旧单牌次数也会计入', () => {
+  const user = { plan: 'earth', planExpiresAt: Date.now() + 86400000, monthlyFeatureUsage: { 'tarot.single': 4, 'tarot.reading': 3 } }
+  assert.deepEqual(featureAllowanceStatus(user, 'tarot.reading'), { limit: 20, used: 7, remaining: 13 })
+  assert.deepEqual(featureAllowanceStatus({ ...user, monthlyFeatureUsage: { 'tarot.reading': 20 } }, 'tarot.reading'), { limit: 20, used: 20, remaining: 0 })
 })
 
 test('每日黄历提醒仅限凡者及以上的有效会员', () => {
