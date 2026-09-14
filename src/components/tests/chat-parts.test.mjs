@@ -226,6 +226,19 @@ test('结论与建议从盘面和依据条目中独立出来，盘面字段仍�
   }
 })
 
+test('无冒号的行动建议也从上一条依据中独立起行', () => {
+  const r = render(AiTextFixture, {
+    text: '- **变量在应期**：逢到相应年份易有大的转折，可提前布局，不必被动等。**行动建议**顺着“合”这条路走：多在人脉协作、资源整合类的事上发力。',
+  })
+  try {
+    assert.deepEqual(Array.from(r.container.querySelectorAll('.md-h')).map(el => el.textContent), ['行动建议'])
+    assert.equal(r.container.querySelector('.md-list').textContent.includes('行动建议'), false, '行动建议不能继续作为上一条列表文本的一部分')
+    assert.ok(r.container.querySelector('.md-h').nextElementSibling.textContent.includes('顺着“合”这条路走'))
+  } finally {
+    r.unmount()
+  }
+})
+
 test('未排盘的自然咨询把压缩资料清单与转折语恢复为易读段落', () => {
   const r = render(AiTextFixture, {
     text: '缘主，人际关系要落到你的命局上才断得准，不是泛泛而谈的“性格好相处”。不过眼下我还没拿到你的出生资料，无法为你排盘。请告诉我：- **出生年月日时**（公历还是农历请注明，时辰尽量精确到小时）- **性别**有了这两项，我先校盘、再专门就人际关系为你细断。若你想聊某个具体关系，也可以把事由说给我。',
