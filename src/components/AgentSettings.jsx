@@ -1,5 +1,8 @@
 import { useState } from 'react'
-import { PROVIDERS, providerDefaults, testLLM, saveConfig } from '../engine/llm.js'
+import {
+  PROVIDERS, providerDefaults, testLLM, saveConfig, createModelConnection,
+  loadModelConnections, saveModelConnections, defaultModelConnection, configWithDefaultConnection,
+} from '../engine/llm.js'
 import { allSkills, loadCustomSkills, BUILTIN_SKILLS } from '../data/skills.js'
 import { getEvolveStatus, runAutoEvolution, clearEvolveStore, clearSkillLogs } from '../engine/agentEvolve.js'
 
@@ -9,15 +12,68 @@ const IS_LEGACY_BACKEND = import.meta.env.VITE_AGENT_BACKEND === 'legacy'
 export default function AgentSettings({ cfg, onSave, onClose, inline }) {
   const [form, setForm] = useState(cfg)
   const [tab, setTab] = useState('model')
+  const [connections, setConnections] = useState(() => loadModelConnections(cfg))
+  const [selectedConnectionId, setSelectedConnectionId] = useState(() => defaultModelConnection(connections)?.id || '')
   // 技能池 = 内置 + 管理后台导入（mount 时读本地缓存；切回本 tab 会重新 mount，故为最新）
   const [customSkills] = useState(() => loadCustomSkills())
   const [testing, setTesting] = useState(false)
   const [testRes, setTestRes] = useState(null) // { ok, ms, preview } | { ok:false, msg }
   const [evolve, setEvolve] = useState(() => getEvolveStatus())
 
+  const selectedConnection = connections.find(connection => connection.id === selectedConnectionId) || null
+
+  const updateConnection = (patch) => {
+    if (!selectedConnection) return
+    setConnections(prev => prev.map(connection => connection.id === selectedConnection.id ? { ...connection, ...patch } : connection))
+  }
+
   const pickProvider = (key) => {
     const d = providerDefaults(key)
-    setForm(prev => ({ ...prev, provider: key, baseUrl: d.baseUrl, model: d.model }))
+    if (!selectedConnection) return
+    const oldPreset = PROVIDERS[selectedConnection.provider]?.name
+    updateConnection({
+      provider: key,
+      name: selectedConnection.name === oldPreset ? PROVIDERS[key]?.name || '自定义模型' : selectedConnection.name,
+      baseUrl: d.baseUrl,
+      model: d.model,
+    })
+  }
+
+  const addConnection = () => {
+    const connection = createModelConnection('deepseek', { isDefault: connections.length === 0 })
+    setConnections(prev => [...prev, connection])
+    setSelectedConnectionId(connection.id)
+    setTestRes(null)
+  }
+
+  const setDefaultConnection = (id) => {
+    setConnections(prev => prev.map(connection => ({ ...connection, isDefault: connection.id === id, enabled: connection.id === id ? true : connection.enabled })))
+    setSelectedConnectionId(id)
+    setTestRes(null)
+  }
+
+  const toggleConnection = (id) => {
+    setConnections(prev => {
+      const next = prev.map(connection => connection.id === id ? { ...connection, enabled: !connection.enabled } : connection)
+      // 停用当前默认项时，立即交给下一个可用项，避免列表显示的默认与实际运行项不一致。
+      const changed = next.find(connection => connection.id === id)
+      if (changed?.isDefault && !changed.enabled) {
+        const fallback = next.find(connection => connection.enabled)
+        if (fallback) return next.map(connection => ({ ...connection, isDefault: connection.id === fallback.id }))
+      }
+      return next
+    })
+    setTestRes(null)
+  }
+
+  const removeConnection = (id) => {
+    setConnections(prev => {
+      const next = prev.filter(connection => connection.id !== id)
+      const fallback = defaultModelConnection(next)
+      setSelectedConnectionId(fallback?.id || '')
+      return next
+    })
+    setTestRes(null)
   }
 
   const toggleSkill = (key) => {
@@ -41,7 +97,8 @@ export default function AgentSettings({ cfg, onSave, onClose, inline }) {
   }
 
   const doSave = () => {
-    const next = { ...form }
+    const savedConnections = saveModelConnections(connections)
+    const next = configWithDefaultConnection(form, savedConnections)
     saveConfig(next)
     onSave(next)
   }
@@ -50,7 +107,8 @@ export default function AgentSettings({ cfg, onSave, onClose, inline }) {
     setTesting(true)
     setTestRes(null)
     try {
-      const r = await testLLM(form)
+      if (!selectedConnection?.apiKey) throw new Error('请先填写当前模型的 API Key')
+      const r = await testLLM({ ...form, ...selectedConnection, useLLM: true })
       setTestRes({ ok: true, ...r })
     } catch (err) {
       setTestRes({ ok: false, msg: err.message })
@@ -117,12 +175,54 @@ export default function AgentSettings({ cfg, onSave, onClose, inline }) {
             {form.useLLM && (
               <>
                 <div className="as-field">
+                  <div className="as-connections-head">
+                    <div>
+                      <label className="as-label">模型连接</label>
+                      <p className="as-hint">可同时保存多个服务商或同服务商的不同模型；带星标的连接作为默认模型。</p>
+                    </div>
+                    <button type="button" className="as-add-connection" onClick={addConnection}>＋ 添加模型</button>
+                  </div>
+                  {connections.length ? (
+                    <div className="as-connection-list">
+                      {connections.map(connection => (
+                        <div key={connection.id} className={`as-connection ${selectedConnectionId === connection.id ? 'selected' : ''} ${connection.enabled ? 'enabled' : 'disabled'}`}>
+                          <button type="button" className="as-connection-select" onClick={() => { setSelectedConnectionId(connection.id); setTestRes(null) }}>
+                            <span className="as-connection-name">{connection.name}</span>
+                            <span className="as-connection-meta">{PROVIDERS[connection.provider]?.name || '自定义'} · {connection.model || '未设置模型'}</span>
+                          </button>
+                          <div className="as-connection-actions">
+                            {connection.isDefault && <span className="as-connection-default">默认</span>}
+                            <button type="button" className={`as-connection-icon ${connection.isDefault ? 'active' : ''}`} onClick={() => setDefaultConnection(connection.id)} title="设为默认模型" aria-label="设为默认模型">★</button>
+                            <button type="button" className={`as-connection-icon ${connection.enabled ? 'active' : ''}`} onClick={() => toggleConnection(connection.id)} title={connection.enabled ? '停用模型' : '启用模型'} aria-label={connection.enabled ? '停用模型' : '启用模型'}>{connection.enabled ? '●' : '○'}</button>
+                            <button type="button" className="as-connection-icon danger" onClick={() => removeConnection(connection.id)} title="移除模型" aria-label="移除模型">×</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="as-connection-empty">尚未绑定模型。添加模型后可分别填写和测试连接。</div>
+                  )}
+                </div>
+
+                {selectedConnection && <>
+                <div className="as-field">
+                  <label className="as-label">连接名称</label>
+                  <input
+                    className="as-input"
+                    type="text"
+                    placeholder="例如：DeepSeek 快速咨询"
+                    value={selectedConnection.name}
+                    onChange={e => updateConnection({ name: e.target.value })}
+                  />
+                </div>
+
+                <div className="as-field">
                   <label className="as-label">模型服务商</label>
                   <div className="as-provider-grid">
                     {Object.entries(PROVIDERS).map(([key, p]) => (
                       <div
                         key={key}
-                        className={`as-provider ${form.provider === key ? 'active' : ''}`}
+                        className={`as-provider ${selectedConnection.provider === key ? 'active' : ''}`}
                         onClick={() => pickProvider(key)}
                       >
                         <span className="as-provider-name">{p.name}</span>
@@ -138,8 +238,8 @@ export default function AgentSettings({ cfg, onSave, onClose, inline }) {
                     className="as-input"
                     type="password"
                     placeholder="sk-..."
-                    value={form.apiKey}
-                    onChange={e => setForm(prev => ({ ...prev, apiKey: e.target.value.trim() }))}
+                    value={selectedConnection.apiKey}
+                    onChange={e => updateConnection({ apiKey: e.target.value.trim() })}
                   />
                   <p className="as-hint">Key 仅保存在浏览器本地（localStorage），不会上传到我们的服务器。</p>
                 </div>
@@ -150,8 +250,8 @@ export default function AgentSettings({ cfg, onSave, onClose, inline }) {
                     className="as-input"
                     type="text"
                     placeholder="https://api.deepseek.com/v1"
-                    value={form.baseUrl}
-                    onChange={e => setForm(prev => ({ ...prev, baseUrl: e.target.value.trim() }))}
+                    value={selectedConnection.baseUrl}
+                    onChange={e => updateConnection({ baseUrl: e.target.value.trim() })}
                   />
                 </div>
 
@@ -161,14 +261,14 @@ export default function AgentSettings({ cfg, onSave, onClose, inline }) {
                     className="as-input"
                     type="text"
                     placeholder="deepseek-chat"
-                    value={form.model}
-                    onChange={e => setForm(prev => ({ ...prev, model: e.target.value.trim() }))}
+                    value={selectedConnection.model}
+                    onChange={e => updateConnection({ model: e.target.value.trim() })}
                   />
-                  <p className="as-hint">{PROVIDERS[form.provider]?.tip}</p>
+                  <p className="as-hint">{PROVIDERS[selectedConnection.provider]?.tip}</p>
                 </div>
 
                 <div className="as-actions">
-                  <button className="btn ghost small" onClick={doTest} disabled={testing || !form.apiKey}>
+                  <button className="btn ghost small" onClick={doTest} disabled={testing || !selectedConnection.apiKey}>
                     {testing ? '连接中…' : '测试连接'}
                   </button>
                   {testRes && (
@@ -177,6 +277,7 @@ export default function AgentSettings({ cfg, onSave, onClose, inline }) {
                     </div>
                   )}
                 </div>
+                </>}
               </>
             )}
 
