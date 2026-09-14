@@ -1863,7 +1863,16 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 700; }
 .md-block > * + * { margin-top: 10px; }
 .md-p { margin: 0; }
 .md-p strong { color: var(--cinnabar-deep); font-weight: 700; }
-.md-h { font-family: var(--serif); color: var(--cinnabar-deep); margin: 14px 0 6px; font-weight: 700; letter-spacing: 0.06em; }
+.md-h {
+  margin: 22px 0 7px;
+  color: var(--cinnabar-deep);
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.55;
+}
+.md-block > .md-h:first-child { margin-top: 0; }
 .md-h4 { font-size: 14px; }
 .md-h5 { font-size: 13px; }
 .md-h6 { font-size: 12.5px; }
@@ -1875,8 +1884,9 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 700; }
   background: linear-gradient(90deg, transparent, rgba(224, 92, 133, 0.28) 12%, rgba(120, 80, 100, 0.14) 88%, transparent);
 }
 .md-list { margin: 0; padding-left: 22px; }
-.md-list li { margin: 4px 0; line-height: 1.8; }
+.md-list li { margin: 5px 0; line-height: 1.8; }
 .md-list li::marker { color: var(--cinnabar); }
+.md-list strong { color: var(--cinnabar-deep); font-weight: 700; }
 
 /* 元气 Agent 的盲派 / 子平报告：把“标题 + 判断条目”收为命书卡，避免长文像一堵墙。 */
 .agent-report-section {
@@ -8575,6 +8585,117 @@ select option { background: var(--paper-light); color: var(--ink); }
 .as-input:focus { outline: none; border-color: var(--cinnabar); box-shadow: 0 0 0 3px rgba(224, 92, 133, 0.12); }
 .as-hint { font-size: 11.5px; color: var(--ink-faint); margin-top: 5px; line-height: 1.6; }
 
+/* 多模型连接：以紧凑的管理行承载状态与操作，方便在平板后台快速扫读。 */
+.as-connections-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.as-connections-head .as-label { margin-bottom: 0; }
+.as-connections-head .as-hint { margin: 4px 0 0; max-width: 340px; }
+.as-add-connection {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(224, 92, 133, 0.5);
+  border-radius: 8px;
+  background: rgba(224, 92, 133, 0.06);
+  color: var(--cinnabar-deep);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+.as-add-connection:hover { background: rgba(224, 92, 133, 0.13); border-color: var(--cinnabar); }
+.as-connection-list {
+  overflow: hidden;
+  border: 1px solid var(--ink-line);
+  border-radius: 10px;
+  background: var(--paper-light);
+}
+.as-connection {
+  display: flex;
+  align-items: center;
+  min-height: 54px;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--ink-line);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+.as-connection:last-child { border-bottom: none; }
+.as-connection.selected { border-left-color: var(--cinnabar); background: rgba(224, 92, 133, 0.06); }
+.as-connection.disabled { opacity: 0.55; }
+.as-connection-select {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 8px 9px 11px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.as-connection-name {
+  display: block;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.as-connection-meta {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--ink-faint);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.as-connection-actions { display: flex; align-items: center; gap: 2px; padding: 0 7px 0 3px; }
+.as-connection-default {
+  margin-right: 2px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(224, 92, 133, 0.1);
+  color: var(--cinnabar-deep);
+  font-size: 10px;
+  line-height: 1.25;
+}
+.as-connection-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  transition: color 0.18s ease, background 0.18s ease;
+}
+.as-connection-icon:hover { color: var(--cinnabar-deep); background: rgba(224, 92, 133, 0.1); }
+.as-connection-icon.active { color: var(--cinnabar-deep); }
+.as-connection-icon.danger:hover { color: #bc3c47; background: rgba(188, 60, 71, 0.1); }
+.as-connection-empty {
+  padding: 12px;
+  border: 1px dashed var(--ink-line);
+  border-radius: 10px;
+  color: var(--ink-faint);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
 .as-mode-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .as-mode {
   border: 1.5px solid var(--ink-line); border-radius: 14px;
@@ -8697,6 +8818,15 @@ select option { background: var(--paper-light); color: var(--ink); }
   .as-provider-grid { grid-template-columns: repeat(2, 1fr); }
   .as-mode-row { grid-template-columns: 1fr; }
   .agent-settings { max-width: 100%; }
+  .as-connections-head { align-items: flex-end; }
+  .as-connections-head .as-hint { max-width: none; }
+}
+
+@media (max-width: 420px) {
+  .as-connections-head { align-items: flex-start; flex-direction: column; gap: 7px; }
+  .as-add-connection { width: 100%; }
+  .as-connection-actions { gap: 0; padding-right: 4px; }
+  .as-connection-default { display: none; }
 }
 
 /* ============ 称骨论命 ============ */

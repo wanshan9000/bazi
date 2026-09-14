@@ -58,6 +58,7 @@ export const PROVIDERS = {
 }
 
 const LS_KEY = 'genki-agent-config'
+const MODEL_CONNECTIONS_KEY = 'genki-agent-model-connections-v1'
 
 export const DEFAULT_CONFIG = {
   provider: 'minimax',
@@ -93,6 +94,83 @@ export function saveConfig(cfg) {
       enabledSkills: normalizeEnabledSkillKeys(cfg?.enabledSkills),
     }))
   } catch { /* ignore */ }
+}
+
+function connectionId() {
+  return `model-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** 创建一条可独立管理的模型连接。密钥仅延续 legacy 本地模式，绝不发往本站服务端。 */
+export function createModelConnection(provider = 'deepseek', values = {}) {
+  const defaults = providerDefaults(provider)
+  const preset = PROVIDERS[provider] || PROVIDERS.custom
+  return {
+    id: String(values.id || connectionId()),
+    name: String(values.name || preset.name || '自定义模型').trim() || '自定义模型',
+    provider,
+    apiKey: String(values.apiKey || '').trim(),
+    baseUrl: String(values.baseUrl || defaults.baseUrl || '').trim(),
+    model: String(values.model || defaults.model || '').trim(),
+    enabled: values.enabled !== false,
+    isDefault: Boolean(values.isDefault),
+  }
+}
+
+function normalizeModelConnections(connections) {
+  const valid = Array.isArray(connections)
+    ? connections
+      .filter(item => item && typeof item === 'object')
+      .map(item => createModelConnection(
+        typeof item.provider === 'string' && Object.hasOwn(PROVIDERS, item.provider) ? item.provider : 'custom',
+        item,
+      ))
+    : []
+  if (!valid.length) return []
+  const defaultId = valid.find(item => item.isDefault && item.enabled)?.id
+    || valid.find(item => item.enabled)?.id
+    || valid[0].id
+  return valid.map(item => ({ ...item, isDefault: item.id === defaultId }))
+}
+
+/** 读取多模型连接；首次使用时自动把旧的单模型配置迁入连接列表。 */
+export function loadModelConnections(legacyConfig = loadConfig()) {
+  try {
+    const raw = localStorage.getItem(MODEL_CONNECTIONS_KEY)
+    if (raw) return normalizeModelConnections(JSON.parse(raw))
+  } catch { /* 忽略已损坏的本地连接列表 */ }
+  if (!legacyConfig?.apiKey || !legacyConfig?.baseUrl || !legacyConfig?.model) return []
+  return normalizeModelConnections([createModelConnection(legacyConfig.provider || 'custom', {
+    name: PROVIDERS[legacyConfig.provider]?.name || legacyConfig.model,
+    apiKey: legacyConfig.apiKey,
+    baseUrl: legacyConfig.baseUrl,
+    model: legacyConfig.model,
+    enabled: legacyConfig.useLLM,
+    isDefault: true,
+  })])
+}
+
+export function saveModelConnections(connections) {
+  const normalized = normalizeModelConnections(connections)
+  try { localStorage.setItem(MODEL_CONNECTIONS_KEY, JSON.stringify(normalized)) } catch { /* 存储不可用时不阻断页面 */ }
+  return normalized
+}
+
+export function defaultModelConnection(connections) {
+  return normalizeModelConnections(connections).find(item => item.isDefault) || null
+}
+
+/** legacy 聊天只读一组配置，将默认连接同步为其运行配置以保持兼容。 */
+export function configWithDefaultConnection(config, connections) {
+  const selected = defaultModelConnection(connections)
+  if (!selected) return { ...config, useLLM: false }
+  return {
+    ...config,
+    provider: selected.provider,
+    apiKey: selected.apiKey,
+    baseUrl: selected.baseUrl,
+    model: selected.model,
+    useLLM: Boolean(config?.useLLM && selected.enabled),
+  }
 }
 
 // 根据服务商选择更新 baseUrl/model（用户也可手动改）

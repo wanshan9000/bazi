@@ -136,3 +136,46 @@ test('盲派与子平报告在聊天气泡中使用统一文本版式，不再�
   assert.deepEqual(Array.from(r.container.querySelectorAll('.md-h')).map(el => el.textContent), ['盘面核对', '格局法'])
   r.unmount()
 })
+
+test('新版独占加粗短标题保留信息组层级，字段强调不误作标题', () => {
+  const r = render(AiTextFixture, {
+    text: '**整体判断**\n- 当前以稳住节奏为先。\n- **关键依据**：日主得根，先看执行与积累。\n\n**行动建议**\n- 本周先完成一件可交付的小事。',
+  })
+  try {
+    assert.deepEqual(
+      Array.from(r.container.querySelectorAll('.md-h')).map(el => el.textContent),
+      ['整体判断', '行动建议'],
+    )
+    assert.equal(r.container.querySelectorAll('.md-list').length, 2)
+    assert.equal(r.container.querySelector('.md-list strong').textContent, '关键依据')
+  } finally {
+    r.unmount()
+  }
+})
+
+test('模型残留的分隔符与 Markdown 标题不会泄漏到聊天正文', () => {
+  const r = render(AiTextFixture, { text: '---## 子平派分析\n- **月令**：戌月本气为戊土。' })
+  try {
+    assert.deepEqual(Array.from(r.container.querySelectorAll('.md-h')).map(el => el.textContent), ['子平派分析'])
+    assert.equal(r.text().includes('---##'), false)
+  } finally {
+    r.unmount()
+  }
+})
+
+test('网关压缩换行后仍恢复截图式的标题与条目排版', () => {
+  const r = render(AiTextFixture, {
+    text: '**盘面核对·出生口径：公历1975年10月13日6:30（卯时）·男**-**四柱**：乙卯丙戌壬辰癸卯-**日主**：壬水；生肖兔**盲派先看三处**-**原局地支**：卯、戌、辰、卯。**接下来怎么走**-若问近期，宜先守成。-建议：把重要的事用合作落地。',
+  })
+  try {
+    assert.deepEqual(
+      Array.from(r.container.querySelectorAll('.md-h')).map(el => el.textContent),
+      ['盲派先看三处', '接下来怎么走'],
+    )
+    assert.equal(r.container.querySelectorAll('.md-list').length, 3)
+    assert.equal(r.container.querySelector('.md-p').textContent, '盘面核对·出生口径：公历1975年10月13日6:30（卯时）·男')
+    assert.equal(r.text().includes('男-四柱'), false, '压缩的条目不能继续与标题粘连')
+  } finally {
+    r.unmount()
+  }
+})
