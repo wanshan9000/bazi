@@ -179,6 +179,12 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
   }, [])
 
   const patchLast = fn => setMessages(prev => prev.map((m, i) => i === prev.length - 1 && m.role === 'ai' && m.streaming ? fn(m) : m))
+  const patchToolStatus = (tools, name, status) => {
+    const index = [...tools].map(tool => typeof tool === 'string' ? tool : tool.name).lastIndexOf(name)
+    return tools.map((tool, i) => i === index
+      ? { name: typeof tool === 'string' ? tool : tool.name, status }
+      : typeof tool === 'string' ? { name: tool, status: 'pending' } : tool)
+  }
   const handleChatScroll = event => { followScrollRef.current = isNearScrollBottom(event.currentTarget) }
 
   const send = async (text) => {
@@ -211,11 +217,17 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
               if (user) refreshSession().then(u => { if (u) onUserChange && onUserChange(u) })
               break
             case 'progress': patchLast(m => appendSafeThinkStep(m, safeThinkStep(e.stage))); break
+            case 'heartbeat':
+              patchLast(m => ({
+                ...m,
+                heartbeat: { stage: e.stage, elapsedSeconds: e.elapsedSeconds, at: Date.now() },
+              }))
+              break
             case 'text': patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('answering')), text: m.text + e.delta })); break
             case 'reasoning': patchLast(m => appendSafeThinkStep(m, safeThinkStep('reasoning'))); break
-            case 'tool_call': patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('tool_call', e.name)), tools: [...m.tools, e.name] })); break
+            case 'tool_call': patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('tool_call', e.name)), tools: [...m.tools, { name: e.name, status: 'pending' }] })); break
             case 'tool_result':
-              patchLast(m => appendSafeThinkStep(m, safeThinkStep('tool_result', e.name)))
+              patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('tool_result', e.name)), tools: patchToolStatus(m.tools, e.name, e.ok === false ? 'failed' : 'complete') }))
               if (e.kind === 'report') {
                 // 报告卡片插在流式气泡之前
                 setMessages(prev => { const last = prev[prev.length - 1]; return [...prev.slice(0, -1), { id: `r-${Date.now()}`, role: 'ai', kind: 'report', report: { title: (e.text.match(/^# (.+)$/m) || [])[1] || '测算报告', markdown: e.text }, time: timeNow(), _counted: true }, last] })
@@ -477,8 +489,8 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
                 <ToolCallsBlock names={m.text} />
               ) : (
                 <div className={`bubble ${m.streaming ? 'bubble-streaming' : ''}`}>
-                  {m.reasoning ? <ThinkBlock content={m.reasoning} streaming={!!m.streaming} collapseWhenStreamingText={Boolean(m.text)} /> : null}
-                  {m.tools && m.tools.length > 0 ? <ToolCallsBlock names={m.tools.join('、')} /> : null}
+                  {m.reasoning ? <ThinkBlock content={m.reasoning} streaming={!!m.streaming} collapseWhenStreamingText={Boolean(m.text)} heartbeat={m.heartbeat} /> : null}
+                  {m.tools && m.tools.length > 0 ? <ToolCallsBlock tools={m.tools} streaming={!!m.streaming} heartbeat={m.heartbeat} /> : null}
                   {m.streaming && !m.text ? (
                     <span className="typing"><i /><i /><i /></span>
                   ) : (

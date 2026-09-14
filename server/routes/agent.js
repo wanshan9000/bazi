@@ -104,17 +104,25 @@ function chartFromBirthText(text) {
   return normalizeChart({ year: date[1], month: date[2], day: date[3], hour, gender: gender[1] })
 }
 
+function wantsZipingSchool(text) {
+  return /(?:子平(?:派|报告|分析|详批|命书|命理)|按\s*子平|子平(?:法|取法|格局|用神)|易学[\s·・-]*泰山)/i.test(String(text || ''))
+}
+
+function baziSchool(text) {
+  return wantsZipingSchool(text) ? 'ziping' : 'mangpai'
+}
+
 function baziSkillInvocation(text) {
   const source = String(text || '')
   const wantsBothSchools = /(?:两派|双派|子平[\s、，,和与及]*盲派|盲派[\s、，,和与及]*子平|对比|综合)/i.test(source)
-  const wantsZiping = /(?:子平派|按\s*子平|子平(?:法|取法|格局|用神)|易学[\s·・-]*泰山)/i.test(source)
+  const wantsZiping = wantsZipingSchool(source)
   // 八字问题的流派边界本身也是 Skill 的职责。不能因为服务端能猜到默认流派，
   // 就跳过 router 后让模型自由补全大运、术语或推法。
   if (wantsBothSchools) return '/bazi-router /mangpai /yixue-taishan'
   return wantsZiping ? '/bazi-router /yixue-taishan' : '/bazi-router /mangpai'
 }
 
-const BAZI_TERMS = /(?:八字|命盘|四柱|大运|流年|流月|三合|三会|自刑|刑冲|合局|日主|十神|喜用神|格局)/
+const BAZI_TERMS = /(?:八字|命盘|四柱|大运|流年|流月|三合|三会|自刑|刑冲|合局|日主|十神|喜用神|格局|子平|盲派|易学[\s·・-]*泰山)/
 const ZIWEI_TERMS = /(?:紫微|斗数|命宫|十二宫|星曜|四化|大限)/
 const QIMEN_TERMS = /(?:奇门|遁甲|九宫|八门|值符|值使|起局)/
 const HUANGLI_TERMS = /(?:黄历|宜忌|择日|吉日|建除|冲煞)/
@@ -157,7 +165,7 @@ function strictToolRequirement(text, { currentChart = null, suppliedChart = null
   const source = String(text || '')
   const knownBirth = hasCompleteBirth(suppliedChart) || hasCompleteBirth(currentChart)
   if ((BAZI_TERMS.test(source) || (knownBirth && PERSONAL_FORECAST_TERMS.test(source))) && knownBirth) {
-    return { tool: 'bazi', label: '八字排盘', skill: baziSkillInvocation(source) }
+    return { tool: 'bazi', label: '八字排盘', skill: baziSkillInvocation(source), school: baziSchool(source) }
   }
   if (ZIWEI_TERMS.test(source) && knownBirth) return { tool: 'ziwei', label: '紫微命盘', skill: '/ziwei' }
   if (CHENGGU_TERMS.test(source) && knownBirth) return { tool: 'chenggu', label: '称骨结果', skill: '/chenggu' }
@@ -174,7 +182,7 @@ function strictToolRequirement(text, { currentChart = null, suppliedChart = null
 function strictToolInstruction(requirement, chart = null) {
   if (!requirement) return ''
   const baziArgs = requirement.tool === 'bazi' && hasCompleteBirth(chart)
-    ? `本会话已核验生辰，调用时必须使用：\`{"year":${chart.year},"month":${chart.month},"day":${chart.day},"hour":${chart.hour},"gender":"${chart.gender}","calendar":"solar","school":"mangpai","detail":"full"}\`。`
+    ? `本会话已核验生辰，调用时必须使用：\`{"year":${chart.year},"month":${chart.month},"day":${chart.day},"hour":${chart.hour},"gender":"${chart.gender}","calendar":"solar","school":"${requirement.school || 'mangpai'}","detail":"full"}\`。`
     : ''
   return `【强制测算规约·不可跳过】本轮涉及 ${requirement.label}。已加载对应 Skill，必须成功调用 \`${requirement.tool}\` 工具并只依据其返回结果作答。${baziArgs} 工具未返回、参数不足或执行失败时，只能说明“本次未完成核验”，并补充所缺信息；禁止凭记忆、常识或语言模型推算任何盘面、年份、干支、宫位、牌面或结论。`
 }
@@ -329,7 +337,7 @@ function stableSessionFacts(userTurns) {
 }
 
 function baziCalibrationInstruction(text) {
-  return `${baziSkillInvocation(text)}\n\n【排盘校验任务】用户首次提供或更新了完整出生年月日时与性别。必须先调用 \`bazi\` 工具（默认盲派；只有用户明确要求子平派时才传 \`school: "ziping"\`）重排，不得凭记忆写四柱或大运。收到工具结果后，先列出生口径、四柱、起运日期/年龄与当前大运，请用户核对；如资料或结果有出入，以用户确认资料重排。同一轮继续回答用户这次的具体问题，只展开与问题相关的内容，不要求用户先另发确认，也不要扩写未被询问的完整报告。后续追问不重复排盘，除非出生资料变化或用户质疑四柱/大运。后续如要断三合、三会、自刑或刑冲合害，必须重调 \`bazi\`，或逐字引用会话中已有的工具原始事实；不能凭印象补全。不得向缘主描述、评价、道歉或询问是否重走任何 Skill、工具或内部执行流程，只直接交付盘面核对与问题回答。\n\n【用户原始问题】\n${text}`
+  return `${baziSkillInvocation(text)}\n\n【排盘校验任务】用户首次提供或更新了完整出生年月日时与性别。必须先调用 \`bazi\` 工具（默认盲派；明确要求子平，包括“子平报告”时传 \`school: "ziping"\`）重排，不得凭记忆写四柱或大运。收到工具结果后，先列出生口径、四柱、起运日期/年龄与当前大运，请用户核对；如资料或结果有出入，以用户确认资料重排。同一轮继续回答用户这次的具体问题，只展开与问题相关的内容，不要求用户先另发确认，也不要扩写未被询问的完整报告。后续追问不重复排盘，除非出生资料变化或用户质疑四柱/大运。后续如要断三合、三会、自刑或刑冲合害，必须重调 \`bazi\`，或逐字引用会话中已有的工具原始事实；不能凭印象补全。不得向缘主描述、评价、道歉或询问是否重走任何 Skill、工具或内部执行流程，只直接交付盘面核对与问题回答。\n\n【用户原始问题】\n${text}`
 }
 
 // 原始 reasoning 是模型的内部推演，不是面向缘主的解释；其中可能出现 Skill、工具或
@@ -752,9 +760,14 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
     res.setHeader('X-Accel-Buffering', 'no') // nginx 默认会缓冲代理响应，那样流式回复会攒成一坨才到前端
     res.flushHeaders()
     const send = e => { if (!res.writableEnded) res.write(`data: ${JSON.stringify(e)}\n\n`) }
-    // 心跳：注释帧（前端解析器只认 data: 行，会忽略它），用来在模型长时间
-    // 思考、一个字都没吐时保住中间代理和移动网络的连接。
-    const beat = setInterval(() => { if (!res.writableEnded) res.write(': ping\n\n') }, 15000)
+    const responseStartedAt = Date.now()
+    let liveStage = 'engine'
+    // 这是公开、无敏感信息的状态心跳：既保住移动网络与中间代理，也让前端能确认
+    // 本轮仍在运行。不能发送模型原始推理、Skill 名称或工具参数。
+    const beat = setInterval(() => send({
+      type: 'heartbeat', stage: liveStage,
+      elapsedSeconds: Math.max(1, Math.ceil((Date.now() - responseStartedAt) / 1000)),
+    }), 8000)
     const ac = new AbortController()
     // 流式过程中累积的正文：客户端中途断开时 pool.run 会以 abort 抛出，
     // result.finalText 拿不到，此前那一轮的 AI 回复就完全没进镜像 ——
@@ -793,6 +806,7 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
         routeKey: session.route, sessionId: session.id, text: prompt, signal: ac.signal,
         onEvent: e => {
           if (e.type === 'text' && e.delta) {
+            liveStage = 'answering'
             const safeDelta = publicTextFilter.push(e.delta)
             if (safeDelta) {
               streamed += safeDelta
@@ -809,6 +823,7 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
             return
           }
           if (e.type === 'reasoning') {
+            liveStage = 'reasoning'
             if (!sentReasoningProgress) {
               sentReasoningProgress = true
               send({ type: 'reasoning', delta: USER_FACING_REASONING })
@@ -816,12 +831,14 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
             return
           }
           if (e.type === 'tool_call') {
+            liveStage = 'tool'
             tools.push(TOOL_NAME_CN[e.name] || e.name)
             if (e.name === 'bazi') baziToolChart = normalizeChart(e.args)
           }
           // e.ok === false 表示工具执行失败，e.text 是错误信息而不是报告正文。
           // 此前不看 ok，把「排盘失败：出生信息无效」也当成一张测算报告卡片持久化。
           if (e.type === 'tool_result' && e.ok !== false && e.name === strictRequirement?.tool) verifiedTools.add(e.name)
+          if (e.type === 'tool_result') liveStage = 'synthesis'
           if (e.type === 'tool_result' && e.name === 'bazi' && e.ok !== false && baziToolChart) inferredChart = baziToolChart
           if (e.type === 'tool_result' && e.kind === 'report' && e.ok !== false) { producedOutput = true; producedReport = true; store.appendMessage(req.uid, session.id, { role: 'ai', kind: 'report', name: e.name, text: e.text, time: timeNow() }) }
           if (e.type === 'title' && session.title.length <= 14) store.updateSession(req.uid, session.id, { title: e.title })

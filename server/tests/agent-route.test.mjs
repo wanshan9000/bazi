@@ -690,7 +690,7 @@ test('长会话仍保留已确认婚姻事实，并向八字工具提供已核�
   } finally { srv.close() }
 })
 
-test('完整生辰且明确指定子平时，服务端注入子平 Skill 而不走默认盲派', async () => {
+test('完整生辰且明确指定子平或点击子平报告时，服务端注入子平 Skill 并传 ziping 排盘参数', async () => {
   const captured = []
   const pool = {
     isBusy: () => false,
@@ -707,11 +707,12 @@ test('完整生辰且明确指定子平时，服务端注入子平 Skill 而不�
     await fetch(`${base}/api/agent/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...bearer(me.token) },
-      body: JSON.stringify({ text: '1990年5月6日早上8点，男，请按子平派看今年工作。' }),
+      body: JSON.stringify({ text: '1990年5月6日早上8点，男，子平报告。' }),
     })
 
     assert.match(captured[0], /^\/bazi-router \/yixue-taishan\b/)
     assert.doesNotMatch(captured[0], /^\/mangpai\b/)
+    assert.match(captured[0], /"school":"ziping"/)
   } finally { srv.close() }
 })
 

@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { render, flush } from '../../test/render.mjs'
 
-const { ThinkBlock, isNearScrollBottom, renderAiText } = await import('../agent/ChatParts.jsx')
+const { ThinkBlock, ToolCallsBlock, isNearScrollBottom, renderAiText } = await import('../agent/ChatParts.jsx')
 
 function AiTextFixture({ text, streaming = false, suppressThinkBlocks = false }) {
   return renderAiText(text, streaming, { suppressThinkBlocks })
@@ -54,6 +54,34 @@ test('正文开始流式出现时，思考条立即收起但仍可手动展开',
 
     r.click(r.$('.think-toggle'))
     assert.ok(r.$('.think-body'), '用户仍可主动展开查看思考状态')
+  } finally {
+    r.unmount()
+  }
+})
+
+test('工具调用在正文生成期间明确显示仍在处理，结束后才标记完成', async () => {
+  const r = render(ToolCallsBlock, {
+    tools: [{ name: 'bazi', status: 'pending' }, { name: 'report', status: 'pending' }],
+    streaming: true,
+    heartbeat: { stage: 'tool', at: Date.now() },
+  })
+  try {
+    assert.ok(r.$('.tool-streaming'), '流式期间工具条应使用进行中状态')
+    assert.ok(r.text().includes('正在核验 2 / 2 项资料'))
+    assert.ok(r.text().includes('连接正常'))
+    assert.equal(r.$('.tool-status').getAttribute('aria-label'), '仍在生成回复')
+
+    r.rerender({ tools: [{ name: 'bazi', status: 'complete' }, { name: 'report', status: 'complete' }], streaming: false })
+    await flush()
+    assert.equal(r.$('.tool-streaming'), null, '结束后才退出进行中状态')
+    assert.ok(r.text().includes('已调用 2 个工具'))
+    r.click(r.$('.tool-toggle'))
+    assert.equal(r.container.querySelectorAll('.tool-item-state.is-complete').length, 2)
+    assert.equal(r.$('.tool-status').getAttribute('aria-label'), '调用完成')
+
+    r.rerender({ tools: [{ name: 'bazi', status: 'failed' }], streaming: true, heartbeat: { stage: 'synthesis', at: Date.now() } })
+    assert.ok(r.text().includes('有 1 项资料未完成核验'), '失败工具不应被概括为已核验')
+    assert.equal(r.container.querySelectorAll('.tool-item-state.is-failed').length, 1)
   } finally {
     r.unmount()
   }

@@ -51,7 +51,7 @@ export function CopyButton({ text, title = '复制结果' }) {
 
 // ── AI 解读进度：回复中的 <think>…</think> 默认收起为一行（点击展开看阶段记录） ────
 // 还没有正文时可暂时展开显示进度；正文一开始流式出现就立刻收起，把首屏留给答案。
-export function ThinkBlock({ content, streaming = false, collapseWhenStreamingText = false }) {
+export function ThinkBlock({ content, streaming = false, collapseWhenStreamingText = false, heartbeat = null }) {
   // 流式中默认展开；开始出正文或结束时收起，让结论成为视觉焦点。
   const [open, setOpen] = useState(streaming)
   const [elapsed, setElapsed] = useState(0)
@@ -81,7 +81,9 @@ export function ThinkBlock({ content, streaming = false, collapseWhenStreamingTe
   useLayoutEffect(() => {
     if (collapseWhenStreamingText) setOpen(false)
   }, [collapseWhenStreamingText])
-  const label = streaming ? `解读中 · ${Math.max(1, elapsed)} 秒` : elapsed ? `解读完成 · ${elapsed} 秒` : '解读进度'
+  const label = streaming
+    ? `${heartbeat ? '连接正常 · ' : ''}解读中 · ${Math.max(1, elapsed)} 秒`
+    : elapsed ? `解读完成 · ${elapsed} 秒` : '解读进度'
   const steps = String(content || '').split('\n').map(item => item.trim()).filter(Boolean)
   return (
     <div className={`think-block ${open ? 'open' : ''} ${streaming ? 'think-streaming' : ''}`}>
@@ -126,24 +128,65 @@ export const TOOL_NAME_CN = {
 }
 
 // 工具调用：可折叠块，列出本次会话实际触发的工具（中文名 + 数量）
-export function ToolCallsBlock({ names }) {
+export function ToolCallsBlock({ names, tools, streaming = false, heartbeat = null }) {
   const [open, setOpen] = useState(false)
-  const list = String(names || '').split(/[、,，\s]+/).filter(Boolean)
+  const [elapsed, setElapsed] = useState(0)
+  const startedAtRef = useRef(streaming ? Date.now() : null)
+  const wasStreamingRef = useRef(streaming)
+  useEffect(() => {
+    if (!streaming) {
+      if (startedAtRef.current && wasStreamingRef.current) {
+        setElapsed(Math.max(1, Math.ceil((Date.now() - startedAtRef.current) / 1000)))
+      }
+      wasStreamingRef.current = false
+      return undefined
+    }
+    if (!startedAtRef.current) startedAtRef.current = Date.now()
+    wasStreamingRef.current = true
+    const updateElapsed = () => setElapsed(Math.max(1, Math.ceil((Date.now() - startedAtRef.current) / 1000)))
+    updateElapsed()
+    const timer = setInterval(updateElapsed, 1000)
+    return () => clearInterval(timer)
+  }, [streaming])
+  const list = Array.isArray(tools) && tools.length
+    ? tools.map(tool => typeof tool === 'string' ? { name: tool, status: 'complete' } : { name: tool.name, status: tool.status || 'pending' })
+    : String(names || '').split(/[、,，\s]+/).filter(Boolean).map(name => ({ name, status: 'complete' }))
   if (!list.length) return null
+  const count = list.length
+  const pendingCount = list.filter(tool => tool.status === 'pending').length
+  const failedCount = list.filter(tool => tool.status === 'failed').length
+  const phaseCopy = {
+    engine: '正在接入解读引擎',
+    reasoning: '正在梳理问题要点',
+    tool: '正在核验测算资料',
+    synthesis: '资料已核验，正在生成结论',
+    answering: '正在输出答案',
+    failed: '部分资料未完成核验',
+  }
+  const phase = failedCount ? 'failed' : heartbeat?.stage || (pendingCount ? 'tool' : 'synthesis')
+  const liveLabel = failedCount
+    ? `${heartbeat ? '连接正常，' : ''}${phaseCopy.failed} · 已耗时 ${Math.max(1, elapsed)} 秒`
+    : elapsed >= 18
+    ? `${heartbeat ? '连接正常，' : ''}仍在生成结论 · 已耗时 ${Math.max(1, elapsed)} 秒`
+    : `${heartbeat ? '连接正常，' : ''}${phaseCopy[phase]} · 已耗时 ${Math.max(1, elapsed)} 秒`
   return (
-    <div className={`tool-block ${open ? 'open' : ''}`}>
+    <div className={`tool-block ${open ? 'open' : ''} ${streaming ? 'tool-streaming' : ''}`}>
       <button className="tool-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="tool-arrow" aria-hidden="true">›</span>
         <span className="tool-icon" aria-hidden="true">⚒</span>
-        <span className="tool-label">调用了 {list.length} 个工具</span>
-        <span className="tool-status" aria-label="调用完成" />
+        <span className="tool-label-group">
+          <span className="tool-label">{streaming ? (pendingCount ? `正在核验 ${pendingCount} / ${count} 项资料` : failedCount ? `有 ${failedCount} 项资料未完成核验` : '资料已核验，正在整理结论') : `已调用 ${count} 个工具`}</span>
+          {streaming && <span className="tool-live-note">{liveLabel}</span>}
+        </span>
+        <span className={`tool-status ${streaming ? 'is-live' : ''}`} aria-label={streaming ? '仍在生成回复' : '调用完成'} />
       </button>
       {open && (
         <div className="tool-body">
-          {list.map((n, i) => (
+          {list.map((tool, i) => (
             <div className="tool-item" key={`t${i}`}>
-              <span className="tool-item-dot" />
-              <span className="tool-item-name">{TOOL_NAME_CN[n] || n}</span>
+              <span className={`tool-item-dot ${tool.status === 'complete' ? 'is-complete' : tool.status === 'failed' ? 'is-failed' : 'is-pending'}`} />
+              <span className="tool-item-name">{TOOL_NAME_CN[tool.name] || tool.name}</span>
+              <span className={`tool-item-state ${tool.status === 'complete' ? 'is-complete' : tool.status === 'failed' ? 'is-failed' : 'is-pending'}`}>{tool.status === 'complete' ? '已核验' : tool.status === 'failed' ? '未完成' : '处理中'}</span>
             </div>
           ))}
         </div>

@@ -125,7 +125,7 @@ test('塔罗：扣费失败时不调用 onStart（不进抽牌页）', async () 
   r.click(go)
   await flush(6)
 
-  assert.deepEqual(consumed, ['tarot.single'])
+  assert.deepEqual(consumed, ['tarot.reading'])
   assert.equal(started, null, '扣不动积分就不该进抽牌页 —— 忘了 await 时正是这里失效')
   r.unmount()
 })
