@@ -50,8 +50,39 @@ function splitTableRows(line, width) {
 }
 
 function headingOf(line) {
-  const m = /^(#{1,3})\s*(\S(?:.*\S)?)\s*$/.exec(String(line || '').trim())
+  // 兼容模型偶发写出的 `---## 标题`：分隔符不是面向用户的内容，
+  // 去掉后仍按标题呈现，避免把 Markdown 残留直接显示在聊天里。
+  const source = String(line || '').trim().replace(/^(?:[-—─]{3,}\s*)+(?=#{1,3}\s*\S)/, '')
+  const m = /^(#{1,3})\s*(\S(?:.*\S)?)\s*$/.exec(source)
   return m ? { level: m[1].length, text: m[2] } : null
+}
+
+// Agent 的统一文案规范使用独占一行的 **短标题**，而不是 # 标题。
+// 将这类短标题交给同一套标题样式，保留 **字段**：内容 的行内强调语义。
+function boldHeadingOf(line) {
+  const m = /^\*\*([^*\n]{1,24})\*\*$/.exec(String(line || '').trim())
+  if (!m) return null
+  const text = m[1].trim()
+  if (!text || /[：:。！？!?]$/.test(text)) return null
+  return { level: 3, text }
+}
+
+// 某些流式网关会把模型 Markdown 的换行压成空串。此时原本的
+// `**标题**\n- **字段**：内容` 会变成一整段，浏览器无法恢复列表层级。
+// 只在明显存在“加粗标题 + 紧随短横”的压缩形态时修复，不触碰普通自然段。
+function restoreCollapsedAgentLayout(text) {
+  let source = String(text || '').replace(/\r\n?/g, '\n')
+  if (source.includes('\n') || !/\*\*[^*\n]+\*\*-/.test(source)) return source
+
+  // 紧接在上一段结尾的无冒号短加粗词，是下一组的独占标题。
+  source = source.replace(/([^\n])(\*\*[^*：:\n]{1,24}\*\*)(?=-)/g, '$1\n\n$2')
+  // 每个独占标题之后先断行；随后将 `-**字段**：` 恢复为标准列表项。
+  source = source.replace(/(\*\*[^*\n]{1,160}\*\*)(?=-)/g, '$1\n')
+  source = source.replace(/-(?=\*\*[^*\n]{1,24}\*\*[：:])/g, '\n- ')
+  // 无加粗字段的建议条目同样经常被压在上一个句号后。
+  source = source.replace(/([。；！？])-(?=[\u4e00-\u9fff])/g, '$1\n- ')
+  source = source.replace(/(^|\n)-(?=[^\s])/g, '$1- ')
+  return source
 }
 
 /**
@@ -61,7 +92,7 @@ function headingOf(line) {
  *   type: 'table' | 'list' | 'p' | 'h' | 'hr' | 'blank'
  */
 export function parseMarkdown(text) {
-  const lines = String(text || '').split('\n')
+  const lines = restoreCollapsedAgentLayout(text).split('\n')
   const blocks = []
   let i = 0
   while (i < lines.length) {
@@ -136,6 +167,15 @@ export function parseMarkdown(text) {
       continue
     }
 
+    // 新版 Agent 回复以 **短标题** 建立信息组。若当作普通段落处理，
+    // 标题和其后的要点会挤在同一个文本块内，阅读层级会丢失。
+    const boldHeading = boldHeadingOf(trimmed)
+    if (boldHeading) {
+      blocks.push({ type: 'h', ...boldHeading })
+      i += 1
+      continue
+    }
+
     // 段落：合并连续非空行
     const paraLines = []
     while (i < lines.length) {
@@ -145,6 +185,7 @@ export function parseMarkdown(text) {
       if (ts.includes('|') && i + 1 < lines.length && isTableSep(lines[i + 1])) break
       if (/^[-*•]\s+/.test(ts)) break
       if (headingOf(ts)) break
+      if (boldHeadingOf(ts)) break
       paraLines.push(t)
       i += 1
     }
