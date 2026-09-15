@@ -9,10 +9,10 @@ const LOGIN_COPY = {
   en: { back: 'Back', backHome: 'Back to home', wish: 'Keep your', wishEm: 'curiosity close', wishCopy: 'After you sign in, your charts, reports, and conversations stay safely in one place.', wishNote: 'Create an account to begin your own exploration', gift: '20 credits on sign-up', point: 'credits', credit: '1 credit = 19,000 Tokens. Genki Agent charges by actual use; credits do not expire.', benefits: ['Save charts', 'Sync reports', 'Ask Genki AI'], title: 'Welcome back', subtitle: 'Save your chart journey and unlock member benefits', methods: ['QR sign in', 'SMS sign in', 'Account sign in'], account: 'Account', accountInput: 'Enter your account', password: 'Password', passwordInput: 'Enter your password', login: 'Sign in', loggingIn: 'Signing in…', phone: 'Phone number', phoneInput: 'Enter an 11-digit phone number', code: 'Verification code', codeInput: '6-digit code', send: 'Send code', smsLogin: 'Sign in by SMS', qrTip: 'Use WeChat to scan and confirm. No password needed.', qrOpen: 'Open QR sign-in', noAccount: 'New here?', register: 'Create account', legal: 'By signing in, you agree to the Terms of Service and Privacy Policy.', hide: 'Hide password', show: 'Show password', failed: 'Sign-in failed. Please try again.', smsSent: 'Code sent. Please check your messages.' },
 }
 
-export default function LoginPage({ onBack, onSwitch, onSuccess }) {
+export default function LoginPage({ onBack, onSwitch, onForgotPassword, onSuccess }) {
   const { locale } = useLocale()
   const copy = LOGIN_COPY[locale] || LOGIN_COPY['zh-CN']
-  const [method, setMethod] = useState('sms')
+  const [method, setMethod] = useState('account')
   const [account, setAccount] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -110,14 +110,16 @@ export default function LoginPage({ onBack, onSwitch, onSuccess }) {
             <button className={`auth-method ${method === 'sms' ? 'active' : ''}`} onClick={() => { setMethod('sms'); setErr('') }} role="tab" aria-selected={method === 'sms'}>{copy.methods[1]}</button>
             <button className={`auth-method ${method === 'account' ? 'active' : ''}`} onClick={() => { setMethod('account'); setErr('') }} role="tab" aria-selected={method === 'account'}>{copy.methods[2]}</button>
           </div>
+          {method === 'sms' && <p className="auth-dev-note">手机短信登录正在接入，暂请使用账号登录。</p>}
+          {method === 'wechat' && <p className="auth-dev-note">微信扫码登录正在接入，暂请使用账号登录。</p>}
 
           {method === 'account' && <form className="auth-form" onSubmit={handleSubmit} noValidate>
             <div className="auth-field">
-              <label htmlFor="login-account">{copy.account}</label>
+              <label htmlFor="login-account">{locale === 'en' ? 'Username or email' : '用户名 / 邮箱'}</label>
               <input
                 id="login-account"
                 type="text"
-                placeholder={copy.accountInput}
+                placeholder={locale === 'en' ? 'Enter username or email' : '请输入用户名或邮箱'}
                 value={account}
                 autoComplete="username"
                 onChange={e => setAccount(e.target.value)}
@@ -135,6 +137,10 @@ export default function LoginPage({ onBack, onSwitch, onSuccess }) {
 
             {err && <p className="auth-err">{err}</p>}
 
+            <div className="auth-forgot-row">
+              <button type="button" className="auth-forgot" onClick={onForgotPassword}>{locale === 'en' ? 'Forgot password?' : '忘记密码？'}</button>
+            </div>
+
             <button type="submit" className="auth-btn" disabled={loading}>
               {loading ? copy.loggingIn : copy.login}
             </button>
@@ -143,25 +149,25 @@ export default function LoginPage({ onBack, onSwitch, onSuccess }) {
           {method === 'sms' && <form className="auth-form" onSubmit={handleSmsLogin} noValidate>
             <div className="auth-field">
               <label htmlFor="login-phone">{copy.phone}</label>
-              <input id="login-phone" type="tel" inputMode="numeric" placeholder={copy.phoneInput} value={phone} autoComplete="tel" onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} />
+              <input id="login-phone" type="tel" inputMode="numeric" placeholder={copy.phoneInput} value={phone} autoComplete="tel" disabled onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} />
             </div>
             <div className="auth-field">
               <label htmlFor="login-code">{copy.code}</label>
               <div className="auth-code-wrap">
-                <input id="login-code" inputMode="numeric" placeholder={copy.codeInput} value={code} autoComplete="one-time-code" onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
-                <button type="button" className="auth-code-send" onClick={handleSendCode} disabled={loading || phone.length !== 11}>{copy.send}</button>
+                <input id="login-code" inputMode="numeric" placeholder={copy.codeInput} value={code} autoComplete="one-time-code" disabled onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+                <button type="button" className="auth-code-send" onClick={handleSendCode} disabled>{copy.send}</button>
               </div>
             </div>
             {smsNote && <p className="auth-dev-note">{smsNote}</p>}
             {err && <p className="auth-err">{err}</p>}
-            <button type="submit" className="auth-btn" disabled={loading}>{loading ? copy.loggingIn : copy.smsLogin}</button>
+            <button type="submit" className="auth-btn" disabled>{copy.smsLogin}</button>
           </form>}
 
           {method === 'wechat' && <div className="auth-wechat">
             <div className="auth-qr-box" aria-hidden="true"><span className="auth-qr-grid" /><span className="auth-qr-logo">微</span></div>
             <p className="auth-wechat-tip">{copy.qrTip}</p>
             {err && <p className="auth-err">{err}</p>}
-            <button className="auth-btn" onClick={handleWechatLogin} disabled={loading}>{loading ? copy.loggingIn : copy.qrOpen}</button>
+            <button className="auth-btn" onClick={handleWechatLogin} disabled>{copy.qrOpen}</button>
           </div>}
 
           <p className="auth-switch">

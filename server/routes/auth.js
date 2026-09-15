@@ -5,14 +5,16 @@
 // 签发的 JWT，把额度换成服务端扣减。
 import { Router } from 'express'
 import crypto from 'node:crypto'
-import { config, resolveJwtSecret, smsConfigured, wechatConfigured } from '../config.js'
+import { config, resolveJwtSecret, smsConfigured, wechatConfigured, emailConfigured } from '../config.js'
 import { sharedAccounts } from '../accounts.js'
 import { signJwt, verifyJwt } from '../jwt.js'
 import { exchangeCode } from '../wechat.js'
 import { createWindowLimiter } from '../rateLimit.js'
 import { sendVerifySms } from '../sms.js'
+import { sendPasswordResetEmail } from '../mail.js'
 
 const ACCOUNT_RE = /^[a-zA-Z0-9._-]{3,24}$/
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 const PHONE_RE = /^1\d{10}$/
 const MAX_PWD = 128 // scrypt 对超长输入照算不误，但没必要给人塞 1MB 口令的机会
 
@@ -76,6 +78,7 @@ export function requireAuth(accounts) {
     if (!id || !id.authed) return res.status(401).json({ ok: false, msg: '请先登录' })
     const user = accounts.get(id.uid)
     if (!user) return res.status(401).json({ ok: false, msg: '登录已失效，请重新登录' })
+    if (Number(id.token?.pv || 0) !== Number(user.passwordVersion || 0)) return res.status(401).json({ ok: false, msg: '密码已更新，请重新登录' })
     if (!accounts.isActive(user)) return res.status(403).json({ ok: false, msg: '该账号已被限制，请联系管理员' })
     req.uid = user.id
     req.account = user
@@ -83,7 +86,7 @@ export function requireAuth(accounts) {
   }
 }
 
-export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = null } = {}) {
+export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = null, mailer = sendPasswordResetEmail } = {}) {
   const r = Router()
   const limiter = createLimiter({
     windowMs: config.auth.loginWindowMin * 60000,
@@ -96,7 +99,10 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
   const sensitiveLimiter = createWindowLimiter({ windowMs: 15 * 60000, max: 8 })
   const smsSendLimiter = createWindowLimiter({ windowMs: 60 * 60000, max: config.security.smsIpPerHour })
   const smsVerifyLimiter = createWindowLimiter({ windowMs: 60 * 60000, max: config.security.smsVerifyIpPerHour })
+  const resetSendLimiter = createWindowLimiter({ windowMs: 60 * 60000, max: config.email.resetIpPerHour })
+  const resetVerifyLimiter = createWindowLimiter({ windowMs: 60 * 60000, max: config.email.resetVerifyIpPerHour })
   const smsCodes = new Map()
+  const resetCodes = new Map()
   const ttlSec = config.auth.tokenTtlDays * 86400
 
   function smsKey(phone, purpose) { return `${phone}:${purpose}` }
@@ -121,8 +127,37 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
     return { ok: true }
   }
 
+  function resetKey(email) { return String(email || '').trim().toLowerCase() }
+  function resetCodeHash(email, code) {
+    return crypto.createHmac('sha256', resolveJwtSecret()).update(`${resetKey(email)}:${code}`).digest()
+  }
+  function clearExpiredResetCodes() {
+    const expiresAt = Date.now() - config.email.resetCodeTtlMin * 60000
+    for (const [key, value] of resetCodes) if (value.createdAt < expiresAt || value.used) resetCodes.delete(key)
+  }
+  function verifyResetCode(email, code) {
+    clearExpiredResetCodes()
+    const key = resetKey(email)
+    const entry = resetCodes.get(key)
+    if (!entry) return { ok: false, msg: '验证码无效或已过期，请重新获取' }
+    if (entry.attempts >= 5) {
+      resetCodes.delete(key)
+      return { ok: false, msg: '验证码错误次数过多，请重新获取' }
+    }
+    const candidate = resetCodeHash(email, code)
+    if (candidate.length !== entry.codeHash.length || !crypto.timingSafeEqual(candidate, entry.codeHash)) {
+      entry.attempts += 1
+      return { ok: false, msg: '验证码不正确' }
+    }
+    resetCodes.delete(key)
+    return { ok: true }
+  }
+  function passwordValid(password) {
+    return password.length >= 8 && password.length <= MAX_PWD && /[a-zA-Z]/.test(password) && /\d/.test(password)
+  }
+
   function issue(user) {
-    return signJwt({ sub: user.id }, resolveJwtSecret(), { expiresInSec: ttlSec })
+    return signJwt({ sub: user.id, pv: Number(user.passwordVersion || 0) }, resolveJwtSecret(), { expiresInSec: ttlSec })
   }
 
   function ok(res, user) {
@@ -132,6 +167,8 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
   r.post('/auth/register', async (req, res) => {
     const nickname = String(req.body?.nickname || '').trim()
     const account = String(req.body?.account || '').trim()
+    const email = String(req.body?.email || '').trim().toLowerCase()
+    const legacyMigration = req.body?.legacyMigration === true
     const password = String(req.body?.password || '')
     // 注册成功也计入窗口，避免脚本用大量不同账号绕开“仅失败计数”的登录限流。
     const registration = registerLimiter.take(`ip:${req.ip}`)
@@ -142,7 +179,9 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
     if (nickname.length < 2) return res.status(400).json({ ok: false, msg: '昵称至少 2 个字符' })
     if (nickname.length > 16) return res.status(400).json({ ok: false, msg: '昵称最多 16 个字符' })
     if (!ACCOUNT_RE.test(account)) return res.status(400).json({ ok: false, msg: '账号需为 3-24 位字母、数字或 . _ -' })
-    if (password.length < 8 || !/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
+    if (email && (!EMAIL_RE.test(email) || email.length > 254)) return res.status(400).json({ ok: false, msg: '请输入正确的邮箱地址' })
+    if (!email && !legacyMigration) return res.status(400).json({ ok: false, msg: '请绑定邮箱，用于找回密码' })
+    if (!passwordValid(password)) {
       return res.status(400).json({ ok: false, msg: '密码至少 8 位，且须同时含字母和数字' })
     }
     if (password.length > MAX_PWD) return res.status(400).json({ ok: false, msg: '密码过长' })
@@ -154,7 +193,11 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
       limiter.fail(keys) // 注册重名也计数：否则这个接口就是个免费的「账号是否存在」枚举器
       return res.status(409).json({ ok: false, msg: '该账号已被注册，换一个试试' })
     }
-    const user = await accounts.create({ account, password, nickname })
+    if (email && accounts.byEmail(email)) {
+      limiter.fail(keys)
+      return res.status(409).json({ ok: false, msg: '该邮箱已被绑定，请直接登录或找回密码' })
+    }
+    const user = await accounts.create({ account, email: email || null, password, nickname })
     ok(res, user)
   })
 
@@ -169,7 +212,7 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
       return res.status(429).json({ ok: false, msg: '尝试次数过多，请稍后再试' })
     }
 
-    const user = accounts.byAccount(account)
+    const user = accounts.byLogin(account)
     // 账号不存在时也跑一遍散列：否则「不存在」几毫秒返回、「密码错」要一百毫秒，
     // 用响应快慢就能把注册过的账号名枚举出来。
     const passed = user ? await accounts.checkPassword(user, password) : await accounts.dummyPasswordCheck(password)
@@ -183,8 +226,53 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
     ok(res, user)
   })
 
+  // 不透露邮箱是否已经注册，避免成为账号枚举器；验证码只在内存保存 HMAC 摘要。
+  r.post('/auth/password-reset/send-code', async (req, res) => {
+    const email = String(req.body?.email || '').trim().toLowerCase()
+    if (!EMAIL_RE.test(email) || email.length > 254) return res.status(400).json({ ok: false, msg: '请输入正确的邮箱地址' })
+    if (mailer === sendPasswordResetEmail && !emailConfigured()) return res.status(503).json({ ok: false, msg: '邮箱找回服务暂未配置，请联系管理员' })
+    const attempt = resetSendLimiter.take(`password-reset:${req.ip}`)
+    if (!attempt.ok) return res.status(429).json({ ok: false, msg: '该网络请求过于频繁，请稍后再试' })
+    clearExpiredResetCodes()
+    const previous = resetCodes.get(resetKey(email))
+    if (previous && Date.now() - previous.createdAt < config.email.resetSendCooldownSec * 1000) {
+      const wait = Math.ceil((config.email.resetSendCooldownSec * 1000 - (Date.now() - previous.createdAt)) / 1000)
+      return res.status(429).json({ ok: false, msg: `发送过于频繁，请 ${wait} 秒后再试`, wait })
+    }
+    const user = accounts.byEmail(email)
+    if (user) {
+      const code = String(crypto.randomInt(100000, 1000000))
+      resetCodes.set(resetKey(email), { codeHash: resetCodeHash(email, code), createdAt: Date.now(), attempts: 0, used: false })
+      try {
+        await mailer(email, code)
+      } catch (error) {
+        resetCodes.delete(resetKey(email))
+        console.error('[auth/password-reset/send-code] 邮件发送失败', error.message)
+        return res.status(502).json({ ok: false, msg: '邮件发送失败，请稍后再试' })
+      }
+    }
+    res.json({ ok: true, msg: '若该邮箱已绑定账号，验证码已发送。请检查收件箱及垃圾邮件。' })
+  })
+
+  r.post('/auth/password-reset/confirm', async (req, res) => {
+    const email = String(req.body?.email || '').trim().toLowerCase()
+    const code = String(req.body?.code || '').trim()
+    const newPassword = String(req.body?.newPassword || '')
+    if (!EMAIL_RE.test(email) || email.length > 254 || !/^\d{6}$/.test(code)) return res.status(400).json({ ok: false, msg: '请输入邮箱和 6 位验证码' })
+    if (!passwordValid(newPassword)) return res.status(400).json({ ok: false, msg: '密码至少 8 位，且须同时含字母和数字' })
+    const attempt = resetVerifyLimiter.take(`password-reset-verify:${req.ip}`)
+    if (!attempt.ok) return res.status(429).json({ ok: false, msg: '验证过于频繁，请稍后再试' })
+    const verified = verifyResetCode(email, code)
+    if (!verified.ok) return res.status(400).json({ ok: false, msg: verified.msg })
+    const user = accounts.byEmail(email)
+    if (!user || !accounts.isActive(user)) return res.status(400).json({ ok: false, msg: '验证码无效或已过期，请重新获取' })
+    const out = await accounts.resetPassword(user.id, newPassword)
+    res.status(out.ok ? 200 : 400).json(out)
+  })
+
   // 短信凭证只服务登录与注册，和黄历订阅验证码隔离，不能相互替代。
   r.post('/auth/sms/send-code', async (req, res) => {
+    if (!config.auth.smsEnabled) return res.status(503).json({ ok: false, msg: '手机短信认证正在接入' })
     const purpose = String(req.body?.purpose || '')
     const phone = String(req.body?.phone || '').trim()
     if (!['login', 'register'].includes(purpose)) return res.status(400).json({ ok: false, msg: '验证码用途无效' })
@@ -212,6 +300,7 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
   })
 
   r.post('/auth/sms/register', async (req, res) => {
+    if (!config.auth.smsEnabled) return res.status(503).json({ ok: false, msg: '手机短信认证正在接入' })
     const phone = String(req.body?.phone || '').trim()
     const code = String(req.body?.code || '').trim()
     if (!PHONE_RE.test(phone) || !/^\d{6}$/.test(code)) return res.status(400).json({ ok: false, msg: '请输入手机号和 6 位验证码' })
@@ -226,6 +315,7 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
   })
 
   r.post('/auth/sms/login', async (req, res) => {
+    if (!config.auth.smsEnabled) return res.status(503).json({ ok: false, msg: '手机短信认证正在接入' })
     const phone = String(req.body?.phone || '').trim()
     const code = String(req.body?.code || '').trim()
     if (!PHONE_RE.test(phone) || !/^\d{6}$/.test(code)) return res.status(400).json({ ok: false, msg: '请输入手机号和 6 位验证码' })
@@ -246,6 +336,7 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
    * 否则公网任何人传一个 openid 就能凭空建号甚至顶掉已有账号。
    */
   r.post('/auth/wechat', async (req, res) => {
+    if (!config.auth.wechatEnabled) return res.status(503).json({ ok: false, msg: '微信扫码认证正在接入' })
     const keys = [`ip:${req.ip}`]
     if (limiter.check(keys)) return res.status(429).json({ ok: false, msg: '操作过于频繁，请稍后再试' })
     let openid = null
@@ -305,7 +396,8 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
     const newPwd = String(req.body?.newPassword || '')
     if (newPwd.length > MAX_PWD) return res.status(400).json({ ok: false, msg: '密码过长' })
     const out = await accounts.setPassword(req.uid, oldPwd, newPwd)
-    res.status(out.ok ? 200 : 400).json(out)
+    if (!out.ok) return res.status(400).json(out)
+    res.json({ ...out, token: issue(req.account), user: accounts.publicUser(req.account), expiresIn: ttlSec })
   })
 
   /* 切换会员档位。

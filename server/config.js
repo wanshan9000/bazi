@@ -121,7 +121,20 @@ export const config = {
     loginMaxAttempts: Number(env.AUTH_LOGIN_MAX_ATTEMPTS || 5),
     registerWindowMin: Number(env.AUTH_REGISTER_WINDOW_MIN || 60),
     registerMaxAttempts: Number(env.AUTH_REGISTER_MAX_ATTEMPTS || 5),
+    // UI 保留短信、微信入口以便后续接入；默认关闭真实认证链路，防止开发降级通道被当成正式登录。
+    smsEnabled: env.AUTH_SMS_ENABLED === '1',
+    wechatEnabled: env.AUTH_WECHAT_ENABLED === '1',
   },
+
+  email: {
+    resendApiKey: env.RESEND_API_KEY || '',
+    from: env.EMAIL_FROM || '',
+    resetCodeTtlMin: Number(env.EMAIL_RESET_CODE_TTL_MIN || 10),
+    resetSendCooldownSec: Number(env.EMAIL_RESET_SEND_COOLDOWN_SEC || 60),
+    resetIpPerHour: Number(env.EMAIL_RESET_IP_PER_HOUR || 8),
+    resetVerifyIpPerHour: Number(env.EMAIL_RESET_VERIFY_IP_PER_HOUR || 20),
+  },
+
 
   // ---- 账号报告档案 ----
   reports: {
@@ -180,6 +193,8 @@ export const config = {
 export const smsConfigured = () =>
   (config.sms.provider === 'aliyun' && config.sms.accessKeyId && config.sms.accessKeySecret) ||
   (config.sms.provider === 'tencent' && config.sms.tencentSecretId && config.sms.tencentSecretKey)
+
+export const emailConfigured = () => Boolean(config.email.resendApiKey && config.email.from)
 
 // 判断微信是否已配置
 export const wechatConfigured = () => Boolean(config.wechat.appId && config.wechat.appSecret)

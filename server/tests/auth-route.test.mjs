@@ -23,9 +23,10 @@ async function listen(app) {
 
 const J = (body) => ({ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
 const bearer = t => ({ authorization: `Bearer ${t}` })
+const emailFor = account => String(account).includes('@') ? account : `${account}@example.test`
 
 async function register(base, account = 'alice', password = 'secret123') {
-  const r = await fetch(`${base}/api/auth/register`, J({ account, password, nickname: '小明' }))
+  const r = await fetch(`${base}/api/auth/register`, J({ account, email: emailFor(account), password, nickname: '小明' }))
   return { status: r.status, body: await r.json() }
 }
 
@@ -52,6 +53,17 @@ test('账号重名拒绝；字段校验拒绝', async () => {
     assert.equal((await register(base, 'dup')).status, 409)
     assert.equal((await register(base, 'ab')).status, 400, '账号太短应拒绝')
     assert.equal((await register(base, 'okname', '123')).status, 400, '口令太短应拒绝')
+  } finally { srv.close() }
+})
+
+test('新账号必须绑定邮箱；短信与微信认证未接入时明确关闭', async () => {
+  const { app } = mkApp()
+  const { srv, base } = await listen(app)
+  try {
+    const missingEmail = await fetch(`${base}/api/auth/register`, J({ account: 'email-missing', nickname: '小明', password: 'secret123' }))
+    assert.equal(missingEmail.status, 400)
+    assert.equal((await fetch(`${base}/api/auth/sms/send-code`, J({ phone: '13800138000', purpose: 'login' }))).status, 503)
+    assert.equal((await fetch(`${base}/api/auth/wechat`, J({ openid: 'mock-openid' }))).status, 503)
   } finally { srv.close() }
 })
 
@@ -169,6 +181,28 @@ test('改密码：旧口令不对拒绝；改完只能用新口令登录', async
     assert.equal(good.status, 200)
     assert.equal((await fetch(`${base}/api/auth/login`, J({ account: 'changer', password: 'secret123' }))).status, 401)
     assert.equal((await fetch(`${base}/api/auth/login`, J({ account: 'changer', password: 'newsecret1' }))).status, 200)
+  } finally { srv.close() }
+})
+
+test('邮箱验证码重设密码：不可复用且会使旧登录态失效', async () => {
+  let delivery = null
+  const { app } = mkApp({ mailer: async (email, code) => { delivery = { email, code } } })
+  const { srv, base } = await listen(app)
+  try {
+    const { body } = await register(base, 'reset-user')
+    const email = emailFor('reset-user')
+    const sent = await (await fetch(`${base}/api/auth/password-reset/send-code`, J({ email }))).json()
+    assert.equal(sent.ok, true)
+    assert.equal(delivery.email, email)
+    assert.match(delivery.code, /^\d{6}$/)
+
+    const reset = await fetch(`${base}/api/auth/password-reset/confirm`, J({ email, code: delivery.code, newPassword: 'renewed123' }))
+    assert.equal(reset.status, 200)
+    assert.equal((await fetch(`${base}/api/auth/me`, { headers: bearer(body.token) })).status, 401, '旧 token 必须失效')
+    assert.equal((await fetch(`${base}/api/auth/login`, J({ account: 'reset-user', password: 'secret123' }))).status, 401)
+    assert.equal((await fetch(`${base}/api/auth/login`, J({ account: email, password: 'renewed123' }))).status, 200, '绑定邮箱也可登录')
+    const reused = await fetch(`${base}/api/auth/password-reset/confirm`, J({ email, code: delivery.code, newPassword: 'another123' }))
+    assert.equal(reused.status, 400, '验证码只能使用一次')
   } finally { srv.close() }
 })
 

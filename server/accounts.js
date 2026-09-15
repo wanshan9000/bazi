@@ -222,6 +222,7 @@ export function createAccountStore(file) {
       id: u.id,
       nickname: u.nickname,
       account: u.account,
+      email: u.email || null,
       avatar: u.avatar,
       plan: u.plan || FREE_PLAN.key,
       role: u.role || 'user',
@@ -261,6 +262,16 @@ export function createAccountStore(file) {
     return load().users.find(u => String(u.account || '').toLowerCase() === key) || null
   }
 
+  function byEmail(email) {
+    const key = String(email || '').trim().toLowerCase()
+    if (!key) return null
+    return load().users.find(u => String(u.email || '').toLowerCase() === key) || null
+  }
+
+  function byLogin(login) {
+    return byAccount(login) || byEmail(login)
+  }
+
   function byOpenid(openid) {
     const key = String(openid || '').trim()
     if (!key) return null
@@ -280,15 +291,17 @@ export function createAccountStore(file) {
     return bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP'
   }
 
-  async function create({ account, password, nickname, avatar, wechatOpenid, plan = 'free' }) {
+  async function create({ account, email, password, nickname, avatar, wechatOpenid, plan = 'free' }) {
     const db = load()
     const now = Date.now()
     const u = {
       id: newId(wechatOpenid ? 'w' : 'u'),
       account: String(account).trim(),
+      email: email ? String(email).trim().toLowerCase() : null,
       nickname: String(nickname).trim(),
       avatar: avatar || AVATARS[now % AVATARS.length],
       passHash: password ? await hashPassword(password) : null,
+      passwordVersion: 0,
       wechatOpenid: wechatOpenid || null,
       status: 'active',
       plan,
@@ -372,8 +385,19 @@ export function createAccountStore(file) {
     if (u.passHash && !(await checkPassword(u, oldPwd))) return { ok: false, msg: '当前密码不正确' }
     if (!newPwd || String(newPwd).length < 6) return { ok: false, msg: '新密码至少 6 位' }
     u.passHash = await hashPassword(newPwd)
+    u.passwordVersion = Number(u.passwordVersion || 0) + 1
     save()
     return { ok: true, msg: '密码已更新' }
+  }
+
+  async function resetPassword(id, newPwd) {
+    const u = get(id)
+    if (!u) return { ok: false, msg: '用户不存在' }
+    if (!newPwd || String(newPwd).length < 6) return { ok: false, msg: '新密码至少 6 位' }
+    u.passHash = await hashPassword(newPwd)
+    u.passwordVersion = Number(u.passwordVersion || 0) + 1
+    save()
+    return { ok: true, msg: '密码已重置' }
   }
 
   function changePlan(id, newKey) {
@@ -569,8 +593,8 @@ export function createAccountStore(file) {
   }
 
   return {
-    get, byAccount, byOpenid, create, checkPassword, dummyPasswordCheck,
-    touchLogin, isActive, setStatus, update, setPassword, changePlan, adminSetPlan, consumeCredit, consumeTokens, refundCredit, remove, grantSuperAdminByAccount,
+    get, byAccount, byEmail, byLogin, byOpenid, create, checkPassword, dummyPasswordCheck,
+    touchLogin, isActive, setStatus, update, setPassword, resetPassword, changePlan, adminSetPlan, consumeCredit, consumeTokens, refundCredit, remove, grantSuperAdminByAccount,
     publicUser, refresh,
     count: () => load().users.length,
     list: () => load().users.map(publicUser),

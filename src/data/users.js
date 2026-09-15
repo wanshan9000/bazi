@@ -46,10 +46,10 @@ export async function refreshSession() {
 }
 
 /* ---- 注册 / 登录 ---- */
-export async function register({ nickname, account, password }) {
+export async function register({ nickname, account, email, password, legacyMigration = false }) {
   const res = await api('/api/auth/register', {
     method: 'POST',
-    body: { nickname: (nickname || '').trim(), account: (account || '').trim(), password: password || '' },
+    body: { nickname: (nickname || '').trim(), account: (account || '').trim(), email: (email || '').trim(), password: password || '', legacyMigration: Boolean(legacyMigration) },
   })
   if (!res.ok) return { ok: false, msg: res.msg || '注册失败' }
   setAuth(res.token, res.user)
@@ -76,6 +76,18 @@ export async function login(account, password) {
   if (migrated.msg) return { ok: false, msg: migrated.msg }
 
   return { ok: false, msg: res.msg || '登录失败' }
+}
+
+export async function sendPasswordResetCode(email) {
+  const res = await api('/api/auth/password-reset/send-code', { method: 'POST', body: { email: String(email || '').trim() } })
+  return res.ok ? { ok: true, msg: res.msg } : { ok: false, msg: res.msg || '验证码发送失败', wait: res.wait }
+}
+
+export async function resetPasswordByEmail(email, code, newPassword) {
+  const res = await api('/api/auth/password-reset/confirm', {
+    method: 'POST', body: { email: String(email || '').trim(), code: String(code || '').trim(), newPassword: newPassword || '' },
+  })
+  return res.ok ? { ok: true, msg: res.msg || '密码已重置' } : { ok: false, msg: res.msg || '重设密码失败' }
 }
 
 export async function sendAuthSmsCode(phone, purpose) {
@@ -137,7 +149,9 @@ export async function changePassword(id, oldPwd, newPwd) {
     method: 'PATCH',
     body: { oldPassword: oldPwd, newPassword: newPwd },
   })
-  return res.ok ? { ok: true, msg: res.msg || '密码已更新' } : { ok: false, msg: res.msg || '修改失败' }
+  if (!res.ok) return { ok: false, msg: res.msg || '修改失败' }
+  if (res.token && res.user) setAuth(res.token, res.user)
+  return { ok: true, msg: res.msg || '密码已更新' }
 }
 
 /* ---- 切换会员档位（升级 / 降级 / 续费） ----

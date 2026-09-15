@@ -7,6 +7,7 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
   const [method, setMethod] = useState('wechat') // wechat | account
   const [nickname, setNickname] = useState('')
   const [account, setAccount] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -50,7 +51,7 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
     }
     setLoading(true)
     try {
-      const res = await register({ nickname, account, password })
+      const res = await register({ nickname, account, email, password })
       if (!res.ok) { setErr(res.msg); return }
       onSuccess(res.user)
     } catch (e) {
@@ -175,6 +176,8 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
               账号注册
             </button>
           </div>
+          {method === 'sms' && <p className="auth-dev-note">手机短信注册正在接入，暂请使用账号注册。</p>}
+          {method === 'wechat' && <p className="auth-dev-note">微信扫码注册正在接入，暂请使用账号注册。</p>}
 
           {method === 'account' ? (
             <form className="auth-form" onSubmit={handleSubmit} noValidate>
@@ -199,6 +202,18 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
                   value={account}
                   autoComplete="username"
                   onChange={e => setAccount(e.target.value)}
+                />
+              </div>
+              <div className="auth-field">
+                <label htmlFor="reg-email">绑定邮箱</label>
+                <input
+                  id="reg-email"
+                  type="email"
+                  inputMode="email"
+                  placeholder="用于找回密码"
+                  value={email}
+                  autoComplete="email"
+                  onChange={e => setEmail(e.target.value)}
                 />
               </div>
               <div className="auth-row">
@@ -228,18 +243,18 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
             <form className="auth-form" onSubmit={handleSmsRegister} noValidate>
               <div className="auth-field">
                 <label htmlFor="reg-phone">手机号</label>
-                <input id="reg-phone" type="tel" inputMode="numeric" placeholder="请输入 11 位手机号" value={phone} autoComplete="tel" onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} />
+                <input id="reg-phone" type="tel" inputMode="numeric" placeholder="请输入 11 位手机号" value={phone} autoComplete="tel" disabled onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} />
               </div>
               <div className="auth-field">
                 <label htmlFor="reg-code">验证码</label>
                 <div className="auth-code-wrap">
-                  <input id="reg-code" inputMode="numeric" placeholder="6 位验证码" value={smsCode} autoComplete="one-time-code" onChange={e => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
-                  <button type="button" className="auth-code-send" onClick={handleSendCode} disabled={loading || phone.length !== 11}>获取验证码</button>
+                  <input id="reg-code" inputMode="numeric" placeholder="6 位验证码" value={smsCode} autoComplete="one-time-code" disabled onChange={e => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+                  <button type="button" className="auth-code-send" onClick={handleSendCode} disabled>获取验证码</button>
                 </div>
               </div>
               {smsNote && <p className="auth-dev-note">{smsNote}</p>}
               {err && <p className="auth-err">{err}</p>}
-              <button type="submit" className="auth-btn" disabled={loading}>{loading ? '注 册 中…' : '短信注册'}</button>
+              <button type="submit" className="auth-btn" disabled>短信注册</button>
             </form>
           ) : (
             <div className="auth-wechat">
@@ -253,13 +268,13 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
                     <span className="auth-qr-logo">💬</span>
                   </div>
                   <div className="auth-qr-text">{mock.qrText || '（当前为开发降级模式，未配置微信）'}</div>
-                  <button className="auth-btn" onClick={handleMockScan} disabled={busy}>
-                    {busy ? '注 册 中…' : '✓ 已扫码 · 确认注册'}
+                  <button className="auth-btn" onClick={handleMockScan} disabled>
+                    ✓ 已扫码 · 确认注册
                   </button>
                   </div>
                   ) : (
-                  <button className="auth-btn" onClick={handleWechat} disabled={busy}>
-                  {busy ? '获取中…' : '📷 打开扫码 · 识别注册'}
+                  <button className="auth-btn" onClick={handleWechat} disabled>
+                  📷 打开扫码 · 识别注册
                   </button>
                   )}
               {!serverOk && !mock && (

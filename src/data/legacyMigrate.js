@@ -109,6 +109,9 @@ export async function tryMigrateLegacy(account, password, serverRegister) {
     nickname: legacy.nickname || '缘主',
     account: legacy.account,
     password,
+    // 老版本没有采集邮箱；允许它在已经证明口令归属的迁移流程中保留账号，
+    // 之后可在个人资料中补绑邮箱，再启用邮箱找回。
+    legacyMigration: true,
   })
   if (!res.ok) {
     // 账号名在服务端已被别人占用等 —— 如实回报，别让用户对着「密码错误」发懵

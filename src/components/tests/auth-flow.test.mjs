@@ -35,6 +35,7 @@ const USER = {
 beforeEach(() => { clearAuth(); localStorage.clear() })
 
 const { default: LoginPage } = await import('../LoginPage.jsx')
+const { default: ForgotPasswordPage } = await import('../ForgotPasswordPage.jsx')
 const { default: MembershipModal } = await import('../MembershipModal.jsx')
 
 async function openAccountLogin(r) {
@@ -99,6 +100,32 @@ test('登录请求不把口令写进 URL', async () => {
   assert.equal(login.method, 'POST')
   assert.ok(!login.path.includes('secret123'), '口令绝不能出现在 URL 里（会进日志和 Referer）')
   assert.equal(login.body.password, 'secret123')
+  r.unmount()
+})
+
+test('账号登录提供邮箱找回入口；重设页按邮箱发送并提交新密码', async () => {
+  const login = render(LoginPage, { onBack: () => {}, onSwitch: () => {}, onForgotPassword: () => {}, onSuccess: () => {} })
+  await openAccountLogin(login)
+  assert.ok(login.findByText('忘记密码？'), '账号登录必须有忘记密码入口')
+  login.unmount()
+
+  const calls = stubFetch({
+    '/api/auth/password-reset/send-code': { body: { ok: true, msg: '验证码已发送' } },
+    '/api/auth/password-reset/confirm': { body: { ok: true, msg: '密码已重置' } },
+  })
+  const r = render(ForgotPasswordPage, { onBack: () => {}, onLogin: () => {} })
+  const [email, code, password, confirm] = r.$$('input')
+  r.type(email, 'member@example.test')
+  r.click(r.findByText('获取验证码'))
+  await flush(3)
+  r.type(code, '123456')
+  r.type(password, 'renewed123')
+  r.type(confirm, 'renewed123')
+  r.click(r.$('button[type="submit"]'))
+  await flush(4)
+  assert.deepEqual(calls.find(call => call.path.includes('/password-reset/send-code')).body, { email: 'member@example.test' })
+  assert.deepEqual(calls.find(call => call.path.includes('/password-reset/confirm')).body, { email: 'member@example.test', code: '123456', newPassword: 'renewed123' })
+  assert.ok(r.text().includes('密码已重置'), `重设成功提示缺失：${r.text().slice(0, 300)}`)
   r.unmount()
 })
 

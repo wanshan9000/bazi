@@ -27,6 +27,7 @@ const AdminPage = lazy(() => import('./components/AdminPage.jsx'))
 const SubscribePage = lazy(() => import('./components/SubscribePage.jsx'))
 const LoginPage = lazy(() => import('./components/LoginPage.jsx'))
 const RegisterPage = lazy(() => import('./components/RegisterPage.jsx'))
+const ForgotPasswordPage = lazy(() => import('./components/ForgotPasswordPage.jsx'))
 const ProfilePage = lazy(() => import('./components/ProfilePage.jsx'))
 const MyReportsPage = lazy(() => import('./components/MyReportsPage.jsx'))
 const ReportArchiveDetail = lazy(() => import('./components/MyReportsPage.jsx').then(module => ({ default: module.ReportArchiveDetail })))
@@ -269,7 +270,7 @@ export default function App() {
   //    （此前的 astro、fengshui、register，已补上）。
   const HASH_VIEWS = ['home', 'agent', 'bazi', 'ziwei', 'qimen', 'chenggu', 'huangli',
     'name', 'fengshui', 'astro', 'tarot', 'tarot-reading', 'wenku', 'article',
-    'profile', 'reports', 'report-detail', 'login', 'register', 'admin', 'share']
+    'profile', 'reports', 'report-detail', 'login', 'register', 'forgot-password', 'admin', 'share']
 
   // 启动时检测 URL hash：
   //   #share=...     → 完整报告直接序列化在 URL 里，解码为只读报告
@@ -652,6 +653,7 @@ export default function App() {
           <LoginPage
             onBack={() => goNav('home')}
             onSwitch={() => goNav('register')}
+            onForgotPassword={() => goNav('forgot-password')}
             onSuccess={handleLogin}
           />
         )}
@@ -662,6 +664,7 @@ export default function App() {
             onSuccess={handleLogin}
           />
         )}
+        {view === 'forgot-password' && <ForgotPasswordPage onBack={() => goNav('login')} onLogin={() => goNav('login')} />}
         {view === 'profile' && user && (
           <ProfilePage
             user={user}
@@ -704,6 +707,7 @@ export default function App() {
           <LoginPage
             onBack={() => goNav('home')}
             onSwitch={() => goNav('login')}
+            onForgotPassword={() => goNav('forgot-password')}
             onSuccess={handleLogin}
           />
         )}
