@@ -1,9 +1,9 @@
-# bazi.keyfocus.cn —— 元气/灵枢。由 deploy/deploy.sh 放到 /etc/caddy/conf.d/bazi.caddy，
+# keymm.me —— 元气/灵枢。由 deploy/deploy.sh 放到 /etc/caddy/conf.d/bazi.caddy，
 # 主 Caddyfile 用 `import conf.d/*.caddy` 引入（那一行由 deploy.sh 幂等补上）。
 #
 # 静态前端 + /api 反代分开处理：/api/agent/chat 是 SSE 流式输出，反代必须关缓冲、放长超时；
 # 静态资源则要长缓存。两者混在一个块里会互相拖累。
-bazi.keyfocus.cn {
+keymm.me {
 	# ⚠ 压缩只对显式列出的类型开，绝不能让 text/event-stream 进来：线上 Caddy 2.6.2 的
 	# encode 不会随 Flush 刷压缩器缓冲，SSE 一旦被压缩，帧会攒到流结束才吐给浏览器。
 	encode zstd gzip {

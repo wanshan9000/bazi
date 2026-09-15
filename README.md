@@ -3,7 +3,7 @@
 随时随地在身边的玄学 AI 助手。八字、紫微、六爻、奇门、黄历、塔罗、取名、风水，
 排盘引擎在前端与服务端共用一套，AI 对话由服务端的 DeepSeek Harness（dsh）子进程承载。
 
-线上：https://bazi.keyfocus.cn
+线上：https://keymm.me
 
 ## 快速开始
 
@@ -30,7 +30,7 @@ npm run agent:smoke                  # 真 key 冒烟（可选）
 | `npm run build` | 构建前端（`prebuild` 会先构建引擎产物） |
 | `npm run build:engines` | 只构建服务端工具用的引擎 bundle |
 | `npm run server:dev` | 后端热重启 |
-| `deploy/deploy.sh` | 一键部署到 bazi.keyfocus.cn（发布前会跑测试） |
+| `deploy/deploy.sh` | 一键部署到 keymm.me（发布前会跑测试） |
 
 ## 目录
 

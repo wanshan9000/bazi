@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 元气/灵枢 一键部署到 47.97.48.115（bazi.keyfocus.cn）。在本机仓库根目录执行：
+# 元气/灵枢 一键部署到 47.237.136.0（新加坡，keymm.me）。在本机仓库根目录执行：
 #   deploy/deploy.sh                 部署当前 HEAD 的已提交内容（未提交改动不会上）
 #   deploy/deploy.sh --ref <git-ref> 部署指定分支/标签/提交
 #   deploy/deploy.sh --skip-install  依赖没变时跳过 npm ci
@@ -17,11 +17,11 @@
 # 失败会被静默吞掉，一路走到「部署成功」。
 set -euo pipefail
 
-DEPLOY_HOST="${DEPLOY_HOST:-47.97.48.115}"
+DEPLOY_HOST="${DEPLOY_HOST:-47.237.136.0}"
 DEPLOY_USER="${DEPLOY_USER:-root}"
-DEPLOY_KEY="${DEPLOY_KEY:-$HOME/.ssh/relly_keyfocushub.pem}"
+DEPLOY_KEY="${DEPLOY_KEY:-$HOME/.ssh/id_rsa_singapore}"
 DEPLOY_REF="${DEPLOY_REF:-HEAD}"
-DOMAIN="${DOMAIN:-bazi.keyfocus.cn}"
+DOMAIN="${DOMAIN:-keymm.me}"
 APP_DIR="${APP_DIR:-/opt/bazi}"
 STAGE_DIR="${STAGE_DIR:-/opt/bazi-staging}"
 WEB_DIR="${WEB_DIR:-/var/www/bazi}"
@@ -188,7 +188,7 @@ remote "set -euo pipefail
 remote "set -e
         if ! grep -qE '^import conf\.d/\*\.caddy' /etc/caddy/Caddyfile; then
           cp -a /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak-\$(date +%Y%m%d-%H%M%S)
-          printf '\n# 其他仓库自带的站点片段（如 bazi.keyfocus.cn ← bazi 仓库 deploy/bazi.caddy）。\n# 覆盖本文件时务必保留这一行，否则那些站点会随之下线。\nimport conf.d/*.caddy\n' >> /etc/caddy/Caddyfile
+          printf '\n# 其他仓库自带的站点片段（如 keymm.me ← bazi 仓库 deploy/bazi.caddy）。\n# 覆盖本文件时务必保留这一行，否则那些站点会随之下线。\nimport conf.d/*.caddy\n' >> /etc/caddy/Caddyfile
         fi
         caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 || { caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; exit 1; }
         systemctl reload caddy" || die_rollback "Caddy 配置校验/重载失败（已备份原 Caddyfile）"

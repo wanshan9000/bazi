@@ -41,7 +41,7 @@ npm run dev             # http://localhost:5173
 | `WX_REDIRECT_URI` | 扫码后回跳地址，需与微信后台「授权回调域」一致，例如 `https://你的域名/api/wechat/callback` |
 | `WX_TEMPLATE_ID` | 公众号模板消息 ID（推送当日黄历用） |
 
-### 部署（bazi.keyfocus.cn · 47.97.48.115）
+### 部署（keymm.me · 47.237.136.0 新加坡）
 
 ```bash
 deploy/deploy.sh                  # 部署当前 HEAD 已提交内容；--ref <ref> 指定版本；--skip-install 跳过 npm ci
@@ -52,8 +52,9 @@ deploy/deploy.sh                  # 部署当前 HEAD 已提交内容；--ref <r
 - 进程：systemd `bazi.service`（[deploy/bazi.service](../deploy/bazi.service)），账号 `bazi`，监听 `127.0.0.1:8793`，
   env 在 `/etc/bazi/env`（模板 [deploy/env.example](../deploy/env.example)，首次部署前手工创建）。
 - 入口：Caddy 站点片段 [deploy/bazi.caddy](../deploy/bazi.caddy) → `/etc/caddy/conf.d/bazi.caddy`，
-  主 Caddyfile 末尾 `import conf.d/*.caddy`。⚠ 该机 Caddyfile 归 KeyfocusHub 仓库 `apps/web/deploy/Caddyfile` 管，
-  整份覆盖时必须保留 import 那一行。DNS：阿里云 `keyfocus.cn` 下 A 记录 `bazi` → 47.97.48.115。
+  主 Caddyfile 末尾 `import conf.d/*.caddy`。⚠ 该机与微信网关（sharp.keyfocus.cn）、sub2api 共用 Caddy，
+  整份覆盖 Caddyfile 时必须保留 import 那一行。DNS：阿里云 `keymm.me` 下 A 记录 `@` → 47.237.136.0。
+  境外机器，keymm.me 无需 ICP 备案。
 - 自托管其他机器：`NODE_ENV=production HOST=127.0.0.1 PORT=8793 BASE_URL=https://你的域名 npm run server`，
   `server/data/` 需持久化。
 
