@@ -14623,14 +14623,22 @@ select option { background: var(--paper-light); color: var(--ink); }
   .app-main { padding-top: 0; padding-bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom) + 24px); }
 }
 
-/* 顶栏启用时使用对称三列，主导航始终以整条顶栏的中心线对齐。 */
+/* 桌面栏按内容分配三段：导航可收缩，始终给账户与语言入口留出空间。 */
 @media (min-width: 870px) {
   .topbar-inner {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: 18px;
   }
   .brand { justify-self: start; }
-  .topnav { justify-self: center; }
+  .topnav {
+    min-width: 0;
+    justify-self: stretch;
+    justify-content: center;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .topnav::-webkit-scrollbar { display: none; }
   .topbar-user { justify-self: end; margin-left: 0; padding-left: 0; }
 
   /* 文库分类总宽会超过桌面阅读列，维持单行并允许横向浏览。 */
@@ -14642,6 +14650,22 @@ select option { background: var(--paper-light); color: var(--ink); }
     padding-left: 2px;
     padding-right: 2px;
   }
+}
+
+/* 浏览器放大或较窄桌面时，压缩非核心的顶栏文案，保留所有入口。 */
+@media (min-width: 870px) and (max-width: 1210px) {
+  /* 紧凑栏两侧均已收为图标入口，可恢复对称列，让导航组居中于整条顶栏。 */
+  .topbar-inner { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); column-gap: 0; }
+  .brand { gap: 0; }
+  .brand-name { display: none; }
+  .topnav { justify-self: center; justify-content: center; gap: 30px; }
+  .topnav-link { padding: 8px 9px; font-size: 13px; letter-spacing: 0.08em; }
+  .topnav-link[data-nav-key="agent"] { width: auto; padding-left: 9px; padding-right: 9px; }
+  .credits-chip { margin-right: 4px; }
+  .credits-chip .cc-num, .user-chip-name { display: none; }
+  .user-chip { min-width: 32px; padding: 0; justify-content: center; }
+  .user-chip-login .user-chip-name { display: inline; }
+  .language-switcher { min-width: 46px; width: 46px; margin-left: 5px; }
 }
 
 /* 手机对话页：把可操作空间留给会话和输入区，避免标题区把对话框推出首屏。 */
@@ -15409,7 +15433,7 @@ select option { background: var(--paper-light); color: var(--ink); }
 /* 870px 以下隐藏顶部栏，语言入口随底栏保留，覆盖手机和 iPad 的导航断点。 */
 @media (max-width: 869px) {
   .language-switcher:not(.language-switcher-mobile) { display: none; }
-  .language-switcher-mobile {
+  .app-shell > .language-switcher-mobile {
     position: fixed;
     right: 12px;
     bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom) + 10px);
@@ -15418,6 +15442,30 @@ select option { background: var(--paper-light); color: var(--ink); }
     height: 34px;
     margin: 0;
     box-shadow: 0 6px 18px rgba(80, 48, 60, 0.12);
+  }
+
+  /* Agent 内把语言切换放在头部操作区，不占用底部输入区。 */
+  .agent-head-actions .language-switcher-mobile {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    z-index: auto;
+    display: inline-flex;
+    width: 46px;
+    min-width: 46px;
+    height: 34px;
+    margin: 0;
+    padding: 0 6px;
+    box-shadow: none;
+  }
+  .agent-head-actions .language-switcher-trigger {
+    font-size: 12px;
+  }
+  .agent-head-actions .language-switcher-menu {
+    top: calc(100% + 8px);
+    right: 0;
+    bottom: auto;
+    width: 92px;
   }
 }
 

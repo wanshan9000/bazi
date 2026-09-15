@@ -729,7 +729,7 @@ export default function App() {
         </Suspense>
       </main>
       <BottomNav view={view} onNav={goNav} user={user} />
-      <LanguageSwitcher mobile />
+      {view !== 'agent' && <LanguageSwitcher mobile />}
       <TailBand onNav={goNav} hideOnMobile={view === 'share'} user={user} />
 
       {/* 全局订阅 Modal（会员方案 · 三重境界） */}

@@ -8,6 +8,13 @@ function json(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
+function sse(events) {
+  return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''), {
+    status: 200,
+    headers: { 'Content-Type': 'text/event-stream' },
+  })
+}
+
 test('历史 MiniMax 缓存不会再自动覆盖默认 Flash', () => {
   // 若回退为直接读取 localStorage，老用户会继续走慢模型，首轮等待问题会复发。
   assert.equal(resolveAgentRoute('minimax', 'deepseek-flash'), 'deepseek-flash')
@@ -127,6 +134,44 @@ test('重新进入 Agent 时会自动恢复最新的可继续会话', async () =
     await flush(5)
     assert.ok(r.$('.current-session-chip'), '应自动恢复最近的可继续会话')
     assert.match(r.text(), /我记得，我们在比较稳定性与成长空间。/)
+  } finally {
+    r.unmount()
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('首页预设问题新开会话，不会被最近历史会话覆盖', async () => {
+  const originalFetch = globalThis.fetch
+  let sessionsRequested = 0
+  let sentText = ''
+  globalThis.fetch = async (url, init = {}) => {
+    const path = String(url)
+    if (path.endsWith('/api/agent/models')) return json({ ok: true, routes: [{ key: 'deepseek-flash', label: 'DeepSeek Flash' }], default: 'deepseek-flash' })
+    if (path.endsWith('/api/agent/sessions')) {
+      sessionsRequested += 1
+      return json({ ok: true, sessions: [{ id: 'old-session', title: '旧会话' }] })
+    }
+    if (path.endsWith('/api/agent/chat')) {
+      sentText = JSON.parse(init.body).text
+      return sse([
+        { type: 'session', sessionId: 'home-question' },
+        { type: 'text', delta: '已收到首页的问题。' },
+        { type: 'done' },
+      ])
+    }
+    throw new Error(`未预期的请求：${path}`)
+  }
+
+  const r = render(AgentChatDsh, {
+    seedQuery: '你好啊，我要测八字', user: null,
+    onRequireLogin() {}, onUpgrade() {}, onUserChange() {},
+  })
+  try {
+    await flush(6)
+    assert.equal(sentText, '你好啊，我要测八字')
+    assert.equal(sessionsRequested, 0, '首页预设问题不应自动恢复历史会话')
+    assert.match(r.text(), /已收到首页的问题。/)
+    assert.match(r.text(), /你好啊，我要测八字/)
   } finally {
     r.unmount()
     globalThis.fetch = originalFetch

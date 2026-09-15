@@ -6,6 +6,7 @@ import { buildChart } from '../engine/bazi.js'
 import { listCollection, saveToCollection, removeFromCollection } from '../engine/chartCollection.js'
 import { refreshSession } from '../data/users.js'
 import { canAfford, nextPlanKey } from '../engine/membership.js'
+import { LanguageSwitcher } from '../i18n.jsx'
 import { renderMarkdown } from '../utils/markdown.jsx'
 import { ThinkBlock, ToolCallsBlock, CopyButton, StructuredAnswer, parseStructuredAnswerText, renderAiText, timeNow, fmtSessionTime, quickQuestionsForConversation, isNearScrollBottom } from './agent/ChatParts.jsx'
 
@@ -364,9 +365,10 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
   // 重新进入 Agent 时默认接回最新会话。此前 sessionId 只存在组件内存：
   // 页面一卸载就丢，用户没有主动打开“会话历史”便直接续问时，会被悄悄创建成新会话。
   // 主动点“新会话”仍是唯一明确开始新话题的入口；带 initialSessionId 的报告咨询则优先
-  // 恢复指定会话，绝不被自动恢复覆盖。
+  // 恢复指定会话，绝不被自动恢复覆盖。首页带来的 seedQuery 同样代表一段新对话，
+  // 绝不能与最近会话的异步恢复并发，否则旧记录会覆盖正在流式生成的首轮回复。
   useEffect(() => {
-    if (initialSessionId || autoResumeAttempted.current) return
+    if (initialSessionId || seedQuery || autoResumeAttempted.current) return
     autoResumeAttempted.current = true
     let cancelled = false
     api.listSessions().then(r => {
@@ -377,7 +379,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     return () => { cancelled = true }
     // 只在本次页面挂载时寻找一次“最近主题”；restore 内部会接住服务端最新快照。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSessionId])
+  }, [initialSessionId, seedQuery])
 
   const del = async (id) => {
     setHistoryErr('')
@@ -434,6 +436,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
           <div className="agent-topic-status">{user ? '按实际用量结算 · 可持续追问' : '赠送体验积分 · 用完后订阅'}</div>
         </div>
         <div className="agent-head-actions">
+          <LanguageSwitcher mobile />
           <button className="agent-btn" onClick={newChat} title="新会话" aria-label="新会话">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
           </button>
