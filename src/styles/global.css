@@ -32,15 +32,23 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html {
+  max-width: 100%;
+  overflow-x: clip;
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-x: none;
+}
 
 body {
   font-family: var(--sans);
   color: var(--ink);
   background: var(--paper);
   min-height: 100vh;
+  min-height: 100svh;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
   line-height: 1.75;
   letter-spacing: 0.01em;
 }
@@ -63,7 +71,7 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 700; }
 .brush { font-family: var(--brush); font-weight: 400; }
 
 /* ============ 应用壳层 ============ */
-.app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+.app-shell { min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; }
 .app-main {
   flex: 1;
   width: 100%;
@@ -11414,8 +11422,10 @@ select option { background: var(--paper-light); color: var(--ink); }
   max-width: 640px;
 }
 .qimen-report-page-title {
-  width: 100vw;
-  margin: 4px 0 18px calc(50% - 50vw);
+  /* 手机用阅读列的负边距铺满可视宽度，避免 100vw 在 Safari 的动态滚动条/
+     地址栏变化时制造横向溢出；桌面端仍在下方保持全屏分隔线。 */
+  width: calc(100% + 28px);
+  margin: 4px 0 18px -14px;
   padding: 8px 20px 18px;
   text-align: center;
   border-bottom: 1px dashed var(--ink-line);
@@ -11452,6 +11462,12 @@ select option { background: var(--paper-light); color: var(--ink); }
 }
 /* 与全站 .container 的报告断点保持一致，避免奇门报告比其他报告更宽。 */
 @media (min-width: 721px) { .qimen-report-page { width: 100%; max-width: 700px; } }
+@media (min-width: 721px) {
+  .qimen-report-page-title {
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+  }
+}
 @media (min-width: 768px) { .qimen-report-page { max-width: 720px; } }
 @media (min-width: 800px) { .qimen-report-page { max-width: 760px; } }
 @media (min-width: 834px) { .qimen-report-page { max-width: 790px; } }
@@ -15324,4 +15340,16 @@ select option { background: var(--paper-light); color: var(--ink); }
   .security-event { padding: 9px 10px; }
   .security-event-main { grid-template-columns: 1fr; gap: 3px; }
   .security-event-main small { margin-top: 1px; }
+}
+
+/* iOS Safari 会在聚焦小于 16px 的可编辑控件时自动放大整页，造成输入后页面能被
+   拖动的错觉。移动端统一保持 16px；展示文字仍沿用各模块的紧凑字号。 */
+@media (max-width: 720px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+  textarea,
+  select,
+  .chat-input,
+  .hero-agent-input input {
+    font-size: 16px !important;
+  }
 }

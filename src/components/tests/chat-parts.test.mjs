@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { render, flush } from '../../test/render.mjs'
 
-const { ThinkBlock, ToolCallsBlock, StructuredAnswer, isNearScrollBottom, renderAiText } = await import('../agent/ChatParts.jsx')
+const { ThinkBlock, ToolCallsBlock, StructuredAnswer, parseStructuredAnswerText, isNearScrollBottom, renderAiText } = await import('../agent/ChatParts.jsx')
 
 function AiTextFixture({ text, streaming = false, suppressThinkBlocks = false }) {
   return renderAiText(text, streaming, { suppressThinkBlocks })
@@ -31,6 +31,19 @@ test('固定字段答案由前端直接渲染，不走 Markdown 或 JSON 原文'
   } finally {
     r.unmount()
   }
+})
+
+test('旧服务误以 text 转发 JSON 时，前端仍能恢复固定字段答案', () => {
+  const raw = JSON.stringify({
+    version: 1,
+    summary: '直接回应。',
+    sections: [{ title: '行动建议', items: [{ label: '本周', text: '先做好手上的事。' }] }],
+    closing: '可继续追问。',
+  })
+  const answer = parseStructuredAnswerText(raw)
+  assert.equal(answer.summary, '直接回应。')
+  assert.equal(answer.sections[0].title, '行动建议')
+  assert.equal(parseStructuredAnswerText('{"version":1'), null, '半截 JSON 不得提前渲染')
 })
 
 test('解读过程按阶段列表展示，而不是一段空白说明', () => {

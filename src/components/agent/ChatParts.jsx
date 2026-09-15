@@ -5,6 +5,37 @@ export function isNearScrollBottom(element, threshold = 32) {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold
 }
 
+// 部署/开发热更新时，前端可能已升级、Node 服务尚未重启。旧服务会把 JSON 信封当作
+// 普通 text 事件发送；这里做一层客户端兼容，防止协议原文露到聊天气泡或旧会话历史中。
+export function parseStructuredAnswerText(raw) {
+  let source = String(raw || '').trim()
+  source = source.replace(/^<output[^>]*>/i, '').replace(/<\/output>$/i, '').trim()
+  const fenced = source.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
+  if (fenced) source = fenced[1].trim()
+  try {
+    const value = JSON.parse(source)
+    if (!value || typeof value !== 'object' || Array.isArray(value) || value.version !== 1 || typeof value.summary !== 'string' || !value.summary.trim()) return null
+    const sections = Array.isArray(value.sections) ? value.sections.slice(0, 6).map(section => {
+      if (!section || typeof section !== 'object' || typeof section.title !== 'string' || !section.title.trim()) return null
+      const body = typeof section.body === 'string' ? section.body.trim() : ''
+      const items = Array.isArray(section.items) ? section.items.slice(0, 6).map(item => (
+        item && typeof item.label === 'string' && item.label.trim() && typeof item.text === 'string' && item.text.trim()
+          ? { label: item.label.trim(), text: item.text.trim() }
+          : null
+      )).filter(Boolean) : []
+      return body || items.length ? { title: section.title.trim(), ...(body ? { body } : {}), ...(items.length ? { items } : {}) } : null
+    }).filter(Boolean) : []
+    return {
+      version: 1,
+      summary: value.summary.trim(),
+      sections,
+      ...(typeof value.closing === 'string' && value.closing.trim() ? { closing: value.closing.trim() } : {}),
+    }
+  } catch {
+    return null
+  }
+}
+
 // ── 反馈按钮（👍有用 / 👎不对）→ 技能进化信号源。仅用于测算报告 / 测算论断 ──
 export function FeedbackBar({ msgId, fb, on, report }) {
   return (

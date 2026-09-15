@@ -7,7 +7,7 @@ import { listCollection, saveToCollection, removeFromCollection } from '../engin
 import { refreshSession } from '../data/users.js'
 import { canAfford, nextPlanKey } from '../engine/membership.js'
 import { renderMarkdown } from '../utils/markdown.jsx'
-import { ThinkBlock, ToolCallsBlock, CopyButton, StructuredAnswer, renderAiText, timeNow, fmtSessionTime, quickQuestionsForConversation, isNearScrollBottom } from './agent/ChatParts.jsx'
+import { ThinkBlock, ToolCallsBlock, CopyButton, StructuredAnswer, parseStructuredAnswerText, renderAiText, timeNow, fmtSessionTime, quickQuestionsForConversation, isNearScrollBottom } from './agent/ChatParts.jsx'
 
 const api = createAgentApi()
 const ROUTE_KEY = 'genki-agent-route'
@@ -223,7 +223,12 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
                 heartbeat: { stage: e.stage, elapsedSeconds: e.elapsedSeconds, at: Date.now() },
               }))
               break
-            case 'text': patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('answering')), text: m.text + e.delta })); break
+            case 'text': patchLast(m => {
+              const candidate = `${m.structuredRaw || ''}${e.delta}`
+              const isStructured = Boolean(m.structuredRaw) || /^\s*\{\s*"version"\s*:/.test(`${m.text || ''}${e.delta}`)
+              if (isStructured) return { ...appendSafeThinkStep(m, safeThinkStep('answering')), structuredRaw: candidate, text: '' }
+              return { ...appendSafeThinkStep(m, safeThinkStep('answering')), text: m.text + e.delta }
+            }); break
             case 'answer':
               patchLast(m => ({
                 ...appendSafeThinkStep(m, safeThinkStep('answering')),
@@ -243,7 +248,13 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
             // 追加而不是二选一：模型已经吐了半截又报错时，丢掉已渲染的文字
             // 会让用户看着内容凭空消失；把错误接在后面，两样都留住。
             case 'error': patchLast(m => ({ ...m, text: (m.text ? m.text + '\n\n' : '') + `⚠️ ${e.message}`, streaming: false, _failed: true })); break
-            case 'done': patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('completed')), streaming: false })); break
+            case 'done': patchLast(m => {
+              const raw = m.structuredRaw || m.text
+              const answer = m.answer || parseStructuredAnswerText(raw)
+              return answer
+                ? { ...appendSafeThinkStep(m, safeThinkStep('completed')), answer, text: '', structuredRaw: undefined, streaming: false }
+                : { ...appendSafeThinkStep(m, safeThinkStep('completed')), text: m.structuredRaw ? '⚠️ 本次回复格式未完成，请重新提问。' : m.text, structuredRaw: undefined, streaming: false }
+            }); break
             default: break
           }
         },
@@ -330,7 +341,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
       const restored = r.session || s
       setMessages((r.messages || []).map((m, i) => m.kind === 'report'
         ? { id: `h-${i}`, role: 'ai', kind: 'report', report: { title: (m.text.match(/^# (.+)$/m) || [])[1] || '测算报告', markdown: m.text }, time: m.time, _counted: true }
-        : { id: `h-${i}`, role: m.role, text: m.text, answer: m.answer, time: m.time, _counted: true }))
+        : { id: `h-${i}`, role: m.role, text: m.answer ? m.text : (parseStructuredAnswerText(m.text) ? '' : m.text), answer: m.answer || parseStructuredAnswerText(m.text), time: m.time, _counted: true }))
       setSessionId(restored.id)
       setActiveSession({ id: restored.id, title: sessionTitle(restored) })
       setActiveChart(null)
