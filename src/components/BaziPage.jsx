@@ -66,7 +66,7 @@ export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin,
           <button className="back-btn" onClick={onBack}>‹ 返回</button>
         </div>
         <h1 className="page-title bazi-page-title rise rise-1">
-          <span>八字门</span>
+          <span>八字排盘</span>
           {chart && !editing && (
             <button className="title-chart-change" onClick={() => { setEditing(true); setTab('mangpai'); window.scrollTo(0, 0) }} title="更换生辰" aria-label="更换生辰">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -306,6 +306,9 @@ function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, o
   const handleAskAgent = () => onAskAgent?.({
     chart,
     reportId: archiveId,
+    // 报告全文用于给 Agent 建立会话上下文，不能原样作为用户气泡展示。
+    // 子平报告尤其长，直接渲染会把截断点落进 Markdown 列表，首屏看起来像异常内容。
+    displayText: tab === 'ziping' ? '想咨询这份子平报告' : undefined,
     prompt: buildReportAgentPrompt({
       reportName: school,
       facts: [

@@ -17,6 +17,17 @@ test('持续触发限流会自动封禁来源，解除后从记录中移除', ()
   assert.equal(guard.snapshot().overview.blocked, 0)
 })
 
+test('注册字段校验失败不触发全站封禁，注册频率限制仍会触发', () => {
+  const guard = createSecurityGuard({ file: tempFile(), secret: 'r'.repeat(48), blockThreshold: 3, blockMinutes: 10 })
+  guard.note({ ip: '198.51.100.4', path: '/auth/register', status: 400 })
+  guard.note({ ip: '198.51.100.4', path: '/auth/register', status: 400 })
+  guard.note({ ip: '198.51.100.4', path: '/auth/register', status: 400 })
+  assert.equal(guard.snapshot().overview.blocked, 0)
+
+  guard.note({ ip: '198.51.100.4', path: '/auth/register', status: 429 })
+  assert.equal(guard.snapshot().overview.blocked, 1)
+})
+
 test('风控记录只保存来源指纹，不保存明文 IP', () => {
   const file = tempFile()
   const guard = createSecurityGuard({ file, secret: 'y'.repeat(48), blockThreshold: 99 })

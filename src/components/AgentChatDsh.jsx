@@ -29,6 +29,15 @@ export function serializeAgentRoute(route) {
   return `${ROUTE_PREF_PREFIX}${route}`
 }
 
+// 报告页进入聊天时，实际请求会带完整报告资料；用户只需要看到自然的咨询意图。
+// 保持字符串输入兼容普通首页入口与快捷提问。
+export function normalizeAgentSeed(input, fallback = '') {
+  const isSeed = input && typeof input === 'object' && !Array.isArray(input)
+  const requestText = String(isSeed ? (input.text || '') : (input || fallback)).trim()
+  const displayText = String(isSeed && input.displayText ? input.displayText : requestText).trim()
+  return { requestText, displayText }
+}
+
 // 解读进度展示的是用户可理解的执行阶段，而不是模型原始推理。这样既能让等待过程有
 // 反馈，也不会泄漏 Skill、系统提示、工具参数或模型自言自语。
 export function safeThinkStep(type, toolName = '') {
@@ -92,12 +101,19 @@ function chartLabel(c) {
   const shiChen = Number.isInteger(c.hour) ? ` · ${SHI_CHEN[c.hour]}时` : ''
   return `${c.gender === '女' ? '坤造' : '乾造'} · ${c.year}年${c.month}月${c.day}日${shiChen}`
 }
+function displaySessionTitle(title) {
+  const value = String(title || '').replace(/\s+/g, ' ').trim()
+  return /(?:【\s*(?:回答长度|问题覆盖校验|当前日期口径|日期换算核验|会话事实备忘|最终交付格式|当前缘主命盘)|这是一次常规咨询|不要复述整张命盘)/.test(value)
+    ? '本次咨询'
+    : value || '未命名会话'
+}
 function sessionTitle(s) {
-  if (!s.chartKey) return s.title || '未命名会话'
+  const title = displaySessionTitle(s.title)
+  if (!s.chartKey) return title
   const [year, month, day, hour, gender] = s.chartKey.split('-')
   const h = hour === 'x' ? null : Number(hour)
   if (!Number.isInteger(+year) || !Number.isInteger(+month) || !Number.isInteger(+day) || (h !== null && !Number.isInteger(h))) {
-    return s.title || '未命名会话'
+    return title
   }
   return chartLabel({ year: +year, month: +month, day: +day, hour: h, gender })
 }
@@ -189,13 +205,13 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
   const handleChatScroll = event => { followScrollRef.current = isNearScrollBottom(event.currentTarget) }
 
   const send = async (text) => {
-    const q = (text || input).trim()
+    const { requestText: q, displayText } = normalizeAgentSeed(text, input)
     if (!q || typing) return
     if (user && !canAfford(user, 'agent.chat')) { onUpgrade && onUpgrade(nextPlanKey(user.plan)); return }
     followScrollRef.current = true
     setInput('')
     setTyping(true)
-    setMessages(prev => [...prev, { id: `u-${Date.now()}`, role: 'user', text: q, time: timeNow() }, { id: `a-${Date.now()}`, role: 'ai', text: '', reasoning: safeThinkStep('start'), tools: [], streaming: true, time: timeNow() }])
+    setMessages(prev => [...prev, { id: `u-${Date.now()}`, role: 'user', text: q, displayText, time: timeNow() }, { id: `a-${Date.now()}`, role: 'ai', text: '', reasoning: safeThinkStep('start'), tools: [], streaming: true, time: timeNow() }])
     const ac = new AbortController()
     abortRef.current = ac
     try {
@@ -515,7 +531,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
                   {m.answer ? <StructuredAnswer answer={m.answer} /> : m.streaming && !m.text ? (
                     <span className="typing"><i /><i /><i /></span>
                   ) : (
-                    <>{renderAiText(m.text, !!m.streaming, { suppressThinkBlocks: Boolean(m.reasoning) })}{m.streaming && <span className="stream-cursor">▍</span>}</>
+                    <>{renderAiText(m.role === 'user' ? (m.displayText || m.text) : m.text, !!m.streaming, { suppressThinkBlocks: Boolean(m.reasoning) })}{m.streaming && <span className="stream-cursor">▍</span>}</>
                   )}
                 </div>
               )}

@@ -9,7 +9,7 @@ const LOGIN_COPY = {
   en: { back: 'Back', backHome: 'Back to home', wish: 'Keep your', wishEm: 'curiosity close', wishCopy: 'After you sign in, your charts, reports, and conversations stay safely in one place.', wishNote: 'Create an account to begin your own exploration', gift: '20 credits on sign-up', point: 'credits', credit: '1 credit = 19,000 Tokens. Genki Agent charges by actual use; credits do not expire.', benefits: ['Save charts', 'Sync reports', 'Ask Genki AI'], title: 'Welcome back', subtitle: 'Save your chart journey and unlock member benefits', methods: ['QR sign in', 'SMS sign in', 'Account sign in'], account: 'Account', accountInput: 'Enter your account', password: 'Password', passwordInput: 'Enter your password', login: 'Sign in', loggingIn: 'Signing in…', phone: 'Phone number', phoneInput: 'Enter an 11-digit phone number', code: 'Verification code', codeInput: '6-digit code', send: 'Send code', smsLogin: 'Sign in by SMS', qrTip: 'Use WeChat to scan and confirm. No password needed.', qrOpen: 'Open QR sign-in', noAccount: 'New here?', register: 'Create account', legal: 'By signing in, you agree to the Terms of Service and Privacy Policy.', hide: 'Hide password', show: 'Show password', failed: 'Sign-in failed. Please try again.', smsSent: 'Code sent. Please check your messages.' },
 }
 
-export default function LoginPage({ onBack, onSwitch, onForgotPassword, onSuccess }) {
+export default function LoginPage({ onBack, onSwitch, onForgotPassword, onOpenLegal, onSuccess }) {
   const { locale } = useLocale()
   const copy = LOGIN_COPY[locale] || LOGIN_COPY['zh-CN']
   const [method, setMethod] = useState('account')
@@ -175,7 +175,13 @@ export default function LoginPage({ onBack, onSwitch, onForgotPassword, onSucces
             <button onClick={onSwitch}>{copy.register}</button>
           </p>
 
-          <p className="auth-tip">{copy.legal}</p>
+          <p className="auth-tip">
+            {locale === 'en' ? 'By signing in, you agree to the ' : locale === 'zh-TW' ? '登入即代表同意' : '登录即代表同意'}
+            <button type="button" className="auth-legal-link" onClick={() => onOpenLegal?.('terms')}>{locale === 'en' ? 'Terms of Service' : locale === 'zh-TW' ? '《使用者協議》' : '《用户协议》'}</button>
+            {locale === 'en' ? ' and the ' : '与'}
+            <button type="button" className="auth-legal-link" onClick={() => onOpenLegal?.('privacy')}>{locale === 'en' ? 'Privacy Policy' : '《隐私政策》'}</button>
+            {locale === 'en' ? '.' : ''}
+          </p>
         </div>
       </div>
     </section>

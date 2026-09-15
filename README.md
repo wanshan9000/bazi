@@ -5,6 +5,15 @@
 
 线上：https://keymm.me
 
+## 搜索收录
+
+生产站唯一规范域名是 `https://keymm.me`。公开功能页可直接访问 `/bazi`、`/ziwei`、`/huangli`、`/ai-bazi`、`/tarot`、`/fengshui`、`/name` 与 `/wenku`；旧的 `#/` 地址仍兼容。
+
+- `https://keymm.me/robots.txt` 允许公开页面抓取，禁止 API、登录、账户、报告与管理页。
+- `npm run build` 会额外生成首页、`/bazi`、`/ziwei`、`/huangli`、`/ai-bazi`、`/tarot`、`/fengshui`、`/name`、`/wenku` 的独立 HTML。Caddy 会优先返回这些静态页，React 加载后再接管交互，因此百度等不执行 JavaScript 的抓取器仍能读取正文、title、description、canonical 和 JSON-LD。
+- `https://keymm.me/sitemap.xml` 列出首页和核心公开落地页；发布后在 Google Search Console 与百度搜索资源平台分别添加 `keymm.me` 域名资源，完成验证并提交此地址。
+- 不要为排名批量生成同质化或无实际内容的页面；持续发布有作者、日期、事实来源和实际解读价值的文库文章。微信公众号搜一搜与普通网页收录是两套体系，仍需通过已认证公众号或小程序发布原创内容。
+
 ## 快速开始
 
 ```bash
@@ -79,5 +88,5 @@ npm run agent:smoke                  # 真 key 冒烟（可选）
   `openid` 去发送公众号模板消息。
 - **`server/data/` 只有本机快照**（`server/backup.js`，默认每 24 小时一份、留 14 份）。
   那只防误删，不防整机故障 —— 服务器侧仍需把该目录纳入常规备份并挂持久卷。
-- **隐私政策与用户协议是占位**，页脚未配置就不显示。上线前需要补真实文本与备案号。
+- **用户协议与隐私政策**已由站内页面提供；上线前仍必须在前端环境变量中填写真实的 `VITE_LEGAL_ENTITY`、`VITE_CONTACT_EMAIL`，并补齐实际备案号。
 - 命理算法以传统流派口径实现，仅供参考，不构成医疗、投资或法律建议。

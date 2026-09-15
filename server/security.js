@@ -34,7 +34,9 @@ function scoreOf({ path, status }) {
   if (status === 429) return 3
   if (status === 413) return 3
   if (status === 401 && (path === '/auth/login' || path === '/admin/auth')) return 2
-  if (status === 400 && (path.startsWith('/sms/') || path === '/auth/register')) return 1
+  // 注册表单的字段校验失败是正常的人机交互，不应累计到全站封禁；注册接口自身
+  // 仍保留独立频率限制。短信接口可被批量枚举，继续计入风险分。
+  if (status === 400 && path.startsWith('/sms/')) return 1
   if (status === 409 && path === '/agent/chat') return 1
   return 0
 }
@@ -200,4 +202,3 @@ export function sharedSecurityGuard() {
   if (!singleton) singleton = createSecurityGuard()
   return singleton
 }
-

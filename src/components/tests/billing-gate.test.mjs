@@ -160,6 +160,8 @@ test('未注册游客可任选牌阵体验三次，第四次引导注册', async
   r.click(go)
   r.click(go)
   r.click(go)
+  await flush()
+  assert.ok(r.text().includes('注册体验更多'), '体验次数用尽后应引导用户注册体验更多')
   r.click(go)
   assert.deepEqual(started, ['single', 'single', 'single'])
   assert.equal(loginContext, 'tarot')

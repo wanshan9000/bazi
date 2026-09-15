@@ -184,7 +184,7 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
                       onStart(s.id)
                     }}
                   >
-                    {!user && !guestQuota.remaining ? '体验已用完 · 注册查看权益' : s.count === 1 ? '开始单牌解读 →' : '抽这组牌 →'}
+                    {!user && !guestQuota.remaining ? '注册体验更多' : s.count === 1 ? '开始单牌解读 →' : '抽这组牌 →'}
                   </button>
                 </article>
               ))}

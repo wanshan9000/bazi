@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /login
+Disallow: /register
+Disallow: /profile
+Disallow: /reports
+Disallow: /report-detail
+Disallow: /share
+
+Sitemap: https://keymm.me/sitemap.xml

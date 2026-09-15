@@ -200,5 +200,6 @@ for i in $(seq 1 30); do
   sleep 3
 done
 curl -fsS -m 10 "https://$DOMAIN/" | grep -q '<div id="root"' || die "首页没拿到前端 index.html"
+curl -fsS -m 10 "https://$DOMAIN/bazi" | grep -q 'data-seo-prerendered="true"' || die "八字页未命中静态预渲染 HTML"
 
 log "完成 · $COMMIT $SUBJECT → https://$DOMAIN"

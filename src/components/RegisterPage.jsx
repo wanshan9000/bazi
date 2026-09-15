@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { register, registerBySms, registerByWechat, sendAuthSmsCode } from '../data/users.js'
 import { api } from '../api/client.js'
 
-export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
+export default function RegisterPage({ onBack, onSwitch, onOpenLegal, onSuccess }) {
   // 注册优先「扫码识别」：默认停在扫码注册 tab，扫码成功自动建号并登录
   const [method, setMethod] = useState('wechat') // wechat | account
   const [nickname, setNickname] = useState('')
@@ -289,7 +289,11 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
             <button onClick={onSwitch}>直接登录</button>
           </p>
 
-          <p className="auth-tip">注册即代表同意《用户协议》与《隐私政策》</p>
+          <p className="auth-tip">注册即代表同意
+            <button type="button" className="auth-legal-link" onClick={() => onOpenLegal?.('terms')}>《用户协议》</button>
+            与
+            <button type="button" className="auth-legal-link" onClick={() => onOpenLegal?.('privacy')}>《隐私政策》</button>
+          </p>
         </div>
       </div>
     </section>

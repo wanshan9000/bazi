@@ -83,7 +83,7 @@ export default function ZiweiPage({ chart, onBack, onChart, user, onRequireLogin
           <button className="back-btn" onClick={onBack}>‹ 返回</button>
         </div>
         <h1 className="page-title bazi-page-title rise rise-1">
-          <span>紫微门</span>
+          <span>紫微斗数</span>
           {chart && !editing && (
             <button className="title-chart-change" onClick={() => { setEditing(true); window.scrollTo(0, 0) }} title="更换生辰" aria-label="更换生辰">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

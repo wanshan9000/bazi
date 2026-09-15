@@ -10,6 +10,8 @@ import { createAgentApi } from './api/agent.js'
 import { reportApi } from './api/reports.js'
 import { createArchiveDraft, legacyArchiveDrafts } from './engine/reportArchive.js'
 import { historyRouteForReport, isHistoryReportView } from './engine/reportHistoryRoute.js'
+import SeoMeta from './components/SeoMeta.jsx'
+import { publicPathForView, routeFromPath } from './seo.js'
 
 // 首屏只需要首页和应用壳；具体阅读、排盘与管理页进入后才下载。
 const BaziPage = lazy(() => import('./components/BaziPage.jsx'))
@@ -28,6 +30,7 @@ const SubscribePage = lazy(() => import('./components/SubscribePage.jsx'))
 const LoginPage = lazy(() => import('./components/LoginPage.jsx'))
 const RegisterPage = lazy(() => import('./components/RegisterPage.jsx'))
 const ForgotPasswordPage = lazy(() => import('./components/ForgotPasswordPage.jsx'))
+const LegalPage = lazy(() => import('./components/LegalPage.jsx'))
 const ProfilePage = lazy(() => import('./components/ProfilePage.jsx'))
 const MyReportsPage = lazy(() => import('./components/MyReportsPage.jsx'))
 const ReportArchiveDetail = lazy(() => import('./components/MyReportsPage.jsx').then(module => ({ default: module.ReportArchiveDetail })))
@@ -210,6 +213,7 @@ export default function App() {
   // 订阅 Modal 状态：待选档位 + 是否先进入续费方案选择。
   const [subscribeModal, setSubscribeModal] = useState(null)
   const [archiveReportId, setArchiveReportId] = useState(null)
+  const [legalReturnView, setLegalReturnView] = useState('home')
   const hasAdminAccess = isSuperAdmin(user)
   const archiveIds = useRef(new Map())
 
@@ -270,7 +274,7 @@ export default function App() {
   //    （此前的 astro、fengshui、register，已补上）。
   const HASH_VIEWS = ['home', 'agent', 'bazi', 'ziwei', 'qimen', 'chenggu', 'huangli',
     'name', 'fengshui', 'astro', 'tarot', 'tarot-reading', 'wenku', 'article',
-    'profile', 'reports', 'report-detail', 'login', 'register', 'forgot-password', 'admin', 'share']
+    'profile', 'reports', 'report-detail', 'login', 'register', 'forgot-password', 'terms', 'privacy', 'admin', 'share']
 
   // 启动时检测 URL hash：
   //   #share=...     → 完整报告直接序列化在 URL 里，解码为只读报告
@@ -325,6 +329,12 @@ export default function App() {
           try { window.history.replaceState(null, '', '#/home') } catch { /* ignore */ }
         }
       }
+    } else {
+      const route = routeFromPath(window.location.pathname)
+      if (route) {
+        setArticleId(route.articleId || null)
+        setView(route.view)
+      }
     }
   }, [])
 
@@ -344,10 +354,20 @@ export default function App() {
             try { window.history.replaceState(null, '', '#/home') } catch { /* ignore */ }
           }
         }
+      } else {
+        const route = routeFromPath(window.location.pathname)
+        if (route) {
+          setArticleId(route.articleId || null)
+          setView(route.view)
+        }
       }
     }
     window.addEventListener('hashchange', onHash)
-    return () => window.removeEventListener('hashchange', onHash)
+    window.addEventListener('popstate', onHash)
+    return () => {
+      window.removeEventListener('hashchange', onHash)
+      window.removeEventListener('popstate', onHash)
+    }
   }, [user, hasAdminAccess])
 
   const goNav = (v, payload) => {
@@ -369,9 +389,14 @@ export default function App() {
       }
       if (payload && typeof payload === 'object' && payload.reportId) setArchiveReportId(payload.reportId)
       else if (!isHistoryReportView(v) && v !== 'report-detail') setArchiveReportId(null)
+      if (payload && typeof payload === 'object' && payload.articleId) setArticleId(payload.articleId)
+      else if (v !== 'article') setArticleId(null)
     })
-    // 同步 URL hash（#/view），支持直达与刷新恢复；分享/文章等有独立子状态的不写
-    if (HASH_VIEWS.includes(v) && v !== 'share') {
+    // 公开内容使用干净路径供爬虫和分享直接访问；账户、报告等私密视图保持 hash 路由。
+    const cleanPath = publicPathForView(v, payload?.articleId || articleId)
+    if (cleanPath) {
+      try { window.history.replaceState(null, '', cleanPath) } catch { /* ignore */ }
+    } else if (HASH_VIEWS.includes(v) && v !== 'share') {
       const reportQuery = (isHistoryReportView(v) || v === 'report-detail') && (payload?.reportId || archiveReportId) ? `?report=${encodeURIComponent(payload?.reportId || archiveReportId)}` : ''
       try { window.history.replaceState(null, '', `#/${v}${reportQuery}`) } catch { /* ignore */ }
     }
@@ -386,19 +411,17 @@ export default function App() {
     setAgentSessionId(null)
     goNav('agent', { seedQuery: q })
   }
-  const openReportAgent = ({ chart: reportChart, prompt, reportId = null }) => {
+  const openReportAgent = ({ chart: reportChart, prompt, reportId = null, displayText }) => {
     if (reportChart) setChart(reportChart)
     setAgentReportId(reportId)
     setAgentSessionId(null)
-    goNav('agent', { seedQuery: prompt })
+    // 报告资料仍完整发送给服务端，供本次会话建立上下文；displayText 仅用于聊天首屏。
+    // 两者分开后，长报告不会再被当成用户消息渲染出来。
+    goNav('agent', { seedQuery: displayText ? { text: prompt, displayText } : prompt })
   }
 
   const openArticle = (id) => {
-    startTransition(() => {
-      setArticleId(id)
-      setView('article')
-    })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    goNav('article', { articleId: id })
   }
 
   const startTarot = (id) => {
@@ -489,6 +512,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <SeoMeta view={view} articleId={articleId} />
       <TopBar
         view={view}
         onNav={goNav}
@@ -642,7 +666,7 @@ export default function App() {
         {view === 'article' && (
           <ArticleView
             id={articleId}
-            onBack={() => { setView('wenku'); window.scrollTo({ top: 0 }) }}
+            onBack={() => goNav('wenku')}
             onOpen={openArticle}
           />
         )}
@@ -654,6 +678,7 @@ export default function App() {
             onBack={() => goNav('home')}
             onSwitch={() => goNav('register')}
             onForgotPassword={() => goNav('forgot-password')}
+            onOpenLegal={type => { setLegalReturnView('login'); goNav(type) }}
             onSuccess={handleLogin}
           />
         )}
@@ -661,10 +686,13 @@ export default function App() {
           <RegisterPage
             onBack={() => goNav('home')}
             onSwitch={() => goNav('login')}
+            onOpenLegal={type => { setLegalReturnView('register'); goNav(type) }}
             onSuccess={handleLogin}
           />
         )}
         {view === 'forgot-password' && <ForgotPasswordPage onBack={() => goNav('login')} onLogin={() => goNav('login')} />}
+        {view === 'terms' && <LegalPage type="terms" onBack={() => goNav(legalReturnView)} />}
+        {view === 'privacy' && <LegalPage type="privacy" onBack={() => goNav(legalReturnView)} />}
         {view === 'profile' && user && (
           <ProfilePage
             user={user}
@@ -781,11 +809,9 @@ function AgentPage({ chart, onBack, seedQuery, user, locale, onRequireLogin, onU
   )
 }
 
-// 站点合规信息全部来自构建期环境变量：没配就不渲染，绝不摆占位符。
+// 备案和联系信息来自构建期环境变量；法律文本由站内页面统一维护。
 const ICP_NO = import.meta.env.VITE_ICP_NO || ''
 const POLICE_NO = import.meta.env.VITE_POLICE_NO || ''
-const PRIVACY_URL = import.meta.env.VITE_LEGAL_PRIVACY_URL || ''
-const TERMS_URL = import.meta.env.VITE_LEGAL_TERMS_URL || ''
 const CONTACT_EMAIL = import.meta.env.VITE_CONTACT_EMAIL || ''
 
 function TailBand({ onNav, hideOnMobile, user }) {
@@ -832,11 +858,8 @@ function TailBand({ onNav, hideOnMobile, user }) {
           <div className="tail-col">
             <p className="tail-col-title">关于</p>
             <ul>
-              {/* 隐私政策 / 用户协议是法律文本，必须由本人撰写后再挂出来。
-                  此前这三项是没有任何 onClick 的死链接，点了毫无反应 ——
-                  与其摆着不如先不放。配了 VITE_LEGAL_* 就会显示为真实链接。 */}
-              {PRIVACY_URL && <li><a href={PRIVACY_URL} target="_blank" rel="noreferrer">隐私政策</a></li>}
-              {TERMS_URL && <li><a href={TERMS_URL} target="_blank" rel="noreferrer">用户协议</a></li>}
+              <li><a onClick={() => onNav('privacy')}>隐私政策</a></li>
+              <li><a onClick={() => onNav('terms')}>用户协议</a></li>
               {CONTACT_EMAIL && <li><a href={`mailto:${CONTACT_EMAIL}`}>联系我们</a></li>}
               {isSuperAdmin(user) && <li><a onClick={() => onNav('admin')}>管理控制台</a></li>}
             </ul>

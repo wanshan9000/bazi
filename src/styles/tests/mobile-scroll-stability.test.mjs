@@ -36,7 +36,7 @@ test('手机聚焦可编辑控件不会触发 Safari 自动缩放', () => {
 test('窄桌面顶栏让导航收缩，不与品牌和账户入口重叠', () => {
   assert.match(css, /@media \(min-width: 870px\) \{\s*\.topbar-inner\s*\{\s*display:\s*grid;\s*grid-template-columns:\s*auto minmax\(0, 1fr\) auto;/)
   assert.match(css, /\.topnav\s*\{\s*min-width:\s*0;\s*justify-self:\s*stretch;\s*justify-content:\s*center;\s*overflow-x:\s*auto;/)
-  assert.match(css, /@media \(min-width: 870px\) and \(max-width: 1210px\) \{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);[\s\S]*?\.topnav\s*\{\s*justify-self:\s*center;\s*justify-content:\s*center;\s*gap:\s*30px;/)
+  assert.match(css, /@media \(min-width: 870px\) and \(max-width: 1210px\) \{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);[\s\S]*?\.topnav\s*\{\s*justify-self:\s*center;\s*justify-content:\s*center;\s*gap:\s*30px;[\s\S]*?\.user-chip-login\s*\{\s*min-width:\s*auto;\s*padding:\s*6px 16px;/)
 })
 
 test('手机 Agent 在头部切换语言，底部不再出现第二个切换器', () => {

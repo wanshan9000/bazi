@@ -287,6 +287,16 @@ function agentResponsePaceProtocol(text) {
   return `【回答长度】这是一次常规咨询。先用 1-2 句给出直接结论，再用 2-4 个短条目说明最相关的依据与建议；不要复述整张命盘、罗列未被问到的宫位或扩写成完整报告。`
 }
 
+// DSH 的标题器会从整段 prompt 自动概括标题。prompt 前部包含服务端控制协议时，
+// 它偶尔会把「回答长度」之类的内部指令当作会话名。标题只可来自用户主题，
+// 不能让控制语进入历史列表或当前会话头部。
+function generatedSessionTitle(title) {
+  const value = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 32)
+  if (!value) return ''
+  if (/(?:【\s*(?:回答长度|问题覆盖校验|当前日期口径|日期换算核验|会话事实备忘|最终交付格式|当前缘主命盘)|这是一次常规咨询|不要复述整张命盘)/.test(value)) return ''
+  return value
+}
+
 function compactUserMessage(text) {
   return String(text || '').replace(/\s+/g, ' ').trim().slice(0, 180)
 }
@@ -905,7 +915,10 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
           if (e.type === 'tool_result') liveStage = 'synthesis'
           if (e.type === 'tool_result' && e.name === 'bazi' && e.ok !== false && baziToolChart) inferredChart = baziToolChart
           if (e.type === 'tool_result' && e.kind === 'report' && e.ok !== false) { producedOutput = true; producedReport = true; store.appendMessage(req.uid, session.id, { role: 'ai', kind: 'report', name: e.name, text: e.text, time: timeNow() }) }
-          if (e.type === 'title' && session.title.length <= 14) store.updateSession(req.uid, session.id, { title: e.title })
+          if (e.type === 'title' && session.title.length <= 14) {
+            const title = generatedSessionTitle(e.title)
+            if (title) store.updateSession(req.uid, session.id, { title })
+          }
           if (e.type === 'error') sawError = true
           if (e.type !== 'message' && e.type !== 'done') send(e) // done 由下方统一发（带 usage）；若已见 error 则不再发 done
         },

@@ -46,8 +46,10 @@ keymm.me {
 		header @assets Cache-Control "public, max-age=31536000, immutable"
 		@html path / /index.html
 		header @html Cache-Control "no-cache"
-		# hash 路由 SPA（/#/admin 等）：任何路径都回 index.html。
-		try_files {path} /index.html
+		# 公开关键页由构建期生成独立的 HTML（/bazi/index.html 等），让不执行
+		# JavaScript 的搜索抓取器也能直接读到正文、canonical 与结构化数据；其余
+		# 路径及旧 hash 路由继续回退 SPA。
+		try_files {path} {path}/index.html /index.html
 		file_server
 	}
 }

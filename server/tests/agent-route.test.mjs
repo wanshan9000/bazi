@@ -62,6 +62,19 @@ test('chat 流式返回并镜像消息', async () => {
   } finally { srv.close() }
 })
 
+test('内部回答长度协议不能覆盖用户会话标题', async () => {
+  const pool = fakePool([{ type: 'title', title: '【回答长度】这是一次常规咨询' }, { type: 'text', delta: '你好。' }, { type: 'done', reason: 'completed' }])
+  const { app, store, accounts } = mkApp(pool)
+  const me = await mkUser(accounts, 'title-protocol')
+  const { srv, base } = await listen(app)
+  try {
+    const res = await fetch(`${base}/api/agent/chat`, { method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify({ text: '你好亲' }) })
+    const frames = sseFrames(await res.text())
+    const sessionId = frames.find(frame => frame.type === 'session').sessionId
+    assert.equal(store.getSession(me.id, sessionId).title, '你好亲')
+  } finally { srv.close() }
+})
+
 test('合规 JSON 以固定 answer 事件交付并保存结构对象', async () => {
   const answer = {
     version: 1,

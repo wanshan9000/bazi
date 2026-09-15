@@ -70,6 +70,39 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 700; }
 .latin { font-family: var(--latin); font-style: italic; }
 .brush { font-family: var(--brush); font-weight: 400; }
 
+/* 构建期 SEO 页：供不执行 JavaScript 的抓取器读取，也让弱网用户在 React 接管前
+   看到与站点一致的、可阅读的首屏。React createRoot 后会替换整个 #root。 */
+.seo-prerender {
+  width: min(100% - 40px, 760px);
+  margin: 0 auto;
+  padding: 40px 0 56px;
+}
+.seo-prerender header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--ink-line);
+}
+.seo-prerender header a { color: var(--ink); font-family: var(--serif); font-size: 20px; font-weight: 700; text-decoration: none; }
+.seo-prerender header p { color: var(--ink-soft); font-size: 13px; }
+.seo-prerender article { padding-top: 40px; }
+.seo-prerender h1 { margin: 0; color: var(--ink); font-size: clamp(27px, 5vw, 38px); line-height: 1.32; }
+.seo-prerender-summary { margin: 14px 0 28px; color: var(--ink-soft); font-size: 16px; }
+.seo-prerender section { padding: 20px 0; border-top: 1px solid var(--ink-line-soft); }
+.seo-prerender h2 { margin: 0 0 5px; color: var(--ink); font-size: 18px; }
+.seo-prerender section p, .seo-prerender-disclaimer { color: var(--ink-soft); font-size: 14px; }
+.seo-prerender-links { display: flex; flex-wrap: wrap; gap: 10px 16px; margin: 25px 0 20px; }
+.seo-prerender-links a { color: var(--cinnabar-deep); font-size: 14px; text-decoration: none; }
+.seo-prerender-disclaimer { border-top: 1px solid var(--ink-line-soft); padding-top: 16px; }
+@media (max-width: 520px) {
+  .seo-prerender { width: min(100% - 32px, 760px); padding-top: 28px; }
+  .seo-prerender header { display: block; }
+  .seo-prerender header p { margin-top: 2px; }
+  .seo-prerender article { padding-top: 30px; }
+}
+
 /* ============ 应用壳层 ============ */
 .app-shell { min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; }
 .app-main {
@@ -12180,6 +12213,49 @@ select option { background: var(--paper-light); color: var(--ink); }
   font-size: 11.5px;
   color: var(--ink-faint);
 }
+.auth-legal-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cinnabar-deep);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(199, 74, 115, 0.35);
+  text-underline-offset: 2px;
+}
+.auth-legal-link:hover { color: var(--cinnabar); text-decoration-color: currentColor; }
+
+/* ============ 用户协议 / 隐私政策 ============ */
+.legal-page { width: min(100% - 40px, 880px); margin: 0 auto; padding: 22px 0 72px; }
+.legal-page .page-back { display: inline-flex !important; }
+.legal-hero { margin: 30px 0 18px; text-align: center; }
+.legal-kicker { margin: 0 0 10px; color: var(--cinnabar-deep); font-size: 10px; font-weight: 700; letter-spacing: 0.18em; }
+.legal-hero h1 { margin: 0; color: var(--ink); font-family: var(--serif); font-size: 32px; font-weight: 700; letter-spacing: 0.12em; }
+.legal-hero > p:last-child { margin: 12px 0 0; color: var(--ink-faint); font-size: 12px; letter-spacing: 0.04em; }
+.legal-summary { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; margin: 0 auto 16px; padding: 14px 17px; border: 1px solid rgba(199, 74, 115, 0.18); border-radius: 8px; background: rgba(255, 247, 248, 0.72); }
+.legal-summary-mark { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 50%; background: var(--cinnabar-soft); color: var(--cinnabar-deep); font-size: 12px; }
+.legal-summary p { margin: 1px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.75; }
+.legal-document { overflow: hidden; border: 1px solid var(--ink-line-soft); border-radius: 8px; background: var(--paper-light); box-shadow: 0 10px 30px rgba(117, 70, 81, 0.06); }
+.legal-meta { display: grid; gap: 4px; padding: 14px 22px; border-bottom: 1px solid var(--ink-line-soft); background: rgba(250, 246, 240, 0.65); color: var(--ink-faint); font-size: 11px; line-height: 1.65; overflow-wrap: anywhere; }
+.legal-section { padding: 23px 24px 0; }
+.legal-section:last-child { padding-bottom: 26px; }
+.legal-section + .legal-section { border-top: 1px solid rgba(125, 93, 94, 0.11); margin-top: 23px; }
+.legal-section h2 { margin: 0 0 11px; color: var(--ink); font-family: var(--serif); font-size: 18px; letter-spacing: 0.06em; }
+.legal-section p { margin: 0; color: var(--ink-soft); font-size: 14px; line-height: 1.95; letter-spacing: 0.015em; overflow-wrap: anywhere; }
+.legal-section p + p { margin-top: 10px; }
+@media (max-width: 640px) {
+  .legal-page { width: min(100% - 28px, 880px); padding-top: 14px; padding-bottom: calc(34px + var(--bottomnav-h) + env(safe-area-inset-bottom)); }
+  .legal-hero { margin-top: 22px; }
+  .legal-hero h1 { font-size: 26px; }
+  .legal-summary { padding: 13px 14px; }
+  .legal-document { border-radius: 7px; }
+  .legal-meta { padding: 13px 16px; }
+  .legal-section { padding: 20px 16px 0; }
+  .legal-section:last-child { padding-bottom: 22px; }
+  .legal-section h2 { font-size: 16px; }
+  .legal-section p { font-size: 13px; line-height: 1.85; }
+}
 .auth-msg {
   max-width: 560px;
   margin: 4px auto 0;
@@ -14664,6 +14740,7 @@ select option { background: var(--paper-light); color: var(--ink); }
   .credits-chip { margin-right: 4px; }
   .credits-chip .cc-num, .user-chip-name { display: none; }
   .user-chip { min-width: 32px; padding: 0; justify-content: center; }
+  .user-chip-login { min-width: auto; padding: 6px 16px; }
   .user-chip-login .user-chip-name { display: inline; }
   .language-switcher { min-width: 46px; width: 46px; margin-left: 5px; }
 }
