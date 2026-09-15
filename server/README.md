@@ -118,9 +118,6 @@ VITE_API_BASE=https://你的域名/api  # ❌ 会拼出 /api/api
   `/api/sms/send-code` 不再回显验证码，`/api/wechat/mock-done` 直接 503。
   确需在生产联调时才设 `ALLOW_MOCK_CHANNELS=1`。
 - 验证码、订阅数据走 HTTPS 传输。
-- 生产账号注册默认要求 Cloudflare Turnstile：必须同时配置服务端
-  `TURNSTILE_SECRET_KEY` 与前端构建变量 `VITE_TURNSTILE_SITE_KEY`。密钥缺失时
-  注册会被关闭，不会悄悄降级成无验证注册。
 - 注册、登录、短信验证码、订阅、报告分享和 AI 接口都有各自限流；AI 额外限制
   同一用户只可同时运行一轮。持续触发限流/鉴权失败会写入 `security.json` 并自动
   临时封禁来源。后台“安全风控”页可查看指纹事件并人工解除或加封。

@@ -136,7 +136,7 @@ export const FREE_PLAN = {
   key: 'free',
   icon: '○',
   en: 'Guest',
-  name: '游客',
+  name: '注册用户',
   tag: '未订阅',
   price: 0,
   credits: 0,
@@ -144,7 +144,6 @@ export const FREE_PLAN = {
   desc: '基础测算免费；注册赠 20 积分可体验轻量深读，高阶术数需开通玄者。',
   perks: [
     '称骨、星座、八字基础盘与通用黄历免费',
-    '塔罗可体验 8 次单牌',
     '八字、称骨、星座、黄历轻量深读',
     '元气 Agent 获赠限量体验积分',
     '注册赠 20 积分',
@@ -365,7 +364,7 @@ export function nextResetAt(now = Date.now()) {
 
 /* ---- 文案 ---- */
 export const PLAN_LABEL = {
-  free: '游客',
+  free: '注册用户',
   earth: '凡者',
   heaven: '玄者',
   oracle: '天者',

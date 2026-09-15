@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { SPREADS } from '../data/tarot.js'
-import ReportLock from './ReportLock.jsx'
 import UpgradePrompt from './UpgradePrompt.jsx'
 import { consumeCredit } from '../data/users.js'
 import { FEATURE_COSTS, getMonthlyCredits, planByKey, nextPlanKey, requiredPlanForFeature, canUseFeature, featureAllowanceStatus } from '../engine/membership.js'
+import { consumeGuestTarot, guestTarotStatus } from '../engine/freeQuota.js'
 
 // 牌阵主题分类
 const SPREAD_CATS = [
@@ -59,39 +59,18 @@ function SpreadPreview({ spread, drawn = 0 }) {
 
 export default function TarotPage({ onBack, onStart, history, user, onRequireLogin, onUpgrade, onUserChange }) {
   const [cat, setCat] = useState('all')
+  const [guestQuota, setGuestQuota] = useState(() => user ? null : guestTarotStatus())
   // 登录用户扣分结果：true 表示扣分成功；'insufficient' 表示积分不足
   const [insufficient, setInsufficient] = useState(false)
   const [accessDenied, setAccessDenied] = useState(false)
 
-  // 凡者起即可使用全部牌阵；每月的内含次数由统一塔罗配额结算。
+  // 游客可任选牌阵，但全站仅有 3 次本机体验；凡者起则进入服务端月度配额。
   const list = SPREADS.filter(s => {
     if (cat !== 'all' && s.cat !== cat) return false
-    return canUseFeature(user, 'tarot.reading')
+    return !user || canUseFeature(user, 'tarot.reading')
   })
   const activeCat = SPREAD_CATS.find(c => c.k === cat)
   const tarotAllowance = featureAllowanceStatus(user, 'tarot.reading')
-
-  if (!user) {
-    return (
-      <div className="page-wrap tarot-page">
-        <div className="container">
-          <div className="page-head rise"><button className="back-btn" onClick={onBack}>‹ 返回</button></div>
-          <h1 className="page-title tarot-page-title rise rise-1">塔罗门</h1>
-          <p className="page-sub rise rise-2">七十八张阿卡那 · 九种经典牌阵 · 一抽即明</p>
-          <ReportLock
-            user={user}
-            onRequireLogin={onRequireLogin}
-            backView="tarot"
-            icon="🃏"
-            eyebrow="塔罗解读 · 凡者起"
-            title="开通凡者后，全部牌阵每月含 20 次解读"
-            desc="爱情、事业、抉择等牌阵均可使用，按月合计计算次数。"
-            note="注册后可查看会员权益并选择适合自己的方案"
-          />
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="page-wrap tarot-page">
@@ -101,14 +80,16 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
         </div>
         <h1 className="page-title tarot-page-title rise rise-1">
           <span>塔罗门</span>
-          {history.length > 0 && (
+          {user && history.length > 0 && (
             <span className="tarot-draw-count" title={`已累计完成 ${history.length} 次塔罗占卜`}><em>{history.length}</em> 卦</span>
           )}
         </h1>
         <p className="page-sub rise rise-2">七十八张阿卡那 · 九种经典牌阵 · 一抽即明</p>
 
         <p className="quota-hint rise rise-2">
-          {planByKey(user.plan).name} · 塔罗解读本月剩余 <b>{tarotAllowance.remaining === Infinity ? '不限' : `${tarotAllowance.remaining} / ${tarotAllowance.limit}`}</b> 次
+          {user
+            ? <>{planByKey(user.plan).name} · 塔罗解读本月剩余 <b>{tarotAllowance.remaining === Infinity ? '不限' : `${tarotAllowance.remaining} / ${tarotAllowance.limit}`}</b> 次</>
+            : <>游客可任选牌阵本机体验，剩余 <b>{guestQuota.remaining} / 3</b> 次</>}
         </p>
 
         {/* 积分不足：此前只 setInsufficient(true) 却从不渲染，用户点「抽这组牌」毫无反应 */}
@@ -180,25 +161,30 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
                   <button
                     className="btn small sc-go"
                     onClick={async () => {
-                      if (user) {
-                        // 扣分走服务端，所以必须 await —— 不等结果就 onStart 的话，
-                        // 积分不足时用户已经进了抽牌页，闸门形同虚设。
-                        const res = await consumeCredit(user.id, 'tarot.reading')
-                        if (!res.ok) {
-                          if (res.reason === 'insufficient' || res.reason === 'plan_required') {
-                            setInsufficient(true)
-                            setAccessDenied(res.reason === 'plan_required')
-                          }
-                          return
-                        }
-                        setInsufficient(false)
-                        setAccessDenied(false)
-                        if (res.user) onUserChange && onUserChange(res.user)
+                      if (!user) {
+                        const result = consumeGuestTarot()
+                        if (!result.ok) { onRequireLogin?.('tarot'); return }
+                        setGuestQuota({ used: result.used, remaining: result.remaining })
+                        onStart(s.id)
+                        return
                       }
+                      // 扣分走服务端，所以必须 await —— 不等结果就 onStart 的话，
+                      // 积分不足时用户已经进了抽牌页，闸门形同虚设。
+                      const res = await consumeCredit(user.id, 'tarot.reading')
+                      if (!res.ok) {
+                        if (res.reason === 'insufficient' || res.reason === 'plan_required') {
+                          setInsufficient(true)
+                          setAccessDenied(res.reason === 'plan_required')
+                        }
+                        return
+                      }
+                      setInsufficient(false)
+                      setAccessDenied(false)
+                      if (res.user) onUserChange && onUserChange(res.user)
                       onStart(s.id)
                     }}
                   >
-                    {s.count === 1 ? '开始单牌解读 →' : '抽这组牌 →'}
+                    {!user && !guestQuota.remaining ? '体验已用完 · 注册查看权益' : s.count === 1 ? '开始单牌解读 →' : '抽这组牌 →'}
                   </button>
                 </article>
               ))}

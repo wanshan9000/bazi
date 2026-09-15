@@ -105,7 +105,7 @@ function canRestoreSession(session) {
   return Boolean(session?.id)
 }
 
-export default function AgentChatDsh({ chart: chartProp, seedQuery, user, reportId, initialSessionId, onRequireLogin, onUpgrade, onUserChange }) {
+export default function AgentChatDsh({ chart: chartProp, seedQuery, user, reportId, initialSessionId, locale = 'zh-CN', onRequireLogin, onUpgrade, onUserChange }) {
   const [messages, setMessages] = useState(() => OPENING.map((text, i) => ({ id: `boot-${i}`, role: 'ai', text, time: timeNow(), _counted: true })))
   const [input, setInput] = useState('')
   const [typing, setTyping] = useState(false)
@@ -199,7 +199,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     abortRef.current = ac
     try {
       await api.streamChat({
-        sessionId, text: q, chart: chartMeta(activeChart), route: route || models.default || undefined, signal: ac.signal,
+        sessionId, text: q, chart: chartMeta(activeChart), route: route || models.default || undefined, locale, signal: ac.signal,
         onEvent: e => {
           switch (e.type) {
             case 'session':

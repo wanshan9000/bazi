@@ -46,10 +46,10 @@ export async function refreshSession() {
 }
 
 /* ---- 注册 / 登录 ---- */
-export async function register({ nickname, account, password, captchaToken = '' }) {
+export async function register({ nickname, account, password }) {
   const res = await api('/api/auth/register', {
     method: 'POST',
-    body: { nickname: (nickname || '').trim(), account: (account || '').trim(), password: password || '', captchaToken },
+    body: { nickname: (nickname || '').trim(), account: (account || '').trim(), password: password || '' },
   })
   if (!res.ok) return { ok: false, msg: res.msg || '注册失败' }
   setAuth(res.token, res.user)

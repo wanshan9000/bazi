@@ -62,8 +62,8 @@ test('free 档本身不会过期', () => {
   assert.equal(isPlanExpired(null), false)
 })
 
-test('会员额度：游客与三档会员按积分产品策略展示', () => {
-  assert.equal(FREE_PLAN.name, '游客')
+test('会员额度：注册用户与三档会员按积分产品策略展示', () => {
+  assert.equal(FREE_PLAN.name, '注册用户')
   assert.equal(FREE_PLAN.perks.some(item => item.includes('体验积分')), true)
   assert.equal(FREE_PLAN.perks.some(item => item.includes('20 积分')), true)
   assert.deepEqual(PLANS.map(plan => [plan.key, plan.credits]), [

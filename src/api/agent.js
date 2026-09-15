@@ -84,11 +84,11 @@ export function createAgentApi() {
       method: 'POST',
       body: JSON.stringify({ date, chart, scenario }),
     }),
-    async streamChat({ sessionId, text, chart, route, onEvent, signal }) {
+    async streamChat({ sessionId, text, chart, route, locale, onEvent, signal }) {
       const res = await fetch(`${BASE}/api/agent/chat`, {
         method: 'POST', signal,
         headers: { 'Content-Type': 'application/json', ...uidHeader() },
-        body: JSON.stringify({ sessionId, text, chart, route }),
+        body: JSON.stringify({ sessionId, text, chart, route, locale }),
       })
       if (!res.ok || !res.body) {
         const body = await res.json().catch(() => ({}))

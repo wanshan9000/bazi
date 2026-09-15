@@ -143,3 +143,25 @@ test('塔罗：扣费成功才进抽牌页', async () => {
   assert.ok(started, '扣费成功应进入抽牌页')
   r.unmount()
 })
+
+test('未注册游客可任选牌阵体验三次，第四次引导注册', async () => {
+  clearAuth()
+  localStorage.clear()
+  const started = []
+  let loginContext = null
+  const r = render(TarotPage, {
+    onBack: () => {}, onStart: id => started.push(id), history: [], user: null,
+    onRequireLogin: context => { loginContext = context }, onUpgrade: () => {}, onUserChange: () => {},
+  })
+  await flush()
+  assert.ok(r.text().includes('关系解析牌阵'), '游客应能看到多牌阵')
+  const go = r.findByText('开始单牌解读')
+  assert.ok(go, `游客应看到体验入口，实际：${r.text().slice(0, 240)}`)
+  r.click(go)
+  r.click(go)
+  r.click(go)
+  r.click(go)
+  assert.deepEqual(started, ['single', 'single', 'single'])
+  assert.equal(loginContext, 'tarot')
+  r.unmount()
+})

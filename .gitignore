@@ -46,3 +46,4 @@ server/dsh/home/profiles/lingshu/package-lock.json
 server/dsh/home/profiles/lingshu/.dsh-module-fallback/
 server/dsh/plugins/lingshu-tools/dist/
 server/dsh/skills/_admin/
+.env.local

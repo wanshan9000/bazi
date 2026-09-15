@@ -95,6 +95,77 @@ test('合规 JSON 以固定 answer 事件交付并保存结构对象', async () 
   } finally { srv.close() }
 })
 
+test('英文显示语言会把 Agent 用户可读字段约束为英文', async () => {
+  let receivedPrompt = ''
+  const pool = {
+    isBusy: () => false,
+    async run({ text, onEvent }) {
+      receivedPrompt = text
+      onEvent({ type: 'text', delta: 'English answer.' })
+      return { finalText: 'English answer.', usage: null, title: null }
+    },
+  }
+  const { app, accounts } = mkApp(pool)
+  const me = await mkUser(accounts, 'english-output')
+  const { srv, base } = await listen(app)
+  try {
+    const res = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearer(me.token) },
+      body: JSON.stringify({ text: 'What should I focus on?', locale: 'en' }),
+    })
+    assert.equal(res.status, 200)
+    await res.text()
+    assert.match(receivedPrompt, /【Output language】/)
+    assert.match(receivedPrompt, /natural English with normal spaces between words/)
+  } finally { srv.close() }
+})
+
+test('用户在 Agent 内直接要求英文后，后续追问沿用该会话语言', async () => {
+  const prompts = []
+  const pool = {
+    isBusy: () => false,
+    async run({ text, onEvent }) {
+      prompts.push(text)
+      onEvent({ type: 'text', delta: 'English answer.' })
+      return { finalText: 'English answer.', usage: null, title: null }
+    },
+  }
+  const { app, accounts } = mkApp(pool)
+  const me = await mkUser(accounts, 'direct-language')
+  const { srv, base } = await listen(app)
+  try {
+    const first = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) },
+      body: JSON.stringify({ text: '请用英文回复我的后续问题' }),
+    })
+    const sessionId = sseFrames(await first.text()).find(frame => frame.type === 'session').sessionId
+    const second = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) },
+      body: JSON.stringify({ sessionId, text: 'What should I ask next?' }),
+    })
+    assert.equal(second.status, 200)
+    await second.text()
+    assert.match(prompts[0], /【Output language】/)
+    assert.match(prompts[1], /【Output language】/)
+  } finally { srv.close() }
+})
+
+test('英文输出中可完整识别的粘连词会恢复正常空格', async () => {
+  const source = 'TobeginNobirthdatahasbeengiveninthissession,sonochartorhexagramcanbecastyet.Tellmeyourbirthdetails,andIwillcastthechartforyou.'
+  const { app, accounts } = mkApp(fakePool([{ type: 'text', delta: source }]))
+  const me = await mkUser(accounts, 'english-spacing')
+  const { srv, base } = await listen(app)
+  try {
+    const res = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) },
+      body: JSON.stringify({ text: 'Please reply in English.', locale: 'en' }),
+    })
+    const frames = sseFrames(await res.text())
+    assert.equal(frames.find(frame => frame.type === 'text')?.delta, 'To begin No birth data has been given in this session, so no chart or hexagram can be cast yet. Tell me your birth details, and I will cast the chart for you.')
+  } finally { srv.close() }
+})
+
 test('完成帧与会话只记录 Agent 耗时指标', async () => {
   // 若路由层忘了转存 pool timing，性能排查会退化成只能靠主观感受“好像慢”。
   const timing = { firstEventMs: 83, firstTextMs: 126, totalMs: 912 }

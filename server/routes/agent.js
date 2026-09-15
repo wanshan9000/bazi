@@ -444,6 +444,65 @@ function inferStoredChart(messages) {
 
 function timeNow() { return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
 
+function normalizeAgentLocale(value) {
+  return value === 'zh-TW' || value === 'en' ? value : 'zh-CN'
+}
+
+// 语言选择不仅来自页面控件。用户在会话中明确要求“用英文/繁体回复”时，
+// 应立即生效并保留在该会话，避免每一轮都重复说明。
+function requestedOutputLocale(text) {
+  const source = String(text || '')
+  if (/(?:请|請|用|以|改成|改用|切换|切換|希望|要).{0,14}(?:繁体|繁體|traditional\s+chinese)|\b(?:reply|answer|respond|write)\s+(?:in\s+)?traditional\s+chinese\b/i.test(source)) return 'zh-TW'
+  if (/(?:请|請|用|以|改成|改用|切换|切換|希望|要).{0,14}(?:英文|英语|英語|english)|\b(?:reply|answer|respond|write)\s+(?:in\s+)?english\b/i.test(source)) return 'en'
+  return null
+}
+
+function agentOutputLanguageProtocol(locale) {
+  const language = normalizeAgentLocale(locale)
+  if (language === 'en') return '【Output language】Write every user-facing summary, section title, item label, and recommendation in natural English with normal spaces between words. Preserve verified Chinese chart terms, pillar names, and classical source terms exactly, adding a short English explanation only when helpful.'
+  if (language === 'zh-TW') return '【輸出語言】所有面向使用者的摘要、章節標題、欄位名稱與建議，一律使用繁體中文。已核驗的盤面術語、干支與典籍原文保持原樣，不可自行改寫。'
+  return '【输出语言】所有面向用户的摘要、章节标题、字段名称与建议，一律使用简体中文。已核验的盘面术语、干支与典籍原文保持原样，不可自行改写。'
+}
+
+// 少数上游模型会把英文自然语言的空格吞掉。只对“能被已知常用词完整切分”的长英文串
+// 修复空格，无法完整判断的专有词一律保留原文，不能用猜测污染盘面术语。
+const ENGLISH_OUTPUT_WORDS = new Set([
+  'a', 'an', 'and', 'answer', 'answering', 'any', 'ask', 'bazi', 'birth', 'can', 'cast', 'certainly', 'chart', 'chinese', 'classical', 'details', 'english', 'for', 'four', 'from', 'go', 'here', 'i', 'in', 'is', 'keeping', 'll', 'me', 'my', 'of', 'on', 'or', 'original', 'pillars', 'please', 'reply', 'source', 'start', 'terms', 'tell', 'the', 'their', 'this', 'to', 'verified', 'we', 'what', 'while', 'will', 'with', 'you', 'your', 'ziwei',
+])
+for (const word of [
+  'about', 'accuracy', 'actual', 'actually', 'all', 'also', 'and', 'answer', 'anything', 'are', 'as', 'at', 'auspicious', 'be', 'been', 'begin', 'birth', 'but', 'by', 'calendar', 'calculate', 'calculation', 'can', 'career', 'cast', 'chart', 'city', 'clear', 'continue', 'cycles', 'data', 'date', 'day', 'decision', 'details', 'dislikes', 'do', 'dont', 'dumping', 'element', 'english', 'estimated', 'event', 'every', 'five', 'first', 'for', 'from', 'gender', 'given', 'god', 'gods', 'gregorian', 'guess', 'has', 'have', 'haven', 'here', 'hexagram', 'hour', 'how', 'i', 'if', 'in', 'info', 'information', 'instead', 'invent', 'inventing', 'is', 'it', 'just', 'know', 'later', 'lay', 'layout', 'life', 'like', 'likes', 'limits', 'lines', 'load', 'lucky', 'lunar', 'major', 'mark', 'master', 'me', 'method', 'money', 'month', 'naming', 'need', 'needed', 'never', 'no', 'not', 'nothing', 'of', 'on', 'once', 'one', 'only', 'or', 'others', 'out', 'palace', 'palaces', 'pillar', 'pillars', 'pick', 'plainly', 'please', 'plus', 'precision', 'present', 'properly', 'purple', 'question', 'questions', 'rather', 'read', 'reading', 'ready', 'real', 'really', 'relationship', 'reply', 'right', 'said', 'say', 'selection', 'send', 'session', 'six', 'so', 'solar', 'specific', 'star', 'state', 'still', 'strength', 'sure', 'tarot', 'tell', 'ten', 'than', 'that', 'the', 'there', 'these', 'they', 'thing', 'this', 'those', 'time', 'to', 'today', 'topic', 'traditional', 'trends', 'true', 'twelve', 'unknown', 'want', 'we', 'what', 'when', 'whether', 'whole', 'will', 'with', 'word', 'year', 'yearly', 'yes', 'yet', 'you', 'your', 'birthdate', 'fengshui', 'liuyao',
+]) ENGLISH_OUTPUT_WORDS.add(word)
+
+function repairCollapsedEnglishWord(token) {
+  if (token.length < 4 || ENGLISH_OUTPUT_WORDS.has(token.toLowerCase())) return token
+  const lower = token.toLowerCase()
+  const paths = Array(lower.length + 1).fill(null)
+  paths[0] = []
+  for (let start = 0; start < lower.length; start++) {
+    if (!paths[start]) continue
+    for (let end = start + 1; end <= Math.min(lower.length, start + 20); end++) {
+      if (!ENGLISH_OUTPUT_WORDS.has(lower.slice(start, end))) continue
+      const candidate = [...paths[start], [start, end]]
+      if (!paths[end] || candidate.length < paths[end].length) paths[end] = candidate
+    }
+  }
+  const parts = paths[lower.length]
+  return parts && parts.length > 1 ? parts.map(([start, end]) => token.slice(start, end)).join(' ') : token
+}
+
+function repairCollapsedEnglish(text) {
+  return String(text || '')
+    // `I'llreply` / `There'sno` 先按缩写边界拆开，后续的单词切分才不会被孤立的 s、ll、d 卡住。
+    .replace(/([A-Za-z])(['’](?:s|ll|d|re|ve|m))(?=[A-Za-z])/gi, '$1$2 ')
+    .replace(/[A-Za-z]{4,}/g, repairCollapsedEnglishWord)
+    .replace(/,([A-Za-z])/g, ', $1')
+    .replace(/;([A-Za-z])/g, '; $1')
+    .replace(/:([A-Za-z])/g, ': $1')
+    .replace(/([.!?])([A-Z])/g, '$1 $2')
+    .replace(/\)([A-Za-z])/g, ') $1')
+    .replace(/([A-Za-z])([\u3400-\u9fff])/g, '$1 $2')
+}
+
 // 报告页进入元气 Agent 时，前端会在首行写入来源。保存为短标题，历史列表就不再
 // 只显示长提示词的前十几个字；普通手动咨询仍继续用第一句命名。
 function reportSessionTitle(text) {
@@ -671,7 +730,7 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
   })
 
   r.post('/agent/chat', async (req, res) => {
-    const { sessionId, text, chart, route } = req.body || {}
+    const { sessionId, text, chart, route, locale } = req.body || {}
     const q = String(text || '').trim()
     if (!q) return res.status(400).json({ ok: false, msg: '内容为空' })
     if (q.length > MAX_TEXT) return res.status(400).json({ ok: false, msg: `内容过长（≤${MAX_TEXT} 字）` })
@@ -727,7 +786,14 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
     const skillInvocation = strictRequirement?.skill || skillInvocationForQuestion(q, {
       knownBirth: hasCompleteBirth(suppliedChart) || hasCompleteBirth(currentChart),
     })
+    const directLocale = requestedOutputLocale(q)
+    // 非简体的页面选择是明确偏好；页面仍为简体时，沿用会话里由用户直接设定的语言。
+    const selectedLocale = normalizeAgentLocale(locale)
+    const outputLocale = directLocale || (selectedLocale !== 'zh-CN' ? selectedLocale : normalizeAgentLocale(session.outputLocale))
+    if (directLocale) session = store.updateSession(req.uid, session.id, { outputLocale: directLocale }) || session
     const promptProtocols = []
+    // 简体中文是既有默认，无需重复占用提示词；用户主动选择繁体或英文时才注入。
+    if (outputLocale !== 'zh-CN') promptProtocols.push(agentOutputLanguageProtocol(outputLocale))
     if (needsEvidenceProtocol(q)) promptProtocols.push(agentEvidenceProtocol())
     if (needsCoverageProtocol(q)) promptProtocols.push(agentCoverageProtocol())
     // 八字咨询即使没有直接写“今年”，模型也常会主动给出“当前大运收官”、
@@ -855,9 +921,10 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
       const acceptedStream = strictRequirement && verifiedTools.has(strictRequirement.tool)
         ? verifiedStreamed
         : streamed
-      const finalText = toolVerified
+      const rawFinalText = toolVerified
         ? (acceptedStream || sanitizePublicText(result.finalText))
         : strictVerificationFailure(strictRequirement, verifiedChart)
+      const finalText = outputLocale === 'en' ? repairCollapsedEnglish(rawFinalText) : rawFinalText
       if (!toolVerified) producedOutput = false
       if (toolVerified && finalText) producedOutput = true
       const answer = !sawError && toolVerified ? parseStructuredAgentAnswer(finalText) : null

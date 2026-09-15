@@ -1,4 +1,5 @@
 import { lazy, startTransition, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { LanguageSwitcher, useLocale } from './i18n.jsx'
 import Landing from './components/Landing.jsx'
 import { buildChart } from './engine/bazi.js'
 import { loadHistory as loadTarot } from './data/tarot.js'
@@ -56,10 +57,12 @@ const BOTTOM_NAV = [
 ]
 
 function RouteFallback() {
-  return <div className="route-loading" role="status" aria-label="页面载入中"><span /></div>
+  const { t } = useLocale()
+  return <div className="route-loading" role="status" aria-label={t('loading')}><span /></div>
 }
 
 function TopBar({ view, onNav, user, onUser, credits }) {
+  const { t } = useLocale()
   return (
     <header className="topbar">
       <div className="container topbar-inner">
@@ -82,7 +85,7 @@ function TopBar({ view, onNav, user, onUser, credits }) {
             </svg>
           </div>
           <div>
-            <span className="brand-name">元氣<em>满满</em></span>
+            <span className="brand-name">{t('brand')}</span>
           </div>
         </div>
         <nav className="topnav">
@@ -93,14 +96,14 @@ function TopBar({ view, onNav, user, onUser, credits }) {
               data-nav-key={n.key}
               onClick={() => onNav(n.key)}
             >
-              <span className="tl">{n.label}</span>
+              <span className="tl">{t(`nav.${n.key}`, n.label)}</span>
             </button>
           ))}
         </nav>
         <div className="topbar-user">
           {user ? (
             <>
-              <button className="credits-chip" onClick={() => onUser('profile')} title="查看 Token 积分余额">
+              <button className="credits-chip" onClick={() => onUser('profile')} title={t('profile.credits')}>
                 <span className="cc-icon" aria-hidden="true">✦</span>
                 <span className="cc-num">{credits === Infinity ? '∞' : Number(credits || 0).toLocaleString('zh-CN')}</span>
               </button>
@@ -113,9 +116,10 @@ function TopBar({ view, onNav, user, onUser, credits }) {
             </>
           ) : (
             <button className="user-chip user-chip-login" onClick={() => onUser('login')}>
-              <span className="user-chip-name">登录</span>
+              <span className="user-chip-name">{t('auth.login')}</span>
             </button>
           )}
+          <LanguageSwitcher />
         </div>
       </div>
     </header>
@@ -123,6 +127,7 @@ function TopBar({ view, onNav, user, onUser, credits }) {
 }
 
 function BottomNav({ view, onNav, user }) {
+  const { t } = useLocale()
   return (
     <nav className="bottom-nav">
       {BOTTOM_NAV.map(n => {
@@ -136,8 +141,8 @@ function BottomNav({ view, onNav, user }) {
           key={n.key}
           className={`bn-link${n.key === 'home' ? ' bn-link-home' : ''}${n.key === 'profile' ? ' bn-link-profile' : ''} ${isActive ? 'active' : ''}`}
           onClick={() => onNav(destination)}
-          aria-label={n.label}
-          title={n.label}
+          aria-label={t(`nav.${n.key}`, n.label)}
+          title={t(`nav.${n.key}`, n.label)}
         >
           {n.key === 'home' ? (
             <span className="bn-home-logo" aria-hidden="true">
@@ -155,7 +160,7 @@ function BottomNav({ view, onNav, user }) {
           ) : n.key === 'profile' ? (
             <span className="bn-profile-mark" aria-hidden="true">◉</span>
           ) : null}
-          {n.key !== 'home' && <span className="bl">{n.label}</span>}
+          {n.key !== 'home' && <span className="bl">{t(`nav.${n.key}`, n.label)}</span>}
         </button>
         )
       })}
@@ -187,6 +192,7 @@ function SharedReportPage({ report, onClose, onTest }) {
 }
 
 export default function App() {
+  const { locale } = useLocale()
   const [view, setView] = useState('home') // home | bazi | liuyao | ziwei | tarot | tarot-reading | wenku | article | login | register | profile | share
   const [articleId, setArticleId] = useState(null)
   const [spreadId, setSpreadId] = useState(null)
@@ -626,6 +632,7 @@ export default function App() {
             onUserChange={setUser}
             reportId={agentReportId}
             initialSessionId={agentSessionId}
+            locale={locale}
           />
         )}
         {view === 'wenku' && (
@@ -718,6 +725,7 @@ export default function App() {
         </Suspense>
       </main>
       <BottomNav view={view} onNav={goNav} user={user} />
+      <LanguageSwitcher mobile />
       <TailBand onNav={goNav} hideOnMobile={view === 'share'} user={user} />
 
       {/* 全局订阅 Modal（会员方案 · 三重境界） */}
@@ -748,21 +756,22 @@ function loadHistory() {
 
 // onUpgrade 由调用处传入（App 里绑的是 openSubscribe），此前没解构也没往下传，
 // 于是元氣 AI 里积分不足的分支永远拿不到回调，用户点了没有任何反应。
-function AgentPage({ chart, onBack, seedQuery, user, onRequireLogin, onUpgrade, onUserChange, reportId, initialSessionId }) {
+function AgentPage({ chart, onBack, seedQuery, user, locale, onRequireLogin, onUpgrade, onUserChange, reportId, initialSessionId }) {
+  const { t } = useLocale()
   return (
     <section className="agent-page page-shell">
-      <button className="page-back" onClick={onBack} aria-label="返回首页">
+      <button className="page-back" onClick={onBack} aria-label={t('common.backHome', '返回首页')}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M15 18l-6-6 6-6" />
         </svg>
-        <span>返回</span>
+        <span>{t('common.back', '返回')}</span>
       </button>
       <h1 className="page-title">
-        元氣<span className="zhushi">AI</span>
-        <span className="page-subtitle">问三门 · 八字 · 紫微，两门通晓</span>
+        {t('agent.title', '元氣')}<span className="zhushi">AI</span>
+        <span className="page-subtitle">{t('agent.subtitle', '问三门 · 八字 · 紫微，两门通晓')}</span>
       </h1>
       <div className="agent-page-card">
-        <AgentChatImpl key={`${seedQuery || 'fresh'}:${reportId || initialSessionId || 'general'}`} chart={chart} seedQuery={seedQuery} user={user} reportId={reportId} initialSessionId={initialSessionId} onRequireLogin={onRequireLogin} onUpgrade={onUpgrade} onUserChange={onUserChange} />
+        <AgentChatImpl key={`${seedQuery || 'fresh'}:${reportId || initialSessionId || 'general'}`} chart={chart} seedQuery={seedQuery} user={user} reportId={reportId} initialSessionId={initialSessionId} locale={locale} onRequireLogin={onRequireLogin} onUpgrade={onUpgrade} onUserChange={onUserChange} />
       </div>
     </section>
   )

@@ -12,29 +12,6 @@ import { exchangeCode } from '../wechat.js'
 import { createWindowLimiter } from '../rateLimit.js'
 import { sendVerifySms } from '../sms.js'
 
-async function verifyRegistrationCaptcha(req) {
-  if (!config.security.captchaRequired) return { ok: true }
-  const token = String(req.body?.captchaToken || '').trim()
-  if (!token) return { ok: false, status: 400, msg: '请先完成人机验证' }
-  if (!config.security.captchaSecret) {
-    // 生产环境宁可暂时关闭注册，也不能因为忘配密钥而把防刷形同虚设。
-    return { ok: false, status: 503, msg: '注册验证暂不可用，请稍后再试' }
-  }
-  try {
-    const body = new URLSearchParams({
-      secret: config.security.captchaSecret,
-      response: token,
-      remoteip: String(req.ip || ''),
-    })
-    const response = await fetch(config.security.captchaVerifyUrl, { method: 'POST', body, signal: AbortSignal.timeout(5000) })
-    const result = await response.json().catch(() => null)
-    return result?.success ? { ok: true } : { ok: false, status: 400, msg: '人机验证未通过，请重试' }
-  } catch (error) {
-    console.error('[auth/register] 人机验证服务不可用：', error.message)
-    return { ok: false, status: 503, msg: '注册验证暂不可用，请稍后再试' }
-  }
-}
-
 const ACCOUNT_RE = /^[a-zA-Z0-9._-]{3,24}$/
 const PHONE_RE = /^1\d{10}$/
 const MAX_PWD = 128 // scrypt 对超长输入照算不误，但没必要给人塞 1MB 口令的机会
@@ -169,9 +146,6 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
       return res.status(400).json({ ok: false, msg: '密码至少 8 位，且须同时含字母和数字' })
     }
     if (password.length > MAX_PWD) return res.status(400).json({ ok: false, msg: '密码过长' })
-
-    const captcha = await verifyRegistrationCaptcha(req)
-    if (!captcha.ok) return res.status(captcha.status).json({ ok: false, msg: captcha.msg })
 
     const keys = [`ip:${req.ip}`]
     if (limiter.check(keys)) return res.status(429).json({ ok: false, msg: '操作过于频繁，请稍后再试' })

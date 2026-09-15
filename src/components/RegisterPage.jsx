@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { register, registerBySms, registerByWechat, sendAuthSmsCode } from '../data/users.js'
 import { api } from '../api/client.js'
-import TurnstileField from './TurnstileField.jsx'
 
 export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
   // 注册优先「扫码识别」：默认停在扫码注册 tab，扫码成功自动建号并登录
@@ -17,7 +16,6 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
   const [smsNote, setSmsNote] = useState('')
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
-  const [captchaToken, setCaptchaToken] = useState('')
 
   // 微信扫码注册
   const [busy, setBusy] = useState(false)
@@ -52,7 +50,7 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
     }
     setLoading(true)
     try {
-      const res = await register({ nickname, account, password, captchaToken })
+      const res = await register({ nickname, account, password })
       if (!res.ok) { setErr(res.msg); return }
       onSuccess(res.user)
     } catch (e) {
@@ -219,8 +217,6 @@ export default function RegisterPage({ onBack, onSwitch, onSuccess }) {
                   </div>
                 </div>
               </div>
-
-              <TurnstileField onToken={setCaptchaToken} onError={setErr} />
 
               {err && <p className="auth-err">{err}</p>}
 

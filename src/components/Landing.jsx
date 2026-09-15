@@ -1,13 +1,7 @@
 import { useState } from 'react'
 import { ARTICLES, CATEGORIES } from '../data/articles.js'
 import { PLANS } from '../engine/membership.js'
-
-const CALCULATOR_CATEGORY_LABELS = {
-  mingli: '命理排盘',
-  yunshi: '运势预测',
-  zhanbu: '决策占卜',
-  huanjing: '环境家居',
-}
+import { useLocale } from '../i18n.jsx'
 
 // 八卡片·元氣测算矩阵
 // 每张卡片有三种跳转：page（路由到独立页面）/ agent（带 seed 打开元氣AI）/ ask（带预设问题）
@@ -85,7 +79,7 @@ const CALCULATORS = [
     cat: 'zhanbu',
     icon: '☽',
     aiTag: '牌阵',  // 本地引擎出报告，未调用模型
-    freeTag: '免费 8 次',
+    freeTag: '游客本机免费 3 次',
     title: '塔罗占卜',
     desc: '融合 78 张塔罗牌的神秘象征体系，依你的问题与所抽牌阵，逐位给出正逆位牌意与整体指引。',
     tags: ['多种牌阵', '正逆位解读', '牌意详解'],
@@ -168,8 +162,61 @@ const POPULAR_TESTS = [
 // 会员方案 · PLANS 已统一自 src/engine/membership.js
 const FEATURED = ARTICLES.slice(0, 3)
 
+const LANDING_COPY = {
+  'zh-CN': {
+    kicker: 'AI 元氣助手 · 24 小时在线', heroA: '先和元氣AI', heroB: '聊聊人生', input: '想问事业、姻缘，还是今年的运势？', ask: '向元氣 AI 提问', start: '开启元氣 AI 对话', try: '试试这样问', suggestions: ['今年工作会有变化吗？', '我适合主动表白吗？', '最近该注意什么？'], explore: '也可以自己探索', shortcuts: ['排八字', '抽塔罗', '看黄历', '择吉', '座位风水', '紫微'],
+    popularKicker: 'Popular picks', popularTitle: '大家都在测', popularDesc: '从一件最近在意的小事开始，也能慢慢找到答案。', calcTitle: '元氣测算', calcDesc: '八字、紫微、塔罗、奇门、每日黄历……传统命理 × AI 算法，一站式解决你的疑问。', plansTitle: '解锁你的命运层级', plansDesc: '从日常陪伴到天机尽握，选择属于你的玄学境界。', popular: [
+      ['关系小测', '感情测试', '想知道桃花、暧昧或相处节奏？先说说你在意的那个人。', '问问元氣 AI'], ['财运小测', '财源测试', '从近期财运与赚钱节奏出发，理清适合先做什么。', '看看财运'], ['心动占卜', '爱情塔罗', '为一段关系抽牌，把心里的犹豫换成更清楚的提示。', '开始抽牌'], ['学习与办公', '书桌风水', '从座位与书桌方位开始，看看怎么让空间更顺手、安心。', '调整书桌'],
+    ], categories: ['命理排盘', '运势预测', '决策占卜', '环境家居'], articleTitle: '文库精选', allArticles: '全部文章', read: '阅读', minutes: '分钟', guest: '游客', featuredLabel: '最受欢迎',
+  },
+  'zh-TW': {
+    kicker: 'AI 元氣助手 · 24 小時在線', heroA: '先和元氣AI', heroB: '聊聊人生', input: '想問事業、姻緣，還是今年的運勢？', ask: '向元氣 AI 提問', start: '開啟元氣 AI 對話', try: '試試這樣問', suggestions: ['今年工作會有變化嗎？', '我適合主動表白嗎？', '最近該注意什麼？'], explore: '也可以自己探索', shortcuts: ['排八字', '抽塔羅', '看黃曆', '擇吉', '座位風水', '紫微'],
+    popularKicker: 'Popular picks', popularTitle: '大家都在測', popularDesc: '從一件最近在意的小事開始，也能慢慢找到答案。', calcTitle: '元氣測算', calcDesc: '八字、紫微、塔羅、奇門、每日黃曆……傳統命理 × AI 演算法，一站式解決你的疑問。', plansTitle: '解鎖你的命運層級', plansDesc: '從日常陪伴到天機盡握，選擇屬於你的玄學境界。', popular: [
+      ['關係小測', '感情測試', '想知道桃花、曖昧或相處節奏？先說說你在意的那個人。', '問問元氣 AI'], ['財運小測', '財源測試', '從近期財運與賺錢節奏出發，理清適合先做什麼。', '看看財運'], ['心動占卜', '愛情塔羅', '為一段關係抽牌，把心裡的猶豫換成更清楚的提示。', '開始抽牌'], ['學習與辦公', '書桌風水', '從座位與書桌方位開始，看看怎麼讓空間更順手、安心。', '調整書桌'],
+    ], categories: ['命理排盤', '運勢預測', '決策占卜', '環境家居'], articleTitle: '文庫精選', allArticles: '全部文章', read: '閱讀', minutes: '分鐘', guest: '遊客', featuredLabel: '最受歡迎',
+  },
+  en: {
+    kicker: 'GENKI AI · HERE WHEN YOU NEED IT', heroA: 'Talk with Genki AI', heroB: 'about your life', input: 'Career, relationships, or this year\'s outlook?', ask: 'Ask Genki AI', start: 'Start a Genki AI conversation', try: 'Try asking', suggestions: ['Will my work change this year?', 'Should I make the first move?', 'What should I watch for lately?'], explore: 'Or explore on your own', shortcuts: ['Bazi chart', 'Draw Tarot', 'Almanac', 'Choose a date', 'Desk Feng Shui', 'Ziwei'],
+    popularKicker: 'Popular picks', popularTitle: 'What people are exploring', popularDesc: 'Start with what has been on your mind lately, then find a clearer next step.', calcTitle: 'Explore with Genki', calcDesc: 'Bazi, Ziwei, Tarot, Qimen, and the daily Almanac. Traditional systems and AI guidance in one place.', plansTitle: 'Choose your access level', plansDesc: 'From everyday guidance to frequent, in-depth use, find the plan that fits you.', popular: [
+      ['Relationship check-in', 'Love reading', 'Explore the rhythm of attraction, ambiguity, and connection.', 'Ask Genki AI'], ['Money check-in', 'Wealth reading', 'Start with your recent money rhythm and clarify what to focus on.', 'Explore finances'], ['Tarot reading', 'Love Tarot', 'Draw for a relationship and turn uncertainty into a clearer prompt.', 'Draw cards'], ['Study and work', 'Desk Feng Shui', 'Start with the direction of your desk and make your space feel more supportive.', 'Adjust my desk'],
+    ], categories: ['Chart reading', 'Daily outlook', 'Decision reading', 'Home and space'], articleTitle: 'From the library', allArticles: 'All articles', read: 'Read', minutes: 'min', guest: 'Guest', featuredLabel: 'Most popular',
+  },
+}
+
+const CALCULATOR_TRANSLATIONS = {
+  'zh-TW': [
+    ['八字排盤', '輸入出生年月日時，自動推算四柱八字，結合大運流年給出命理解讀，涵蓋事業、感情、財運、健康。', ['四柱', '大運', '流年', '深度解讀'], '立即排盤'],
+    ['稱骨論命', '袁天罡稱骨算命法，根據出生年月日時推算骨重，解讀人生格局與趨勢。', ['骨重命格', '命格厚薄', '生平估算'], '開始稱骨'],
+    ['今日黃曆', '結合你的生辰八字，每日提供個人化宜忌、開運方位、貴人屬相與幸運色。', ['結合八字', '每日推送', '開運指引'], '查看今日黃曆'],
+    ['星座運勢', '每日星座運勢，涵蓋事業、感情、財運、健康與幸運提示。', ['每日更新', '十二星座', '行星追蹤'], '查看運勢'],
+    ['風水分析', '依八宅派結合八字喜忌，為你的空間提供五行調和與布局建議。', ['八宅方位', '五行調和', '結合八字'], '風水分析'],
+    ['塔羅占卜', '依你抽取的牌陣，逐位給出正逆位牌意與整體指引。', ['多種牌陣', '正逆位解讀', '牌意詳解'], '開始占卜'],
+    ['奇門遁甲', '時家奇門排盤，解讀當下格局，提供方位與時機參考。', ['九宮排盤', '八門九星', '方位指引'], '起盤排局'],
+    ['紫微斗數', '紫微斗數完整排盤，逐宮解讀命盤格局與大運流年。', ['十四主星', '十二宮位', '四化飛星', '大運流年'], '紫微排盤'],
+  ],
+  en: [
+    ['Bazi chart', 'Enter your birth date and time to generate the Four Pillars and explore career, relationships, finances, and wellbeing.', ['Four Pillars', '10-year luck', 'Annual outlook', 'In-depth reading'], 'Create chart'],
+    ['Bone Weight reading', 'A traditional Yuan Tiangang calculation based on birth year, month, day, and hour.', ['Bone weight', 'Life pattern', 'Life overview'], 'Calculate reading'],
+    ["Today’s Almanac", 'Personalized daily auspicious activities, directions, and color guidance, connected to your Bazi.', ['With Bazi', 'Daily update', 'Helpful directions'], 'View Almanac'],
+    ['Horoscope', 'Daily signs for career, relationships, finances, wellbeing, and a lucky prompt.', ['Daily update', '12 signs', 'Planetary themes'], 'View horoscope'],
+    ['Feng Shui', 'Use Eight Mansions and your elemental profile to improve balance and layout in your space.', ['Eight Mansions', 'Element balance', 'With Bazi'], 'Analyze space'],
+    ['Tarot', 'Choose a spread and receive position-by-position card meanings and a full reading.', ['Multiple spreads', 'Upright and reversed', 'Card meanings'], 'Start reading'],
+    ['Qimen Dunjia', 'A Qimen chart for the moment, with directions and timing to consider.', ['Nine palaces', 'Gates and stars', 'Direction guide'], 'Create chart'],
+    ['Ziwei Doushu', 'A full Ziwei chart with palace interpretations and 10-year and annual cycles.', ['14 major stars', '12 palaces', 'Transformations', 'Annual outlook'], 'Create chart'],
+  ],
+}
+
+function localizedCalculators(locale) {
+  const translations = CALCULATOR_TRANSLATIONS[locale]
+  if (!translations) return CALCULATORS
+  return CALCULATORS.map((card, index) => ({ ...card, title: translations[index][0], desc: translations[index][1], tags: translations[index][2], cta: translations[index][3] }))
+}
+
 export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, user }) {
   const [agentQuery, setAgentQuery] = useState('')
+  const { locale } = useLocale()
+  const copy = LANDING_COPY[locale] || LANDING_COPY['zh-CN']
+  const calculators = localizedCalculators(locale)
 
   const handleClick = (card) => {
     if (card.route === 'agent') {
@@ -189,20 +236,20 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
       {/* Hero：以元氣智能体为首要入口 */}
       <section className="hero">
         <div className="hero-copy">
-          <p className="hero-kicker rise rise-1">AI 元氣助手 · 24 小时在线</p>
+          <p className="hero-kicker rise rise-1">{copy.kicker}</p>
           <h1 className="rise rise-1">
-            <span className="hero-line">先和元氣AI</span>
-            <span className="hero-line hero-line-2">聊聊人生<span className="zhushi">吧</span></span>
+            <span className="hero-line">{copy.heroA}</span>
+            <span className="hero-line hero-line-2">{copy.heroB}<span className="zhushi">{locale === 'en' ? '' : '吧'}</span></span>
           </h1>
           <form className="hero-agent rise rise-3" onSubmit={openAgent}>
             <div className={`hero-agent-input ${agentQuery.trim() ? 'has-query' : ''}`}>
               <input
                 value={agentQuery}
                 onChange={event => setAgentQuery(event.target.value)}
-                aria-label="向元氣 AI 提问"
-                placeholder="想问事业、姻缘，还是今年的运势？"
+                aria-label={copy.ask}
+                placeholder={copy.input}
               />
-              <button type="submit" aria-label="开启元氣 AI 对话" title="开启元氣 AI 对话">
+              <button type="submit" aria-label={copy.start} title={copy.start}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M22 2L11 13" />
                   <path d="M22 2L15 22l-4-9-9-4z" />
@@ -210,21 +257,16 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
               </button>
             </div>
           </form>
-          <div className="hero-agent-suggestions rise rise-3" aria-label="元氣智能体示例问题">
-            <span>试试这样问</span>
-            {['今年工作会有变化吗？', '我适合主动表白吗？', '最近该注意什么？'].map(question => (
+          <div className="hero-agent-suggestions rise rise-3" aria-label={copy.ask}>
+            <span>{copy.try}</span>
+            {copy.suggestions.map(question => (
               <button key={question} type="button" onClick={() => onAskAgent && onAskAgent(question)}>{question}</button>
             ))}
           </div>
           <div className="hero-quick-start rise rise-3">
-            <span>也可以自己探索</span>
+            <span>{copy.explore}</span>
             <div className="hero-cta">
-              <button className="btn ghost" onClick={() => onGate('bazi')}>排八字</button>
-              <button className="btn ghost" onClick={() => onGate('tarot')}>抽塔罗</button>
-              <button className="btn ghost" onClick={() => onGate('huangli')}>看黄历</button>
-              <button className="btn ghost" onClick={() => onGate('huangli')}>择吉</button>
-              <button className="btn ghost" onClick={() => onGate('fengshui')}>座位风水</button>
-              <button className="btn ghost" onClick={() => onGate('ziwei')}>紫微</button>
+              {['bazi', 'tarot', 'huangli', 'huangli', 'fengshui', 'ziwei'].map((target, index) => <button key={`${target}-${index}`} className="btn ghost" onClick={() => onGate(target)}>{copy.shortcuts[index]}</button>)}
             </div>
           </div>
         </div>
@@ -234,13 +276,15 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
       <section className="container popular-tests rise" aria-labelledby="popular-tests-title">
         <div className="popular-tests-head">
           <div>
-            <p className="popular-tests-kicker">Popular picks</p>
-            <h2 id="popular-tests-title">大家都在测</h2>
+            <p className="popular-tests-kicker">{copy.popularKicker}</p>
+            <h2 id="popular-tests-title">{copy.popularTitle}</h2>
           </div>
-          <p>从一件最近在意的小事开始，也能慢慢找到答案。</p>
+          <p>{copy.popularDesc}</p>
         </div>
         <div className="popular-tests-grid">
-          {POPULAR_TESTS.map((test, index) => (
+          {POPULAR_TESTS.map((test, index) => {
+            const translated = copy.popular[index]
+            return (
             <button
               key={test.key}
               type="button"
@@ -248,12 +292,13 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
               onClick={() => handleClick(test)}
             >
               <span className="popular-test-icon" aria-hidden="true">{test.icon}</span>
-              <span className="popular-test-eyebrow">{test.eyebrow}</span>
-              <span className="popular-test-title">{test.title}</span>
-              <span className="popular-test-desc">{test.desc}</span>
-              <span className="popular-test-cta">{test.cta} <span aria-hidden="true">→</span></span>
+              <span className="popular-test-eyebrow">{translated[0]}</span>
+              <span className="popular-test-title">{translated[1]}</span>
+              <span className="popular-test-desc">{translated[2]}</span>
+              <span className="popular-test-cta">{translated[3]} <span aria-hidden="true">→</span></span>
             </button>
-          ))}
+            )
+          })}
         </div>
       </section>
 
@@ -262,14 +307,14 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
         <div className="yc-head rise">
           <div>
             <h2 className="section-title">
-              元氣<span className="zhushi">测算</span>
+              {locale === 'zh-CN' ? <>元氣<span className="zhushi">测算</span></> : copy.calcTitle}
             </h2>
-            <p className="yc-sub">八字、紫微、塔罗、奇门、每日黄历……传统命理 × AI 算法，一站式解决你的疑问。</p>
+            <p className="yc-sub">{copy.calcDesc}</p>
           </div>
         </div>
 
         <div className="yc-grid rise">
-          {CALCULATORS.map((c, i) => (
+          {calculators.map((c, i) => (
             <div
               key={c.key}
               className={`yc-card ${c.cls} rise rise-${(i % 4) + 1}`}
@@ -277,7 +322,7 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
               role="button"
               tabIndex={0}
             >
-              <span className="yc-cat-label">{CALCULATOR_CATEGORY_LABELS[c.cat]}</span>
+              <span className="yc-cat-label">{copy.categories[['mingli', 'yunshi', 'zhanbu', 'huanjing'].indexOf(c.cat)]}</span>
               <span className="yc-icon" aria-hidden="true">{c.icon}</span>
               <div className="yc-title">
                 <span className="yc-ai">{c.aiTag}</span>
@@ -285,7 +330,7 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
               </div>
               <p className="yc-desc">{c.desc}</p>
               {!user && c.freeTag && (
-                <span className="yc-free">🎁 游客 {c.freeTag}</span>
+                <span className="yc-free">🎁 {locale === 'en' ? 'Guest: 3 free on-device readings' : c.freeTag}</span>
               )}
               <div className="yc-tags">
                 {c.tags.map(t => <span key={t} className="yc-tag-chip">{t}</span>)}
@@ -300,14 +345,14 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
       <section className="container plans">
         <div className="yc-head rise">
           <h2 className="section-title">
-            解锁你的<span className="zhushi">命运层级</span>
+            {locale === 'zh-CN' ? <>解锁你的<span className="zhushi">命运层级</span></> : copy.plansTitle}
           </h2>
-          <p className="yc-sub">从日常陪伴到天机尽握，选择属于你的玄学境界。</p>
+          <p className="yc-sub">{copy.plansDesc}</p>
         </div>
         <div className="plans-grid rise">
           {PLANS.map((p, i) => (
             <div key={p.key} className={`plan-card ${p.featured ? 'featured' : ''} rise rise-${(i % 3) + 1}`}>
-              {p.featured && <span className="plan-badge">最受欢迎</span>}
+              {p.featured && <span className="plan-badge">{copy.featuredLabel}</span>}
               <span className="plan-icon" aria-hidden="true">{p.icon}</span>
               <h3 className="plan-name">{p.name}</h3>
               <p className="plan-en latin">{p.en}</p>
@@ -332,9 +377,9 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
       <section className="container">
         <div className="featured-head rise">
           <h2 className="section-title" style={{ marginBottom: 10 }}>
-            文库精选
+            {copy.articleTitle}
           </h2>
-          <button className="featured-more" onClick={() => onGate('wenku')}>全部文章 →</button>
+          <button className="featured-more" onClick={() => onGate('wenku')}>{copy.allArticles} →</button>
         </div>
         <div className="article-grid rise">
           {FEATURED.map(a => (
@@ -346,9 +391,9 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
               <h3 className="ac-title">{a.title}</h3>
               <p className="ac-digest">{a.digest}</p>
               <div className="ac-meta">
-                <span className="am">⏱ {a.read} 分钟</span>
+                <span className="am">⏱ {a.read} {copy.minutes}</span>
                 <span className="am">👁 {a.views}</span>
-                <span className="ac-more">阅读 →</span>
+                <span className="ac-more">{copy.read} →</span>
               </div>
             </article>
           ))}

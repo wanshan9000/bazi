@@ -132,11 +132,6 @@ export const config = {
   security: {
     apiIpPerMinute: Number(env.API_IP_PER_MINUTE || 180),
     smsIpPerHour: Number(env.SMS_IP_PER_HOUR || 12),
-    // 生产注册必须通过 Turnstile（或兼容供应商）人机校验。开发环境默认关闭，避免
-    // 本地没有公网回调时无法联调；生产如未填密钥会拒绝注册，而不是静默放行。
-    captchaRequired: env.CAPTCHA_REQUIRED === '1' || env.NODE_ENV === 'production',
-    captchaSecret: env.TURNSTILE_SECRET_KEY || '',
-    captchaVerifyUrl: env.TURNSTILE_VERIFY_URL || 'https://challenges.cloudflare.com/turnstile/v0/siteverify',
     // 订阅验证码的发送与校验分别限流，防止撞库者跳过发送接口直接撞六码。
     smsVerifyIpPerHour: Number(env.SMS_VERIFY_IP_PER_HOUR || 30),
     subscriptionIpPerHour: Number(env.SUBSCRIPTION_IP_PER_HOUR || 12),
@@ -156,8 +151,9 @@ export const config = {
 
   // ---- 游客免费额度（服务端记账，按来源 IP）----
   guest: {
-    // 每 IP 每天的免费 token 上限。游客标识是客户端自报的，只有按 IP 记账才拦得住。
-    dailyTokens: Number(env.GUEST_DAILY_TOKENS || 50000),
+    // 每 IP 每天的免费 Token 上限。游客额外赠送 1 积分等值的体验量（19,000 Token），
+    // 游客标识是客户端自报的，只有按 IP 记账才拦得住。
+    dailyTokens: Number(env.GUEST_DAILY_TOKENS || 69000),
     quotaFile: env.GUEST_QUOTA_FILE || path.join(__dirname, 'data', 'guest_quota.json'),
   },
 
