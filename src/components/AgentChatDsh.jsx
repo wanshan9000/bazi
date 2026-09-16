@@ -14,7 +14,16 @@ const api = createAgentApi()
 const ROUTE_KEY = 'genki-agent-route'
 const ROUTE_PREF_PREFIX = 'v2:'
 const OPENING = ['我是「三门先生」，一位玄学大师。八字、紫微、六爻、奇门、黄历、塔罗、取名、风水，心有所问，尽管开口。', '把出生年月日时和性别告诉我，我先为你排盘；也可以直接问今年运势、事业、姻缘。']
+const OPENING_EN = ['I am Mr. Sanmen, your personal metaphysics guide. Ask about Bazi, Ziwei, Qimen, the Almanac, Tarot, names, or Feng Shui.', 'Share your birth date, time, and gender to create a chart, or ask about your year, career, or relationships.']
 const SHI_CHEN = ['子', '丑', '丑', '寅', '寅', '卯', '卯', '辰', '辰', '巳', '巳', '午', '午', '未', '未', '申', '申', '酉', '酉', '戌', '戌', '亥', '亥', '子']
+
+function agentCopy(locale, key, fallback = key) {
+  const en = {
+    session: 'Session', unnamedSession: 'Untitled session', report: 'Reading report', malformedReply: '⚠️ The reply format was incomplete. Please ask again.', loginExpired: '⚠️ Your session expired. Please sign in again.', stopped: '⏹ Generation stopped', networkFailed: 'Network issue. The reply was not completed.', historyFailed: 'Could not load conversations. Check your connection and try again.', sessionMissing: 'This conversation is unavailable.', deleteFailed: 'Could not delete this conversation. Please try again.', noChart: 'No chart is active. Share your birth details before saving one.', chartName: 'Name this chart (for example: Me, Mom, Child):',
+    agentName: 'Mr. Sanmen', shortName: 'Sanmen', usage: 'Usage-based billing · Keep asking', trial: 'Trial credits included · Subscribe when used', newChat: 'New chat', history: 'History', totalChats: count => `${count} chats · Select to restore`, close: 'Close', noHistory: 'No saved conversations yet. Start chatting to save one.', messages: count => `${count} messages`, delete: 'Delete', myCharts: 'My charts', totalCharts: count => `${count} saved · Select to switch`, saveChart: '+ Save current', noCharts: 'No saved charts. Create one, then save it here.', saved: 'saved', removeSaved: 'Remove saved chart', you: 'You', copyReport: 'Copy full report', askAnything: 'Ask Mr. Sanmen anything…', switchModel: 'Switch model', modelTitle: 'Choose model (starts a new chat)', stop: 'Stop generating',
+  }
+  return locale === 'en' ? (en[key] ?? fallback) : fallback
+}
 
 // v1 只存一个裸路由名，历史用户曾因此被永久锁在 MiniMax。v2 仅保存用户主动点选的
 // 路由；所有旧裸值一律交回默认 Flash，保留之后手动选择深度模型的能力。
@@ -40,7 +49,16 @@ export function normalizeAgentSeed(input, fallback = '') {
 
 // 解读进度展示的是用户可理解的执行阶段，而不是模型原始推理。这样既能让等待过程有
 // 反馈，也不会泄漏 Skill、系统提示、工具参数或模型自言自语。
-export function safeThinkStep(type, toolName = '') {
+export function safeThinkStep(type, toolName = '', locale = 'zh-CN') {
+  if (locale === 'en') {
+    const stages = {
+      start: 'Request received. Identifying the reading topic…', session_ready: 'Conversation ready. Connecting the reading engine…', context_ready: 'Conversation context is ready. Checking whether a chart or prior report is needed…', engine_requested: 'Reading request sent. Waiting for the first response…', reasoning: 'Reviewing the relevant chart relationships and key facts…\nCross-checking the available information…', answering: 'Organizing the key conclusion and practical guidance…\nChecking that the reply directly addresses your question…', completed: 'Reading complete. You can ask a follow-up question.',
+    }
+    const calls = { bazi: 'Calculating the Four Pillars and luck cycles…', ziwei: 'Calculating the Ziwei chart and twelve palaces…', qimen: 'Casting the Qimen chart and reviewing the pattern…', liuyao: 'Casting the hexagram and reviewing changing lines…', huangli: 'Checking the date and Almanac guidance…', tarot: 'Reviewing the spread and card positions…', fengshui: 'Reviewing space, direction, and movement…', name: 'Reviewing name structure and element balance…', wuyunliuqi: 'Reviewing seasonal wellness factors…' }
+    const results = { bazi: 'Four Pillars data returned. Checking its relevance to this question…', ziwei: 'Ziwei chart data returned. Checking palace and star relationships…', qimen: 'Qimen chart returned. Checking the relevant signifiers…', liuyao: 'Hexagram returned. Checking the changing-line relationship…', huangli: 'Date guidance confirmed. Converting it into practical advice…', tarot: 'Spread details are ready. Relating the positions to your question…', fengshui: 'Space details are ready. Preparing actionable suggestions…', name: 'Name details are ready. Organizing the key points…', wuyunliuqi: 'Wellness factors are ready. Organizing daily recommendations…' }
+    if (stages[type]) return stages[type]
+    return type === 'tool_result' ? (results[toolName] || 'Required information returned. Preparing the reply…') : (calls[toolName] || 'Checking the information needed for this reading…')
+  }
   if (type === 'start') return '已接收咨询，正在识别本次解读主题…'
   if (type === 'session_ready') return '已建立本次咨询会话，正在接入解读引擎…'
   if (type === 'context_ready') return '已同步本轮会话上下文与可用资料…\n正在确认本次问题是否需要命盘或历史报告辅助判断…'
@@ -97,25 +115,26 @@ function readAgentRoutePreference() {
 // 命盘行，模型据此排出的时柱是编的，用户却看不出来。原样传 null，由服务端与人设
 // 决定怎么向用户说明。
 function chartMeta(c) { return c ? { year: c.year, month: c.month, day: c.day, hour: c.hour ?? null, gender: c.gender } : null }
-function chartLabel(c) {
+function chartLabel(c, locale = 'zh-CN') {
   const shiChen = Number.isInteger(c.hour) ? ` · ${SHI_CHEN[c.hour]}时` : ''
+  if (locale === 'en') return `${c.gender === '女' ? 'Female' : 'Male'} · ${c.year}-${c.month}-${c.day}${Number.isInteger(c.hour) ? ` · ${SHI_CHEN[c.hour]} hour` : ''}`
   return `${c.gender === '女' ? '坤造' : '乾造'} · ${c.year}年${c.month}月${c.day}日${shiChen}`
 }
-function displaySessionTitle(title) {
+function displaySessionTitle(title, locale = 'zh-CN') {
   const value = String(title || '').replace(/\s+/g, ' ').trim()
   return /(?:【\s*(?:回答长度|问题覆盖校验|当前日期口径|日期换算核验|会话事实备忘|最终交付格式|当前缘主命盘)|这是一次常规咨询|不要复述整张命盘)/.test(value)
-    ? '本次咨询'
-    : value || '未命名会话'
+    ? agentCopy(locale, 'session', '本次咨询')
+    : value || agentCopy(locale, 'unnamedSession', '未命名会话')
 }
-function sessionTitle(s) {
-  const title = displaySessionTitle(s.title)
+function sessionTitle(s, locale = 'zh-CN') {
+  const title = displaySessionTitle(s.title, locale)
   if (!s.chartKey) return title
   const [year, month, day, hour, gender] = s.chartKey.split('-')
   const h = hour === 'x' ? null : Number(hour)
   if (!Number.isInteger(+year) || !Number.isInteger(+month) || !Number.isInteger(+day) || (h !== null && !Number.isInteger(h))) {
     return title
   }
-  return chartLabel({ year: +year, month: +month, day: +day, hour: h, gender })
+  return chartLabel({ year: +year, month: +month, day: +day, hour: h, gender }, locale)
 }
 function canRestoreSession(session) {
   // 积分余额与会话独立；只要会话存在，就应能恢复完整上下文。
@@ -123,7 +142,7 @@ function canRestoreSession(session) {
 }
 
 export default function AgentChatDsh({ chart: chartProp, seedQuery, user, reportId, initialSessionId, locale = 'zh-CN', onRequireLogin, onUpgrade, onUserChange }) {
-  const [messages, setMessages] = useState(() => OPENING.map((text, i) => ({ id: `boot-${i}`, role: 'ai', text, time: timeNow(), _counted: true })))
+  const [messages, setMessages] = useState(() => (locale === 'en' ? OPENING_EN : OPENING).map((text, i) => ({ id: `boot-${i}`, role: 'ai', text, time: timeNow(), _counted: true })))
   const [input, setInput] = useState('')
   const [typing, setTyping] = useState(false)
   const [activeChart, setActiveChart] = useState(() => chartProp || null)
@@ -211,7 +230,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     followScrollRef.current = true
     setInput('')
     setTyping(true)
-    setMessages(prev => [...prev, { id: `u-${Date.now()}`, role: 'user', text: q, displayText, time: timeNow() }, { id: `a-${Date.now()}`, role: 'ai', text: '', reasoning: safeThinkStep('start'), tools: [], streaming: true, time: timeNow() }])
+    setMessages(prev => [...prev, { id: `u-${Date.now()}`, role: 'user', text: q, displayText, time: timeNow() }, { id: `a-${Date.now()}`, role: 'ai', text: '', reasoning: safeThinkStep('start', '', locale), tools: [], streaming: true, time: timeNow() }])
     const ac = new AbortController()
     abortRef.current = ac
     try {
@@ -233,7 +252,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
             case 'usage':
               if (user) refreshSession().then(u => { if (u) onUserChange && onUserChange(u) })
               break
-            case 'progress': patchLast(m => appendSafeThinkStep(m, safeThinkStep(e.stage))); break
+            case 'progress': patchLast(m => appendSafeThinkStep(m, safeThinkStep(e.stage, '', locale))); break
             case 'heartbeat':
               patchLast(m => ({
                 ...m,
@@ -243,23 +262,23 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
             case 'text': patchLast(m => {
               const candidate = `${m.structuredRaw || ''}${e.delta}`
               const isStructured = Boolean(m.structuredRaw) || /^\s*\{\s*"version"\s*:/.test(`${m.text || ''}${e.delta}`)
-              if (isStructured) return { ...appendSafeThinkStep(m, safeThinkStep('answering')), structuredRaw: candidate, text: '' }
-              return { ...appendSafeThinkStep(m, safeThinkStep('answering')), text: m.text + e.delta }
+              if (isStructured) return { ...appendSafeThinkStep(m, safeThinkStep('answering', '', locale)), structuredRaw: candidate, text: '' }
+              return { ...appendSafeThinkStep(m, safeThinkStep('answering', '', locale)), text: m.text + e.delta }
             }); break
             case 'answer':
               patchLast(m => ({
-                ...appendSafeThinkStep(m, safeThinkStep('answering')),
+                ...appendSafeThinkStep(m, safeThinkStep('answering', '', locale)),
                 answer: e.answer,
                 text: '',
               }))
               break
-            case 'reasoning': patchLast(m => appendSafeThinkStep(m, safeThinkStep('reasoning'))); break
-            case 'tool_call': patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('tool_call', e.name)), tools: [...m.tools, { name: e.name, status: 'pending' }] })); break
+            case 'reasoning': patchLast(m => appendSafeThinkStep(m, safeThinkStep('reasoning', '', locale))); break
+            case 'tool_call': patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('tool_call', e.name, locale)), tools: [...m.tools, { name: e.name, status: 'pending' }] })); break
             case 'tool_result':
-              patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('tool_result', e.name)), tools: patchToolStatus(m.tools, e.name, e.ok === false ? 'failed' : 'complete') }))
+              patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep('tool_result', e.name, locale)), tools: patchToolStatus(m.tools, e.name, e.ok === false ? 'failed' : 'complete') }))
               if (e.kind === 'report') {
                 // 报告卡片插在流式气泡之前
-                setMessages(prev => { const last = prev[prev.length - 1]; return [...prev.slice(0, -1), { id: `r-${Date.now()}`, role: 'ai', kind: 'report', report: { title: (e.text.match(/^# (.+)$/m) || [])[1] || '测算报告', markdown: e.text }, time: timeNow(), _counted: true }, last] })
+                setMessages(prev => { const last = prev[prev.length - 1]; return [...prev.slice(0, -1), { id: `r-${Date.now()}`, role: 'ai', kind: 'report', report: { title: (e.text.match(/^# (.+)$/m) || [])[1] || agentCopy(locale, 'report', '测算报告'), markdown: e.text }, time: timeNow(), _counted: true }, last] })
               }
               break
             // 追加而不是二选一：模型已经吐了半截又报错时，丢掉已渲染的文字
@@ -269,8 +288,8 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
               const raw = m.structuredRaw || m.text
               const answer = m.answer || parseStructuredAnswerText(raw)
               return answer
-                ? { ...appendSafeThinkStep(m, safeThinkStep('completed')), answer, text: '', structuredRaw: undefined, streaming: false }
-                : { ...appendSafeThinkStep(m, safeThinkStep('completed')), text: m.structuredRaw ? '⚠️ 本次回复格式未完成，请重新提问。' : m.text, structuredRaw: undefined, streaming: false }
+                ? { ...appendSafeThinkStep(m, safeThinkStep('completed', '', locale)), answer, text: '', structuredRaw: undefined, streaming: false }
+                : { ...appendSafeThinkStep(m, safeThinkStep('completed', '', locale)), text: m.structuredRaw ? agentCopy(locale, 'malformedReply', '⚠️ 本次回复格式未完成，请重新提问。') : m.text, structuredRaw: undefined, streaming: false }
             }); break
             default: break
           }
@@ -297,7 +316,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
       // 登录态失效（401）：token 过期或账号已注销。api 层已清掉 token，
       // 这里只需给出一句能让人知道该干什么的提示。
       if (err && err.status === 401) {
-        patchLast(m => ({ ...m, text: '⚠️ 登录已失效，请重新登录后继续', streaming: false, _failed: true }))
+        patchLast(m => ({ ...m, text: agentCopy(locale, 'loginExpired', '⚠️ 登录已失效，请重新登录后继续'), streaming: false, _failed: true }))
         return
       }
       // 会话在服务端已不存在（重启/淘汰/删除）→ 清掉本地 sessionId，
@@ -309,8 +328,8 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
       patchLast(m => ({
         ...m,
         text: aborted
-          ? (m.text ? m.text + '\n\n⏹ 已停止生成' : '⏹ 已停止生成')
-          : (m.text ? m.text + '\n\n' : '') + `⚠️ ${err.message || '网络异常，回复未完成'}`,
+          ? (m.text ? m.text + `\n\n${agentCopy(locale, 'stopped', '⏹ 已停止生成')}` : agentCopy(locale, 'stopped', '⏹ 已停止生成'))
+          : (m.text ? m.text + '\n\n' : '') + `⚠️ ${err.message || agentCopy(locale, 'networkFailed', '网络异常，回复未完成')}`,
         streaming: false,
         _failed: true,
       }))
@@ -332,7 +351,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     setActiveChart(null)
     setShowHistory(false)
     setInput('')
-    setMessages(OPENING.map((text, i) => ({ id: `boot-${Date.now()}-${i}`, role: 'ai', text, time: timeNow(), _counted: true })))
+    setMessages((locale === 'en' ? OPENING_EN : OPENING).map((text, i) => ({ id: `boot-${Date.now()}-${i}`, role: 'ai', text, time: timeNow(), _counted: true })))
   }
 
   // 历史面板的加载/恢复/删除此前一律 catch 后静默吞掉：网络断了、会话在服务端
@@ -347,7 +366,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
       setSessions(r.sessions || [])
     } catch (e) {
       setSessions([])
-      setHistoryErr('会话列表加载失败，请检查网络后重试')
+      setHistoryErr(agentCopy(locale, 'historyFailed', '会话列表加载失败，请检查网络后重试'))
     }
   }
 
@@ -357,17 +376,17 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
       const r = await api.loadMessages(s.id)
       const restored = r.session || s
       setMessages((r.messages || []).map((m, i) => m.kind === 'report'
-        ? { id: `h-${i}`, role: 'ai', kind: 'report', report: { title: (m.text.match(/^# (.+)$/m) || [])[1] || '测算报告', markdown: m.text }, time: m.time, _counted: true }
+        ? { id: `h-${i}`, role: 'ai', kind: 'report', report: { title: (m.text.match(/^# (.+)$/m) || [])[1] || agentCopy(locale, 'report', '测算报告'), markdown: m.text }, time: m.time, _counted: true }
         : { id: `h-${i}`, role: m.role, text: m.answer ? m.text : (parseStructuredAnswerText(m.text) ? '' : m.text), answer: m.answer || parseStructuredAnswerText(m.text), time: m.time, _counted: true }))
       setSessionId(restored.id)
-      setActiveSession({ id: restored.id, title: sessionTitle(restored) })
+      setActiveSession({ id: restored.id, title: sessionTitle(restored, locale) })
       setActiveChart(null)
       if (restored.chartKey) { const [y, mo, d, h, g] = restored.chartKey.split('-'); try { setActiveChart(buildChart(+y, +mo, +d, +h, g)) } catch { /* 命盘键格式异常：不影响正文恢复 */ } }
       setShowHistory(false)
     } catch (e) {
       // 会话在服务端已不存在（被淘汰/删除）→ 从列表里摘掉，不要让用户反复点一个死条目
       setSessions(prev => prev.filter(x => x.id !== s.id))
-      setHistoryErr('该会话已不存在或加载失败')
+      setHistoryErr(agentCopy(locale, 'sessionMissing', '该会话已不存在或加载失败'))
     }
   }
 
@@ -406,20 +425,20 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
       // 删掉最后一条历史时，不能继续显示已不属于任何会话的旧消息。
       if (remaining.length === 0 || sessionId === id) newChat()
     } catch (e) {
-      setHistoryErr('删除失败，请稍后重试')
+      setHistoryErr(agentCopy(locale, 'deleteFailed', '删除失败，请稍后重试'))
     }
   }
 
   const refreshCollection = () => setCollection(listCollection())
   const saveCurrentChart = () => {
-    if (!activeChart) { window.alert('当前还没有命盘，请先提供出生信息排盘后再收藏。'); return }
-    const label = window.prompt('为这个命盘起个名字（如：我自己、妈妈、孩子）：', chartLabel(activeChart))
+    if (!activeChart) { window.alert(agentCopy(locale, 'noChart', '当前还没有命盘，请先提供出生信息排盘后再收藏。')); return }
+    const label = window.prompt(agentCopy(locale, 'chartName', '为这个命盘起个名字（如：我自己、妈妈、孩子）：'), chartLabel(activeChart, locale))
     if (label === null) return
     saveToCollection(activeChart, label.trim())
     refreshCollection()
   }
   const switchToCollected = (it) => {
-    try { setActiveChart(buildChart(it.year, it.month, it.day, it.hour, it.gender)); setSessionId(null); setActiveSession(null); setShowCollection(false) } catch { /* 忽略 */ }
+    try { setActiveChart(buildChart(it.year, it.month, it.day, it.hour, it.gender)); setSessionId(null); setActiveSession(null); setShowCollection(false) } catch { /* ignore invalid saved chart */ }
   }
   // 换模型 = 换一个服务端会话。此前只把 sessionId 置空却保留了聊天记录：
   // 界面上还挂着上文，服务端却是一张白纸，模型完全不知道前面聊过什么，
@@ -438,25 +457,25 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     e.preventDefault()
     send()
   }
-  const quick = quickQuestionsForConversation(messages, { hasChart: Boolean(activeChart) })
+  const quick = quickQuestionsForConversation(messages, { hasChart: Boolean(activeChart), locale })
   return (
     <div className="agent-page-inner">
       <div className="agent-head">
         <div className="agent-avatar">三</div>
         <div className="agent-head-main">
           <div className="agent-head-top">
-            {activeChart ? <div className="current-chart-chip"><span className="current-chart-txt">{chartLabel(activeChart)}</span></div>
-              : activeSession ? <div className="current-session-chip" title={activeSession.title}><span className="current-session-label">会话</span><span className="current-session-title">{activeSession.title}</span></div>
-                : <div className="name"><span className="agent-name-full">三门先生</span><span className="agent-name-short">三门</span></div>}
+            {activeChart ? <div className="current-chart-chip"><span className="current-chart-txt">{chartLabel(activeChart, locale)}</span></div>
+              : activeSession ? <div className="current-session-chip" title={activeSession.title}><span className="current-session-label">{agentCopy(locale, 'session', '会话')}</span><span className="current-session-title">{activeSession.title}</span></div>
+                : <div className="name"><span className="agent-name-full">{agentCopy(locale, 'agentName', '三门先生')}</span><span className="agent-name-short">{agentCopy(locale, 'shortName', '三门')}</span></div>}
           </div>
-          <div className="agent-topic-status">{user ? '按实际用量结算 · 可持续追问' : '赠送体验积分 · 用完后订阅'}</div>
+          <div className="agent-topic-status">{user ? agentCopy(locale, 'usage', '按实际用量结算 · 可持续追问') : agentCopy(locale, 'trial', '赠送体验积分 · 用完后订阅')}</div>
         </div>
         <div className="agent-head-actions">
           <LanguageSwitcher mobile />
-          <button className="agent-btn" onClick={newChat} title="新会话" aria-label="新会话">
+          <button className="agent-btn" onClick={newChat} title={agentCopy(locale, 'newChat', '新会话')} aria-label={agentCopy(locale, 'newChat', '新会话')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
           </button>
-          <button className="agent-btn" onClick={openHistory} title="会话历史" aria-label="会话历史">
+          <button className="agent-btn" onClick={openHistory} title={agentCopy(locale, 'history', '会话历史')} aria-label={agentCopy(locale, 'history', '会话历史')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 3" /></svg>
           </button>
         </div>
@@ -464,20 +483,20 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
         {showHistory && (
           <div className="session-drawer">
             <div className="session-drawer-head">
-              <div className="session-drawer-titles"><span className="session-drawer-title">会话历史</span><span className="session-drawer-sub">共 {sessions.length} 次 · 点击恢复</span></div>
-              <div className="session-drawer-ops"><button className="session-close-btn" onClick={() => setShowHistory(false)}>关闭</button></div>
+              <div className="session-drawer-titles"><span className="session-drawer-title">{agentCopy(locale, 'history', '会话历史')}</span><span className="session-drawer-sub">{locale === 'en' ? agentCopy(locale, 'totalChats')(sessions.length) : `共 ${sessions.length} 次 · 点击恢复`}</span></div>
+              <div className="session-drawer-ops"><button className="session-close-btn" onClick={() => setShowHistory(false)}>{agentCopy(locale, 'close', '关闭')}</button></div>
             </div>
             {historyErr && (
               <div className="session-empty" style={{ color: 'var(--danger, #c0392b)' }}>{historyErr}</div>
             )}
             <div className="session-list">
-              {sessions.length === 0 ? <div className="session-empty">暂无历史会话，聊两句就会自动记录。</div> : sessions.map(s => (
+              {sessions.length === 0 ? <div className="session-empty">{agentCopy(locale, 'noHistory', '暂无历史会话，聊两句就会自动记录。')}</div> : sessions.map(s => (
                 <div key={s.id} className={`session-item ${s.id === sessionId ? 'active' : ''}`} onClick={() => restore(s)}>
                   <div className="session-item-body">
-                    <div className="session-item-title">{sessionTitle(s)}</div>
-                    <div className="session-item-meta"><span>{s.messageCount} 条消息</span><span>{fmtSessionTime(s.updatedAt)}</span></div>
+                    <div className="session-item-title">{sessionTitle(s, locale)}</div>
+                    <div className="session-item-meta"><span>{locale === 'en' ? agentCopy(locale, 'messages')(s.messageCount) : `${s.messageCount} 条消息`}</span><span>{fmtSessionTime(s.updatedAt, locale)}</span></div>
                   </div>
-                  <button className="session-del" onClick={e => { e.stopPropagation(); del(s.id) }} title="删除" aria-label="删除会话">
+                  <button className="session-del" onClick={e => { e.stopPropagation(); del(s.id) }} title={agentCopy(locale, 'delete', '删除')} aria-label={agentCopy(locale, 'delete', '删除会话')}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /></svg>
                   </button>
                 </div>
@@ -489,17 +508,17 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
         {showCollection && (
           <div className="session-drawer">
             <div className="session-drawer-head">
-              <div className="session-drawer-titles"><span className="session-drawer-title">我的命盘</span><span className="session-drawer-sub">共 {collection.length} 个 · 点击切换</span></div>
-              <div className="session-drawer-ops"><button className="session-clear-btn" onClick={saveCurrentChart}>＋ 收藏当前</button><button className="session-close-btn" onClick={() => setShowCollection(false)}>关闭</button></div>
+              <div className="session-drawer-titles"><span className="session-drawer-title">{agentCopy(locale, 'myCharts', '我的命盘')}</span><span className="session-drawer-sub">{locale === 'en' ? agentCopy(locale, 'totalCharts')(collection.length) : `共 ${collection.length} 个 · 点击切换`}</span></div>
+              <div className="session-drawer-ops"><button className="session-clear-btn" onClick={saveCurrentChart}>{agentCopy(locale, 'saveChart', '＋ 收藏当前')}</button><button className="session-close-btn" onClick={() => setShowCollection(false)}>{agentCopy(locale, 'close', '关闭')}</button></div>
             </div>
             <div className="session-list">
-              {collection.length === 0 ? <div className="session-empty">还没有收藏的命盘。先排一个盘，点「＋收藏当前」保存。</div> : collection.map(it => (
+              {collection.length === 0 ? <div className="session-empty">{agentCopy(locale, 'noCharts', '还没有收藏的命盘。先排一个盘，点「＋收藏当前」保存。')}</div> : collection.map(it => (
                 <div key={it.id} className="session-item" onClick={() => switchToCollected(it)}>
                   <div className="session-item-body">
                     <div className="session-item-title">⭐ {it.label}</div>
-                    <div className="session-item-meta"><span className="session-pillar">{chartLabel(it)}</span><span>{fmtSessionTime(it.savedAt)} 收藏</span></div>
+                    <div className="session-item-meta"><span className="session-pillar">{chartLabel(it, locale)}</span><span>{fmtSessionTime(it.savedAt, locale)} {agentCopy(locale, 'saved', '收藏')}</span></div>
                   </div>
-                  <button className="session-del" onClick={e => { e.stopPropagation(); removeFromCollection(it.id); refreshCollection() }} title="取消收藏" aria-label="取消收藏">
+                  <button className="session-del" onClick={e => { e.stopPropagation(); removeFromCollection(it.id); refreshCollection() }} title={agentCopy(locale, 'removeSaved', '取消收藏')} aria-label={agentCopy(locale, 'removeSaved', '取消收藏')}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /></svg>
                   </button>
                 </div>
@@ -512,7 +531,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
       <div className="chat-scroll" ref={scrollRef} onScroll={handleChatScroll}>
         {messages.map(m => (
           <div key={m.id} className={`msg ${m.role}`}>
-            <div className="avatar">{m.role === 'ai' ? '三' : m.role === 'tool' ? '🔧' : '我'}</div>
+            <div className="avatar">{m.role === 'ai' ? '三' : m.role === 'tool' ? '🔧' : agentCopy(locale, 'you', '我')}</div>
             <div className="msg-content">
               {m.kind === 'report' ? (
                 <>
@@ -520,14 +539,14 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
                     <div className="report-md-title">{m.report.title}</div>
                     <div className="report-md-body">{renderMarkdown(m.report.markdown)}</div>
                   </div>
-                  <div className="msg-actions"><CopyButton text={m.report.markdown} title="复制报告全文" /></div>
+                  <div className="msg-actions"><CopyButton text={m.report.markdown} title={agentCopy(locale, 'copyReport', '复制报告全文')} locale={locale} /></div>
                 </>
               ) : m.role === 'tool' ? (
-                <ToolCallsBlock names={m.text} />
+                <ToolCallsBlock names={m.text} locale={locale} />
               ) : (
                 <div className={`bubble ${m.streaming ? 'bubble-streaming' : ''}`}>
-                  {m.reasoning ? <ThinkBlock content={m.reasoning} streaming={!!m.streaming} collapseWhenStreamingText={Boolean(m.text || m.answer)} heartbeat={m.heartbeat} /> : null}
-                  {m.tools && m.tools.length > 0 ? <ToolCallsBlock tools={m.tools} streaming={!!m.streaming} heartbeat={m.heartbeat} /> : null}
+                  {m.reasoning ? <ThinkBlock content={m.reasoning} streaming={!!m.streaming} collapseWhenStreamingText={Boolean(m.text || m.answer)} heartbeat={m.heartbeat} locale={locale} /> : null}
+                  {m.tools && m.tools.length > 0 ? <ToolCallsBlock tools={m.tools} streaming={!!m.streaming} heartbeat={m.heartbeat} locale={locale} /> : null}
                   {m.answer ? <StructuredAnswer answer={m.answer} /> : m.streaming && !m.text ? (
                     <span className="typing"><i /><i /><i /></span>
                   ) : (
@@ -548,14 +567,14 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
       </div>
 
       <div className="chat-input-bar">
-        <textarea className="chat-input" rows={1} placeholder="问三门先生任何问题…" value={input}
+        <textarea className="chat-input" rows={1} placeholder={agentCopy(locale, 'askAnything', '问三门先生任何问题…')} value={input}
           onChange={e => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 110) + 'px' }}
           onKeyDown={handleKey} style={{ maxHeight: 110 }} />
         <div className="input-status-wrap">
-          <button type="button" className="input-status-dot on" onClick={() => setPickerOpen(v => !v)} title="切换模型" aria-label="切换模型" />
+          <button type="button" className="input-status-dot on" onClick={() => setPickerOpen(v => !v)} title={agentCopy(locale, 'switchModel', '切换模型')} aria-label={agentCopy(locale, 'switchModel', '切换模型')} />
           {pickerOpen && (
             <div className="model-picker" onClick={e => e.stopPropagation()}>
-              <div className="model-picker-title">切换模型（新会话生效）</div>
+              <div className="model-picker-title">{agentCopy(locale, 'modelTitle', '切换模型（新会话生效）')}</div>
               {models.routes.map(r => (
                 <button key={r.key} type="button" className={`model-picker-item ${r.key === (route || models.default) ? 'active' : ''}`} onClick={() => pickRoute(r.key)}>
                   <span className={`model-picker-dot ${r.key === (route || models.default) ? 'on' : ''}`} />
@@ -568,7 +587,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
         </div>
         {/* 生成中把发送键换成停止键：此前一旦模型开始长篇输出就只能干等，没有任何出口 */}
         {typing ? (
-          <button className="send-btn" onClick={stopGenerating} title="停止生成" aria-label="停止生成">
+          <button className="send-btn" onClick={stopGenerating} title={agentCopy(locale, 'stop', '停止生成')} aria-label={agentCopy(locale, 'stop', '停止生成')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
           </button>
         ) : (

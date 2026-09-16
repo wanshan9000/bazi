@@ -33,16 +33,19 @@ export function buildReportAgentPrompt({ reportName, facts = [], report = null }
 }
 
 export default function ReportAgentFooter({ onAskAgent, onBack, backLabel = '回到首页' }) {
+  const { locale } = useLocale()
+  const l = (zh, en, tw) => localize(locale, zh, en, tw)
   return (
     <div className="report-agent-footer-zone">
-      <section className="report-agent-footer" aria-label="报告页操作">
+      <section className="report-agent-footer" aria-label={l('报告页操作', 'Report actions')}>
         <button type="button" className="report-agent-ask" onClick={onAskAgent}>
-          ✦ 咨询元气 AI
+          ✦ {l('咨询元气 AI', 'Ask Genki AI')}
         </button>
         <button type="button" className="report-agent-home" onClick={onBack}>
-          {backLabel}
+          {locale === 'en' && backLabel === '回到首页' ? 'Back home' : backLabel}
         </button>
       </section>
     </div>
   )
 }
+import { localize, useLocale } from '../i18n.jsx'

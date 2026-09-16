@@ -19,6 +19,7 @@ import { consumeCredit } from '../data/users.js'
 import { hasPaid, markPaid } from '../engine/entitlements.js'
 import { FEATURE_COSTS, getMonthlyCredits, planByKey, nextPlanKey } from '../engine/membership.js'
 import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx'
+import { localize, useLocale } from '../i18n.jsx'
 
 const SHICHEN = [
   ['子时', '23-01'], ['丑时', '01-03'], ['寅时', '03-05'], ['卯时', '05-07'],
@@ -29,6 +30,8 @@ const SHICHEN_HOUR = { 子: 0, 丑: 2, 寅: 4, 卯: 6, 辰: 8, 巳: 10, 午: 12,
 const WX_LABEL = { 木: '木 · 仁', 火: '火 · 礼', 土: '土 · 信', 金: '金 · 义', 水: '水 · 智' }
 
 export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin, onUpgrade, onUserChange, onAskAgent, onReportReady }) {
+  const { locale } = useLocale()
+  const l = (zh, en, tw) => localize(locale, zh, en, tw)
   const [editing, setEditing] = useState(!chart)
   const [tab, setTab] = useState('mangpai')
   // 命书扣减状态：paid=true 表示本次会话已成功扣分；reason=null 表示无错误；
@@ -63,24 +66,24 @@ export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin,
     <div className="page-wrap bazi-page">
       <div className="container">
         <div className="page-head rise">
-          <button className="back-btn" onClick={onBack}>‹ 返回</button>
+          <button className="back-btn" onClick={onBack}>‹ {l('返回', 'Back')}</button>
         </div>
         <h1 className="page-title bazi-page-title rise rise-1">
-          <span>八字排盘</span>
+          <span>{l('八字排盘', 'Bazi chart')}</span>
           {chart && !editing && (
-            <button className="title-chart-change" onClick={() => { setEditing(true); setTab('mangpai'); window.scrollTo(0, 0) }} title="更换生辰" aria-label="更换生辰">
+            <button className="title-chart-change" onClick={() => { setEditing(true); setTab('mangpai'); window.scrollTo(0, 0) }} title={l('更换生辰', 'Edit birth details')} aria-label={l('更换生辰', 'Edit birth details')}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M3 12a9 9 0 1 0 3-6.7" />
                 <path d="M3 3v5h5" />
               </svg>
-              <span>更换生辰</span>
+              <span>{l('更换生辰', 'Edit details')}</span>
             </button>
           )}
         </h1>
-        <p className="page-sub rise rise-2">排四柱 · 看五行 · 找到你的出厂设置</p>
+        <p className="page-sub rise rise-2">{l('排四柱 · 看五行 · 找到你的出厂设置', 'Four Pillars · Five Elements · Your personal blueprint')}</p>
 
         {editing || !chart ? (
-          <BirthFormComp
+          <BirthFormComp locale={locale}
             onDone={(data) => {
               onChart(data)
               // 游客可直接排盘：盘面/五行等基础分析免费展示；完整命书按下方登录态 + 积分扣减
@@ -109,7 +112,8 @@ export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin,
   )
 }
 
-function BirthFormComp({ onDone }) {
+function BirthFormComp({ onDone, locale }) {
+  const l = (zh, en, tw) => localize(locale, zh, en, tw)
   const now = new Date()
   const [calendar, setCalendar] = useState('solar')
   const [year, setYear] = useState(1995)
@@ -174,37 +178,37 @@ function BirthFormComp({ onDone }) {
 
   return (
     <div className="card rise rise-3 bazi-entry-form">
-      <div className="form-head">✦ 获取出厂说明书 ✦</div>
-      <p className="form-sub">输入生辰 · 排出你的四柱八字与五行命局</p>
+      <div className="form-head">✦ {l('获取出厂说明书', 'Create your life blueprint')} ✦</div>
+      <p className="form-sub">{l('输入生辰 · 排出你的四柱八字与五行命局', 'Enter your birth details to create a Four Pillars chart.')}</p>
 
       <div className="field-pair">
         <div className="field">
-          <label>性别</label>
+          <label>{l('性别', 'Gender')}</label>
           <div className="select-wrap">
             <select value={gender} onChange={e => setGender(e.target.value)}>
-              <option value="男">乾造 · 男</option>
-              <option value="女">坤造 · 女</option>
+              <option value="男">{l('乾造 · 男', 'Male')}</option>
+              <option value="女">{l('坤造 · 女', 'Female')}</option>
             </select>
           </div>
         </div>
         <div className="field">
-          <label>称呼（可选）</label>
-          <input type="text" placeholder="怎么称呼你？" value={name} maxLength={12} onChange={e => setName(e.target.value)} />
+          <label>{l('称呼（可选）', 'Name (optional)')}</label>
+          <input type="text" placeholder={l('怎么称呼你？', 'How should we address you?')} value={name} maxLength={12} onChange={e => setName(e.target.value)} />
         </div>
       </div>
 
       <div className="field">
         <label className="date-label-row">
-          <span>出生日期<span className="req">*</span></span>
+          <span>{l('出生日期', 'Birth date')}<span className="req">*</span></span>
           <span className="cal-switch">
-            <span className={`cal-chip ${calendar === 'solar' ? 'active' : ''}`} onClick={() => { setCalendar('solar'); setLunarLeap(false) }}>阳历</span>
-            <span className={`cal-chip ${calendar === 'lunar' ? 'active' : ''}`} onClick={() => setCalendar('lunar')}>农历</span>
+            <span className={`cal-chip ${calendar === 'solar' ? 'active' : ''}`} onClick={() => { setCalendar('solar'); setLunarLeap(false) }}>{l('阳历', 'Solar')}</span>
+            <span className={`cal-chip ${calendar === 'lunar' ? 'active' : ''}`} onClick={() => setCalendar('lunar')}>{l('农历', 'Lunar')}</span>
           </span>
         </label>
         <div className="date-row">
           <div className="select-wrap">
             <select value={year} onChange={e => setY(+e.target.value)}>
-              {years.map(y => <option key={y} value={y}>{y} 年</option>)}
+              {years.map(y => <option key={y} value={y}>{locale === 'en' ? y : `${y} 年`}</option>)}
             </select>
           </div>
           <div className="select-wrap">
@@ -214,20 +218,20 @@ function BirthFormComp({ onDone }) {
             }}>
               {calendar === 'lunar'
                 ? lunarMonths.map(m => <option key={m.key} value={m.key}>{m.label}</option>)
-                : Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1} 月</option>)}
+                : Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{locale === 'en' ? `${i + 1}` : `${i + 1} 月`}</option>)}
             </select>
           </div>
           <div className="select-wrap">
             <select value={day} onChange={e => adjustDay(+e.target.value)}>
-              {Array.from({ length: lunarMaxDay }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1} 日</option>)}
+              {Array.from({ length: lunarMaxDay }, (_, i) => <option key={i + 1} value={i + 1}>{locale === 'en' ? `${i + 1}` : `${i + 1} 日`}</option>)}
             </select>
           </div>
         </div>
-        {calendar === 'lunar' && <p className="field-hint">农历输入会自动换算为公历排盘</p>}
+        {calendar === 'lunar' && <p className="field-hint">{l('农历输入会自动换算为公历排盘', 'Lunar dates are converted before charting.')}</p>}
       </div>
 
       <div className="field">
-        <label>出生时辰</label>
+        <label>{l('出生时辰', 'Birth time')}</label>
         <ShichenPicker
           value={hour}
           timeKnown={timeKnown}
@@ -258,9 +262,9 @@ function BirthFormComp({ onDone }) {
 
       <div className="form-actions">
         <button className="btn" style={{ width: '100%' }} onClick={submit}>
-          ✦ 排定命盘
+          ✦ {l('排定命盘', 'Create chart')}
         </button>
-        <p className="form-note">基于你的生辰推算四柱八字与五行命局 · 仅供自我探索参考</p>
+        <p className="form-note">{l('基于你的生辰推算四柱八字与五行命局 · 仅供自我探索参考', 'A traditional Four Pillars reference for self-exploration.')}</p>
       </div>
     </div>
   )

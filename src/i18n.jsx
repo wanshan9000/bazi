@@ -26,6 +26,107 @@ const COPY = {
 
 const LocaleContext = createContext(null)
 const STORAGE_KEY = 'genki-locale'
+let traditionalConverter = null
+let traditionalConverterLoading = null
+const CONVERTIBLE_ATTRIBUTES = ['title', 'aria-label', 'placeholder']
+
+function loadTraditionalConverter() {
+  if (traditionalConverter) return Promise.resolve(traditionalConverter)
+  if (!traditionalConverterLoading) {
+    traditionalConverterLoading = import('opencc-js/cn2t').then(OpenCC => {
+      traditionalConverter = OpenCC.Converter({ from: 'cn', to: 'tw' })
+      return traditionalConverter
+    })
+  }
+  return traditionalConverterLoading
+}
+
+function shouldSkipConversion(node) {
+  const element = node?.parentElement || node
+  return !element || element.closest('input, textarea, select, option, script, style, code, pre, [contenteditable="true"], [data-no-opencc], .ignore-opencc, .msg.user')
+}
+
+// 旧页面尚未完全迁入字典时，以 OpenCC 作为最后一道显示层兜底。
+// 只转换应用里的静态展示文本；用户输入、代码、富文本编辑器和本人消息保持原样。
+function useTraditionalFallback(locale) {
+  useEffect(() => {
+    const root = document.getElementById('root')
+    if (!root) return undefined
+    const originalText = new WeakMap()
+    const originalAttributes = new WeakMap()
+    let cancelled = false
+
+    const convertText = node => {
+      if (locale !== 'zh-TW' || !node?.data || shouldSkipConversion(node)) return
+      const converted = traditionalConverter(node.data)
+      if (converted === node.data) return
+      originalText.set(node, { original: node.data, converted })
+      node.data = converted
+    }
+    const restoreText = node => {
+      const record = originalText.get(node)
+      if (record && node.data === record.converted) node.data = record.original
+    }
+    const convertAttributes = element => {
+      if (locale !== 'zh-TW' || shouldSkipConversion(element)) return
+      CONVERTIBLE_ATTRIBUTES.forEach(name => {
+        const value = element.getAttribute?.(name)
+        if (!value) return
+        const converted = traditionalConverter(value)
+        if (converted === value) return
+        const record = originalAttributes.get(element) || {}
+        record[name] = { original: value, converted }
+        originalAttributes.set(element, record)
+        element.setAttribute(name, converted)
+      })
+    }
+    const restoreAttributes = element => {
+      const record = originalAttributes.get(element)
+      if (!record) return
+      Object.entries(record).forEach(([name, value]) => {
+        if (element.getAttribute(name) === value.converted) element.setAttribute(name, value.original)
+      })
+    }
+    const visit = node => {
+      if (node.nodeType === Node.TEXT_NODE) convertText(node)
+      if (node.nodeType === Node.ELEMENT_NODE) convertAttributes(node)
+      node.childNodes?.forEach(visit)
+    }
+    const restore = node => {
+      if (node.nodeType === Node.TEXT_NODE) restoreText(node)
+      if (node.nodeType === Node.ELEMENT_NODE) restoreAttributes(node)
+      node.childNodes?.forEach(restore)
+    }
+
+    const observer = new MutationObserver(records => {
+      records.forEach(record => {
+        if (record.type === 'characterData') {
+          if (locale === 'zh-TW') convertText(record.target)
+          else restoreText(record.target)
+        } else if (record.type === 'attributes') {
+          if (locale === 'zh-TW') convertAttributes(record.target)
+          else restoreAttributes(record.target)
+        } else {
+          record.addedNodes.forEach(node => locale === 'zh-TW' ? visit(node) : restore(node))
+        }
+      })
+    })
+    if (locale === 'zh-TW') {
+      loadTraditionalConverter().then(() => {
+        if (cancelled) return
+        visit(root)
+        observer.observe(root, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: CONVERTIBLE_ATTRIBUTES })
+      }).catch(error => console.warn('繁體字庫載入失敗', error))
+    } else {
+      observer.observe(root, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: CONVERTIBLE_ATTRIBUTES })
+    }
+    return () => {
+      cancelled = true
+      observer.disconnect()
+      if (locale === 'zh-TW') restore(root)
+    }
+  }, [locale])
+}
 const FALLBACK_CONTEXT = {
   locale: 'zh-CN',
   setLocale: () => {},
@@ -34,6 +135,13 @@ const FALLBACK_CONTEXT = {
 
 export function normalizeLocale(value) {
   return LOCALES.some(item => item.key === value) ? value : 'zh-CN'
+}
+
+// 用于页面内仍需逐步迁移的短文案。不要把命盘干支等计算结果放进这里：
+// 它们保留原文，再由相邻的英文标签说明，避免错误翻译传统术语。
+export function localize(locale, zhCN, english, zhTW = zhCN) {
+  if (locale === 'en') return english
+  return locale === 'zh-TW' ? zhTW : zhCN
 }
 
 function initialLocale() {
@@ -54,6 +162,7 @@ export function LocaleProvider({ children }) {
     document.documentElement.lang = option.htmlLang
     try { localStorage.setItem(STORAGE_KEY, locale) } catch { /* 私密模式仅维持当前页 */ }
   }, [locale])
+  useTraditionalFallback(locale)
   const value = useMemo(() => ({
     locale,
     setLocale,

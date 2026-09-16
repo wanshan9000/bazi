@@ -72,24 +72,10 @@ function TopBar({ view, onNav, user, onUser, credits }) {
       <div className="container topbar-inner">
         <div className="brand" onClick={() => onNav('home')}>
           <div className="brand-mark" aria-hidden="true">
-            <svg className="bear-silhouette" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-              {/* 双耳 */}
-              <circle cx="9.2" cy="9.5" r="4.2" />
-              <circle cx="22.8" cy="9.5" r="4.2" />
-              {/* 头部 */}
-              <circle cx="16" cy="14.2" r="7.4" />
-              {/* 身体 */}
-              <ellipse cx="16" cy="23.8" rx="8" ry="6.2" />
-              {/* 双臂搭在身体两侧 */}
-              <ellipse cx="8.2" cy="23" rx="2.8" ry="5.2" />
-              <ellipse cx="23.8" cy="23" rx="2.8" ry="5.2" />
-              {/* 双脚 */}
-              <ellipse cx="12.4" cy="28.6" rx="2.6" ry="2" />
-              <ellipse cx="19.6" cy="28.6" rx="2.6" ry="2" />
-            </svg>
+            <img src="/genki-logo.png" alt="" />
           </div>
           <div>
-            <span className="brand-name">{t('brand')}</span>
+            <span className="brand-name" aria-label={t('brand')}>GENKI</span>
           </div>
         </div>
         <nav className="topnav">
@@ -150,16 +136,7 @@ function BottomNav({ view, onNav, user }) {
         >
           {n.key === 'home' ? (
             <span className="bn-home-logo" aria-hidden="true">
-              <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="9.2" cy="9.5" r="4.2" />
-                <circle cx="22.8" cy="9.5" r="4.2" />
-                <circle cx="16" cy="14.2" r="7.4" />
-                <ellipse cx="16" cy="23.8" rx="8" ry="6.2" />
-                <ellipse cx="8.2" cy="23" rx="2.8" ry="5.2" />
-                <ellipse cx="23.8" cy="23" rx="2.8" ry="5.2" />
-                <ellipse cx="12.4" cy="28.6" rx="2.6" ry="2" />
-                <ellipse cx="19.6" cy="28.6" rx="2.6" ry="2" />
-              </svg>
+              <img src="/genki-logo.png" alt="" />
             </span>
           ) : n.key === 'profile' ? (
             <span className="bn-profile-mark" aria-hidden="true">◉</span>
@@ -815,60 +792,53 @@ const POLICE_NO = import.meta.env.VITE_POLICE_NO || ''
 const CONTACT_EMAIL = import.meta.env.VITE_CONTACT_EMAIL || ''
 
 function TailBand({ onNav, hideOnMobile, user }) {
+  const { locale } = useLocale()
+  const l = (zh, en) => locale === 'en' ? en : zh
   return (
     <footer className={`tail-band${hideOnMobile ? ' tail-band-share-sm' : ''}`}>
       <div className="tail-inner">
         <div className="tail-brand">
           <div className="tail-logo" aria-hidden="true">
-            <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" className="bear-silhouette">
-              <circle cx="9.2" cy="9.5" r="4.2" />
-              <circle cx="22.8" cy="9.5" r="4.2" />
-              <circle cx="16" cy="14.2" r="7.4" />
-              <ellipse cx="16" cy="23.8" rx="8" ry="6.2" />
-              <ellipse cx="8.2" cy="23" rx="2.8" ry="5.2" />
-              <ellipse cx="23.8" cy="23" rx="2.8" ry="5.2" />
-              <ellipse cx="12.4" cy="28.6" rx="2.6" ry="2" />
-              <ellipse cx="19.6" cy="28.6" rx="2.6" ry="2" />
-            </svg>
+            <img src="/genki-logo.png" alt="" />
           </div>
           <div>
-            <p className="tail-brand-name">元氣<em>满满</em></p>
-            <p className="tail-brand-slogan">把心事交给星星，把好运留给自己</p>
+            <p className="tail-brand-name">GENKI</p>
+            <p className="tail-brand-slogan">{l('把心事交给星星，把好运留给自己', 'Bring your questions to the stars. Keep the next step for yourself.')}</p>
           </div>
         </div>
 
         <div className="tail-cols">
           <div className="tail-col">
-            <p className="tail-col-title">开始占卜</p>
+            <p className="tail-col-title">{l('开始占卜', 'Explore')}</p>
             <ul>
-              <li><a onClick={() => onNav('bazi')}>八字排盘</a></li>
-              <li><a onClick={() => onNav('ziwei')}>紫微斗数</a></li>
-              <li><a onClick={() => onNav('tarot')}>塔罗指引</a></li>
+              <li><a onClick={() => onNav('bazi')}>{l('八字排盘', 'Bazi chart')}</a></li>
+              <li><a onClick={() => onNav('ziwei')}>{l('紫微斗数', 'Ziwei Doushu')}</a></li>
+              <li><a onClick={() => onNav('tarot')}>{l('塔罗指引', 'Tarot')}</a></li>
               <li><a onClick={() => onNav('agent')}>元氣 AI</a></li>
             </ul>
           </div>
           <div className="tail-col">
-            <p className="tail-col-title">发现更多</p>
+            <p className="tail-col-title">{l('发现更多', 'Discover')}</p>
             <ul>
-              <li><a onClick={() => onNav('wenku')}>文库精选</a></li>
-              <li><a onClick={() => onNav('huangli')}>订阅黄历</a></li>
-              <li><a onClick={() => onNav('profile')}>我的元氣</a></li>
+              <li><a onClick={() => onNav('wenku')}>{l('文库精选', 'Library')}</a></li>
+              <li><a onClick={() => onNav('huangli')}>{l('订阅黄历', 'Almanac')}</a></li>
+              <li><a onClick={() => onNav('profile')}>{l('我的元氣', 'My Genki')}</a></li>
             </ul>
           </div>
           <div className="tail-col">
-            <p className="tail-col-title">关于</p>
+            <p className="tail-col-title">{l('关于', 'About')}</p>
             <ul>
-              <li><a onClick={() => onNav('privacy')}>隐私政策</a></li>
-              <li><a onClick={() => onNav('terms')}>用户协议</a></li>
-              {CONTACT_EMAIL && <li><a href={`mailto:${CONTACT_EMAIL}`}>联系我们</a></li>}
-              {isSuperAdmin(user) && <li><a onClick={() => onNav('admin')}>管理控制台</a></li>}
+              <li><a onClick={() => onNav('privacy')}>{l('隐私政策', 'Privacy')}</a></li>
+              <li><a onClick={() => onNav('terms')}>{l('用户协议', 'Terms')}</a></li>
+              {CONTACT_EMAIL && <li><a href={`mailto:${CONTACT_EMAIL}`}>{l('联系我们', 'Contact')}</a></li>}
+              {isSuperAdmin(user) && <li><a onClick={() => onNav('admin')}>{l('管理控制台', 'Admin')}</a></li>}
             </ul>
           </div>
         </div>
       </div>
 
       <div className="tail-bottom">
-        <p className="tail-copy">© 2025–2026 元氣滿滿 · 仅供娱乐参考 · 命由己造，相由心生</p>
+        <p className="tail-copy">{locale === 'en' ? '© 2025–2026 Genki · Traditional culture and entertainment reference only.' : '© 2025–2026 元氣滿滿 · 仅供娱乐参考 · 命由己造，相由心生'}</p>
         {/* 备案号原先写死成 XXXXXXXX 占位。公网站点挂一个假的备案号比不挂更糟，
             所以改成读环境变量，没配就整行不渲染。 */}
         {(ICP_NO || POLICE_NO) && (

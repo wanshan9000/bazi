@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { localize, useLocale } from '../i18n.jsx'
 
 /**
  * 时辰选择器（点击触发按钮 → 弹层选择）
@@ -50,6 +51,8 @@ export default function ShichenPicker({
   placeholder = '点击选择出生时辰',
   tone = 'rose'
 }) {
+  const { locale } = useLocale()
+  const l = (zh, en, tw) => localize(locale, zh, en, tw)
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState(timeKnown ? 'known' : 'unknown')
   const accent = TONE_VAR[tone] || TONE_VAR.rose
@@ -77,8 +80,8 @@ export default function ShichenPicker({
 
   const current = getShichenByHour(value)
   const triggerLabel = !timeKnown
-    ? '时辰不确定'
-    : `${current.zhi}时 · ${current.range}`
+    ? l('时辰不确定', 'Time unknown')
+    : `${current.zhi} · ${current.range}`
 
   const pickHour = (hour) => {
     onChange({ hour, timeKnown: true })
@@ -109,7 +112,7 @@ export default function ShichenPicker({
           onClick={() => setOpen(false)}
           role="dialog"
           aria-modal="true"
-          aria-label="选择出生时辰"
+          aria-label={l('选择出生时辰', 'Choose birth time')}
         >
           <div
             className="scp-modal"
@@ -117,8 +120,8 @@ export default function ShichenPicker({
             style={{ '--scp-accent': accent.accent, '--scp-accent-rgb': accent.accentRgb }}
           >
             <header className="scp-modal-head">
-              <h3 className="scp-modal-title">选择出生时辰</h3>
-              <button className="scp-modal-close" onClick={() => setOpen(false)} aria-label="关闭">✕</button>
+              <h3 className="scp-modal-title">{l('选择出生时辰', 'Birth time')}</h3>
+              <button className="scp-modal-close" onClick={() => setOpen(false)} aria-label={l('关闭', 'Close')}>✕</button>
             </header>
 
             <div className="scp-tabs">
@@ -126,13 +129,13 @@ export default function ShichenPicker({
                 className={`scp-tab ${tab === 'known' ? 'active' : ''}`}
                 onClick={() => setTab('known')}
               >
-                知道时辰
+                {l('知道时辰', 'Known time')}
               </div>
               <div
                 className={`scp-tab ${tab === 'unknown' ? 'active' : ''}`}
                 onClick={() => setTab('unknown')}
               >
-                时辰不确定
+                {l('时辰不确定', 'Not sure')}
               </div>
             </div>
 
@@ -147,8 +150,8 @@ export default function ShichenPicker({
                       onClick={() => pickHour(s.hour)}
                     >
                       <div className="scp-cell-zhi">
-                        {s.zhi}时
-                        {s.sub ? <em className="scp-cell-sub">{s.sub}</em> : null}
+                        {locale === 'en' ? s.zhi : `${s.zhi}时`}
+                        {s.sub ? <em className="scp-cell-sub">{locale === 'en' ? (s.hour === 23 ? 'Late Zi' : 'Early Zi') : s.sub}</em> : null}
                       </div>
                       <div className="scp-cell-range">{s.range}</div>
                     </div>
@@ -158,13 +161,13 @@ export default function ShichenPicker({
             ) : (
               <div className="scp-unknown-panel">
                 <div className="scp-unknown-illu" aria-hidden>⏳</div>
-                <p className="scp-unknown-tit">不记得具体时辰？</p>
-                <p className="scp-unknown-desc">系统将以<strong>午时（11-13 点）</strong>为中点起盘，仍然可以得出大方向，结果精度略有偏差。</p>
-                <button className="scp-unknown-cta" onClick={pickUnknown}>确定 · 以午时起盘</button>
+                <p className="scp-unknown-tit">{l('不记得具体时辰？', 'Not sure of the time?')}</p>
+                <p className="scp-unknown-desc">{locale === 'en' ? <>Your chart will use <strong>Wu time (11:00-13:00)</strong> as an estimate. It remains useful for a broad reading, with lower precision.</> : <>系统将以<strong>午时（11-13 点）</strong>为中点起盘，仍然可以得出大方向，结果精度略有偏差。</>}</p>
+                <button className="scp-unknown-cta" onClick={pickUnknown}>{l('确定 · 以午时起盘', 'Use Wu time')}</button>
               </div>
             )}
 
-            <p className="scp-foot">子时跨日 · 晚子时（23-24 点）按次日子时起干 · 选中即关闭</p>
+            <p className="scp-foot">{l('子时跨日 · 晚子时（23-24 点）按次日子时起干 · 选中即关闭', 'Zi time crosses midnight. Late Zi (23:00-24:00) follows the next day. Selecting an option closes this panel.')}</p>
           </div>
         </div>,
         document.body

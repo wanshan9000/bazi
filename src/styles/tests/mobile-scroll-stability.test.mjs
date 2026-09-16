@@ -22,6 +22,15 @@ test('应用壳使用稳定视口高度并裁掉意外横向溢出', () => {
   assert.match(shell, /min-height:\s*100svh;/)
 })
 
+test('英文界面使用正常西文字距，中文全局字距规则保持独立', () => {
+  const englishTypography = cssBlock('html:lang\\(en\\) \\.app-shell,\\s*html:lang\\(en\\) \\.app-shell \\*')
+  const body = cssBlock('body')
+
+  assert.match(englishTypography, /letter-spacing:\s*normal;/)
+  assert.match(englishTypography, /word-spacing:\s*normal;/)
+  assert.match(body, /letter-spacing:\s*0\.01em;/)
+})
+
 test('奇门报告标题在手机不再使用 100vw 制造横向拖动', () => {
   const title = cssBlock('\\.qimen-report-page-title')
   assert.match(title, /width:\s*calc\(100% \+ 28px\);/)

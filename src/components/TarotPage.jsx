@@ -4,6 +4,7 @@ import UpgradePrompt from './UpgradePrompt.jsx'
 import { consumeCredit } from '../data/users.js'
 import { FEATURE_COSTS, getMonthlyCredits, planByKey, nextPlanKey, requiredPlanForFeature, canUseFeature, featureAllowanceStatus } from '../engine/membership.js'
 import { consumeGuestTarot, guestTarotStatus } from '../engine/freeQuota.js'
+import { useLocale } from '../i18n.jsx'
 
 // 牌阵主题分类
 const SPREAD_CATS = [
@@ -58,6 +59,8 @@ function SpreadPreview({ spread, drawn = 0 }) {
 }
 
 export default function TarotPage({ onBack, onStart, history, user, onRequireLogin, onUpgrade, onUserChange }) {
+  const { locale } = useLocale()
+  const en = locale === 'en'
   const [cat, setCat] = useState('all')
   const [guestQuota, setGuestQuota] = useState(() => user ? null : guestTarotStatus())
   // 登录用户扣分结果：true 表示扣分成功；'insufficient' 表示积分不足
@@ -76,20 +79,20 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
     <div className="page-wrap tarot-page">
       <div className="container">
         <div className="page-head rise">
-          <button className="back-btn" onClick={onBack}>‹ 返回</button>
+          <button className="back-btn" onClick={onBack}>‹ {en ? 'Back' : '返回'}</button>
         </div>
         <h1 className="page-title tarot-page-title rise rise-1">
-          <span>塔罗门</span>
+          <span>{en ? 'Tarot' : '塔罗门'}</span>
           {user && history.length > 0 && (
-            <span className="tarot-draw-count" title={`已累计完成 ${history.length} 次塔罗占卜`}><em>{history.length}</em> 卦</span>
+            <span className="tarot-draw-count" title={en ? `${history.length} completed Tarot readings` : `已累计完成 ${history.length} 次塔罗占卜`}><em>{history.length}</em> {en ? 'reads' : '卦'}</span>
           )}
         </h1>
-        <p className="page-sub rise rise-2">七十八张阿卡那 · 九种经典牌阵 · 一抽即明</p>
+        <p className="page-sub rise rise-2">{en ? '78 Arcana · 9 classic spreads · Draw for clarity' : '七十八张阿卡那 · 九种经典牌阵 · 一抽即明'}</p>
 
         <p className="quota-hint rise rise-2">
           {user
-            ? <>{planByKey(user.plan).name} · 塔罗解读本月剩余 <b>{tarotAllowance.remaining === Infinity ? '不限' : `${tarotAllowance.remaining} / ${tarotAllowance.limit}`}</b> 次</>
-            : <>游客可任选牌阵本机体验，剩余 <b>{guestQuota.remaining} / 3</b> 次</>}
+            ? <>{planByKey(user.plan).name} · {en ? 'Tarot readings left this month ' : '塔罗解读本月剩余 '}<b>{tarotAllowance.remaining === Infinity ? (en ? 'Unlimited' : '不限') : `${tarotAllowance.remaining} / ${tarotAllowance.limit}`}</b>{en ? '' : ' 次'}</>
+            : <>{en ? 'Try any spread on this device. Remaining ' : '游客可任选牌阵本机体验，剩余 '}<b>{guestQuota.remaining} / 3</b>{en ? '' : ' 次'}</>}
         </p>
 
         {/* 积分不足：此前只 setInsufficient(true) 却从不渲染，用户点「抽这组牌」毫无反应 */}
@@ -114,11 +117,11 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
             <button
               key={c.k}
               className={`cat-chip ${cat === c.k ? 'active' : ''}`}
-              title={c.hint}
+              title={en ? ({ all: 'All spreads', love: 'Love · reunion · lasting love', career: 'Career · transition · people', decision: 'Choices · trade-offs', self: 'Self discovery · gifts', general: 'Quick answer · overview' }[c.k]) : c.hint}
               onClick={() => setCat(c.k)}
             >
               <span className="ce" aria-hidden="true">{c.icon}</span>
-              <span className="cl">{c.l}</span>
+              <span className="cl">{en ? ({ all: 'All', love: 'Love', career: 'Career', decision: 'Choices', self: 'Growth', general: 'General' }[c.k]) : c.l}</span>
             </button>
           ))}
         </div>
@@ -126,9 +129,9 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
         <>
             <div className="spread-result-head rise rise-3">
               <span className="srh-label">
-                {activeCat.icon} {activeCat.l}
+                {activeCat.icon} {en ? ({ all: 'All', love: 'Love', career: 'Career', decision: 'Choices', self: 'Growth', general: 'General' }[activeCat.k]) : activeCat.l}
               </span>
-              <span className="srh-count">{list.length} 个牌阵</span>
+              <span className="srh-count">{list.length} {en ? 'spreads' : '个牌阵'}</span>
             </div>
             <div className="spread-grid rise rise-3">
               {list.map((s, i) => (
@@ -140,21 +143,21 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
                   <div className="sc-top">
                     <span className={`sc-cat ${s.cat}`}>
                       {SPREAD_CATS.find(c => c.k === s.cat)?.icon}
-                      {SPREAD_CATS.find(c => c.k === s.cat)?.l}
+                      {en ? ({ all: 'All', love: 'Love', career: 'Career', decision: 'Choices', self: 'Growth', general: 'General' }[s.cat]) : SPREAD_CATS.find(c => c.k === s.cat)?.l}
                     </span>
                   </div>
                   <SpreadPreview spread={s} />
                   <div className="sc-name-row">
-                    <h3 className="sc-name">{s.name}</h3>
-                    <span className="sc-card-count"><em>{s.count}</em>张</span>
+                    <h3 className="sc-name">{en ? s.nameEn : s.name}</h3>
+                    <span className="sc-card-count"><em>{s.count}</em>{en ? ' cards' : '张'}</span>
                   </div>
-                  <p className="sc-en">{s.nameEn}</p>
-                  <p className="sc-short">{s.short}</p>
-                  <p className="sc-desc">{s.desc}</p>
+                  {!en && <p className="sc-en">{s.nameEn}</p>}
+                  {!en && <p className="sc-short">{s.short}</p>}
+                  {!en && <p className="sc-desc">{s.desc}</p>}
                   <div className="sc-positions">
                     {s.positions.map((p, i) => (
                       <span key={i} className="sc-pill">
-                        <b>{i + 1}</b> {p.name}
+                        <b>{i + 1}</b> {en ? `Position ${i + 1}` : p.name}
                       </span>
                     ))}
                   </div>
@@ -184,7 +187,7 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
                       onStart(s.id)
                     }}
                   >
-                    {!user && !guestQuota.remaining ? '注册体验更多' : s.count === 1 ? '开始单牌解读 →' : '抽这组牌 →'}
+                    {!user && !guestQuota.remaining ? (en ? 'Sign up for more' : '注册体验更多') : s.count === 1 ? (en ? 'Start one-card reading →' : '开始单牌解读 →') : (en ? 'Draw this spread →' : '抽这组牌 →')}
                   </button>
                 </article>
               ))}
@@ -193,7 +196,7 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
 
         {list.length === 0 && (
           <p style={{ textAlign: 'center', color: 'var(--ink-faint)', padding: 40 }}>
-            该分类下暂无符合的牌阵，换个筛选试试
+            {en ? 'No spreads in this category. Try another filter.' : '该分类下暂无符合的牌阵，换个筛选试试'}
           </p>
         )}
       </div>

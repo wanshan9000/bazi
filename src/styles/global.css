@@ -53,6 +53,14 @@ body {
   letter-spacing: 0.01em;
 }
 
+/* 中文保留杂志式的微字距；英文界面则回到浏览器的标准西文排版。覆盖到
+   应用壳内的局部标题、按钮与 Agent 气泡，避免中文为主的规则把英文逐字拉开。 */
+html:lang(en) .app-shell,
+html:lang(en) .app-shell * {
+  letter-spacing: normal;
+  word-spacing: normal;
+}
+
 /* 杂志留白背景 · 极淡的暖色光晕 */
 body::before {
   content: '';
@@ -156,28 +164,12 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 700; }
 .brand { display: flex; align-items: center; gap: 11px; cursor: pointer; user-select: none; }
 .brand-mark {
   width: 38px; height: 38px;
-  border-radius: 10px;
   display: grid;
   place-items: center;
-  background: linear-gradient(150deg, #e05c85 0%, #c74a73 100%);
-  position: relative;
-  overflow: hidden;
+  flex: 0 0 auto;
 }
-.brand-mark::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.15), transparent 55%);
-  pointer-events: none;
-}
-.bear-silhouette {
-  width: 28px;
-  height: 28px;
-  fill: #ffffff;
-  position: relative;
-  z-index: 1;
-}
-.brand-name { font-size: 18px; font-weight: 700; letter-spacing: 0.22em; color: var(--ink); line-height: 1.1; display: block; }
+.brand-mark img { display: block; width: 100%; height: 100%; }
+.brand-name { font: 800 17px/1 var(--latin); letter-spacing: 0.12em; color: var(--ink); display: block; }
 .brand-name em { font-style: normal; color: var(--cinnabar); }
 .brand-sub { display: block; font-size: 9px; letter-spacing: 0.3em; color: var(--ink-faint); font-family: var(--latin); text-transform: uppercase; }
 
@@ -254,12 +246,9 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 700; }
   height: 24px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(199, 74, 115, 0.24);
-  border-radius: 7px;
-  background: var(--cinnabar);
+  overflow: hidden;
 }
-.bn-home-logo svg { width: 17px; height: 17px; fill: #fff; }
-.bn-link-home.active .bn-home-logo { background: var(--cinnabar-deep); }
+.bn-home-logo img { display: block; width: 100%; height: 100%; }
 .bn-profile-mark {
   display: grid;
   width: 20px;
@@ -710,6 +699,11 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 700; }
 .hero h1 .zhushi { color: var(--cinnabar); }
 .hero-line { display: inline; }
 .hero-line-2 { margin-left: 0.14em; }
+/* 英文标题的单词密度远高于中文，沿用中文的大字号会显得笨重。 */
+html:lang(en) .hero h1 {
+  font-size: clamp(31px, 5.1vw, 60px);
+  letter-spacing: 0;
+}
 .hero .subtitle-en {
   font-family: var(--latin);
   font-size: 15px;
@@ -7222,17 +7216,11 @@ select option { background: var(--paper-light); color: var(--ink); }
   width: 44px; height: 44px;
   display: grid;
   place-items: center;
-  background: linear-gradient(150deg, #e05c85 0%, #c74a73 100%);
-  border-radius: 12px;
 }
-.tail-logo .bear-silhouette {
-  width: 30px; height: 30px; fill: #fff;
-}
+.tail-logo img { display: block; width: 100%; height: 100%; }
 .tail-brand-name {
-  font-family: var(--serif);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font: 800 17px/1 var(--latin);
+  letter-spacing: 0.12em;
   margin-bottom: 4px;
 }
 .tail-brand-name em { color: var(--cinnabar-deep); font-style: normal; }

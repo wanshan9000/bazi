@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">GENKI</title>
+  <desc id="desc">A rising sun, growing leaf, and smile mark for GENKI</desc>
+  <rect x="4" y="4" width="120" height="120" rx="35" fill="#F65F86"/>
+  <path d="M31 55.5 22.5 49M43 40.5l-3.5-10.5M62 37V25M81 40.5 85.5 30M96.5 55.5 105 49" fill="none" stroke="#FFF5CD" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="64" cy="71" r="31" fill="#FFF5CD"/>
+  <path d="M72.5 47.5C74 28.5 89.5 20.5 106 23c-2.5 18-14.5 28-32 29.5" fill="#75D9B3"/>
+  <path d="M77.5 47.5c5.5-6.5 11-11 18.5-15.5" fill="none" stroke="#F65F86" stroke-width="4.5" stroke-linecap="round"/>
+  <circle cx="53" cy="68" r="3.5" fill="#59364A"/>
+  <circle cx="75" cy="68" r="3.5" fill="#59364A"/>
+  <path d="M48 80c4 7.5 11.5 11.5 19 11.5S82 87.5 86 80" fill="none" stroke="#59364A" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="32" cy="31" r="7" fill="#FFFFFF" opacity=".52"/>
+</svg>

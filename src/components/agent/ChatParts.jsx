@@ -55,7 +55,7 @@ export function FeedbackBar({ msgId, fb, on, report }) {
 }
 
 // ── 复制按钮：一键复制关键测试结果 / 测算论断全文 ──
-export function CopyButton({ text, title = '复制结果' }) {
+export function CopyButton({ text, title = '复制结果', locale = 'zh-CN' }) {
   const [copied, setCopied] = useState(false)
   const handleCopy = async () => {
     const content = String(text || '')
@@ -75,14 +75,14 @@ export function CopyButton({ text, title = '复制结果' }) {
   }
   return (
     <button className={`copy-btn ${copied ? 'copied' : ''}`} title={title} onClick={handleCopy}>
-      {copied ? '✓ 已复制' : '⧉'}
+      {copied ? (locale === 'en' ? '✓ Copied' : '✓ 已复制') : '⧉'}
     </button>
   )
 }
 
 // ── AI 解读进度：回复中的 <think>…</think> 默认收起为一行（点击展开看阶段记录） ────
 // 还没有正文时可暂时展开显示进度；正文一开始流式出现就立刻收起，把首屏留给答案。
-export function ThinkBlock({ content, streaming = false, collapseWhenStreamingText = false, heartbeat = null }) {
+export function ThinkBlock({ content, streaming = false, collapseWhenStreamingText = false, heartbeat = null, locale = 'zh-CN' }) {
   // 流式中默认展开；开始出正文或结束时收起，让结论成为视觉焦点。
   const [open, setOpen] = useState(streaming)
   const [elapsed, setElapsed] = useState(0)
@@ -112,7 +112,9 @@ export function ThinkBlock({ content, streaming = false, collapseWhenStreamingTe
   useLayoutEffect(() => {
     if (collapseWhenStreamingText) setOpen(false)
   }, [collapseWhenStreamingText])
-  const label = streaming
+  const label = locale === 'en' ? (streaming
+    ? `${heartbeat ? 'Connected · ' : ''}Reading · ${Math.max(1, elapsed)}s`
+    : elapsed ? `Reading complete · ${elapsed}s` : 'Reading progress') : streaming
     ? `${heartbeat ? '连接正常 · ' : ''}解读中 · ${Math.max(1, elapsed)} 秒`
     : elapsed ? `解读完成 · ${elapsed} 秒` : '解读进度'
   const steps = String(content || '').split('\n').map(item => item.trim()).filter(Boolean)
@@ -122,7 +124,7 @@ export function ThinkBlock({ content, streaming = false, collapseWhenStreamingTe
         <span className="think-arrow" aria-hidden="true">›</span>
         <span className="think-icon" aria-hidden="true">✦</span>
         <span className="think-label">{label}</span>
-        {streaming && <span className="think-status" aria-label="正在思考" />}
+        {streaming && <span className="think-status" aria-label={locale === 'en' ? 'Reading in progress' : '正在思考'} />}
       </button>
       {open && (
         <div className="think-body" ref={bodyRef}>
@@ -134,7 +136,7 @@ export function ThinkBlock({ content, streaming = false, collapseWhenStreamingTe
                 </li>
               ))}
             </ol>
-          ) : (streaming ? <span className="think-placeholder">正在准备解读…</span> : '')}
+          ) : (streaming ? <span className="think-placeholder">{locale === 'en' ? 'Preparing the reading…' : '正在准备解读…'}</span> : '')}
         </div>
       )}
     </div>
@@ -159,7 +161,7 @@ export const TOOL_NAME_CN = {
 }
 
 // 工具调用：可折叠块，列出本次会话实际触发的工具（中文名 + 数量）
-export function ToolCallsBlock({ names, tools, streaming = false, heartbeat = null }) {
+export function ToolCallsBlock({ names, tools, streaming = false, heartbeat = null, locale = 'zh-CN' }) {
   const [open, setOpen] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const startedAtRef = useRef(streaming ? Date.now() : null)
@@ -186,7 +188,9 @@ export function ToolCallsBlock({ names, tools, streaming = false, heartbeat = nu
   const count = list.length
   const pendingCount = list.filter(tool => tool.status === 'pending').length
   const failedCount = list.filter(tool => tool.status === 'failed').length
-  const phaseCopy = {
+  const phaseCopy = locale === 'en' ? {
+    engine: 'Connecting the reading engine', reasoning: 'Reviewing the key points', tool: 'Checking reading data', synthesis: 'Data checked. Preparing the conclusion', answering: 'Writing the reply', failed: 'Some data checks were incomplete',
+  } : {
     engine: '正在接入解读引擎',
     reasoning: '正在梳理问题要点',
     tool: '正在核验测算资料',
@@ -196,28 +200,28 @@ export function ToolCallsBlock({ names, tools, streaming = false, heartbeat = nu
   }
   const phase = failedCount ? 'failed' : heartbeat?.stage || (pendingCount ? 'tool' : 'synthesis')
   const liveLabel = failedCount
-    ? `${heartbeat ? '连接正常，' : ''}${phaseCopy.failed} · 已耗时 ${Math.max(1, elapsed)} 秒`
+    ? locale === 'en' ? `${heartbeat ? 'Connected · ' : ''}${phaseCopy.failed} · ${Math.max(1, elapsed)}s` : `${heartbeat ? '连接正常，' : ''}${phaseCopy.failed} · 已耗时 ${Math.max(1, elapsed)} 秒`
     : elapsed >= 18
-    ? `${heartbeat ? '连接正常，' : ''}仍在生成结论 · 已耗时 ${Math.max(1, elapsed)} 秒`
-    : `${heartbeat ? '连接正常，' : ''}${phaseCopy[phase]} · 已耗时 ${Math.max(1, elapsed)} 秒`
+    ? locale === 'en' ? `${heartbeat ? 'Connected · ' : ''}Preparing the conclusion · ${Math.max(1, elapsed)}s` : `${heartbeat ? '连接正常，' : ''}仍在生成结论 · 已耗时 ${Math.max(1, elapsed)} 秒`
+    : locale === 'en' ? `${heartbeat ? 'Connected · ' : ''}${phaseCopy[phase]} · ${Math.max(1, elapsed)}s` : `${heartbeat ? '连接正常，' : ''}${phaseCopy[phase]} · 已耗时 ${Math.max(1, elapsed)} 秒`
   return (
     <div className={`tool-block ${open ? 'open' : ''} ${streaming ? 'tool-streaming' : ''}`}>
       <button className="tool-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="tool-arrow" aria-hidden="true">›</span>
         <span className="tool-icon" aria-hidden="true">⚒</span>
         <span className="tool-label-group">
-          <span className="tool-label">{streaming ? (pendingCount ? `正在核验 ${pendingCount} / ${count} 项资料` : failedCount ? `有 ${failedCount} 项资料未完成核验` : '资料已核验，正在整理结论') : `已调用 ${count} 个工具`}</span>
+          <span className="tool-label">{locale === 'en' ? (streaming ? (pendingCount ? `Checking ${pendingCount} / ${count} sources` : failedCount ? `${failedCount} source checks incomplete` : 'Data checked. Preparing conclusion') : `${count} tools used`) : (streaming ? (pendingCount ? `正在核验 ${pendingCount} / ${count} 项资料` : failedCount ? `有 ${failedCount} 项资料未完成核验` : '资料已核验，正在整理结论') : `已调用 ${count} 个工具`)}</span>
           {streaming && <span className="tool-live-note">{liveLabel}</span>}
         </span>
-        <span className={`tool-status ${streaming ? 'is-live' : ''}`} aria-label={streaming ? '仍在生成回复' : '调用完成'} />
+        <span className={`tool-status ${streaming ? 'is-live' : ''}`} aria-label={locale === 'en' ? (streaming ? 'Generating reply' : 'Complete') : (streaming ? '仍在生成回复' : '调用完成')} />
       </button>
       {open && (
         <div className="tool-body">
           {list.map((tool, i) => (
             <div className="tool-item" key={`t${i}`}>
               <span className={`tool-item-dot ${tool.status === 'complete' ? 'is-complete' : tool.status === 'failed' ? 'is-failed' : 'is-pending'}`} />
-              <span className="tool-item-name">{TOOL_NAME_CN[tool.name] || tool.name}</span>
-              <span className={`tool-item-state ${tool.status === 'complete' ? 'is-complete' : tool.status === 'failed' ? 'is-failed' : 'is-pending'}`}>{tool.status === 'complete' ? '已核验' : tool.status === 'failed' ? '未完成' : '处理中'}</span>
+              <span className="tool-item-name">{locale === 'en' ? ({ bazi: 'Bazi chart', ziwei: 'Ziwei chart', liuyao: 'Six Lines', qimen: 'Qimen chart', huangli: 'Almanac', tarot: 'Tarot draw', name: 'Name analysis', fengshui: 'Feng Shui', wuyunliuqi: 'Seasonal wellness', report: 'Reading report', skill: 'Load skill' }[tool.name] || tool.name) : (TOOL_NAME_CN[tool.name] || tool.name)}</span>
+              <span className={`tool-item-state ${tool.status === 'complete' ? 'is-complete' : tool.status === 'failed' ? 'is-failed' : 'is-pending'}`}>{locale === 'en' ? (tool.status === 'complete' ? 'Checked' : tool.status === 'failed' ? 'Incomplete' : 'Working') : (tool.status === 'complete' ? '已核验' : tool.status === 'failed' ? '未完成' : '处理中')}</span>
             </div>
           ))}
         </div>
@@ -369,6 +373,10 @@ export const QUICK_DATE_SELECTION = [
   '今天宜忌',
 ]
 
+const QUICK_DEFAULT_EN = ['Create a Bazi chart', 'Ziwei reading', 'Love & relationships', 'Career direction', 'Wealth outlook', 'Career growth', 'Relationships', 'Draw a Tarot card']
+const QUICK_BAZI_EN = ['This year\'s outlook', 'Suitable work', 'When will love arrive?', 'Blind school report', 'Ziping report', 'Wellness', 'Career', 'Wealth', 'Relationships', 'Love']
+const QUICK_DATE_SELECTION_EN = ['Moving date', 'Date night', 'Matchmaking date', 'Wedding date', 'Marriage registration', 'Business opening', 'Travel date', 'Today\'s Almanac']
+
 // 兼容仍在使用旧常量的调用方；实际聊天页应通过 quickQuestionsForConversation
 // 选择与当前会话相符的追问，避免把八字按钮固定塞进所有话题。
 export const QUICK = QUICK_DEFAULT
@@ -377,13 +385,21 @@ const DATE_SELECTION_TERMS = /(?:黄历|择日|吉日|宜忌|冲煞|建除|搬�
 const BAZI_TERMS = /(?:八字|命盘|四柱|大运|流年|流月|盲派|子平|日主|十神|喜用神|格局)/
 const OTHER_DIVINATION_TERMS = /(?:紫微|斗数|塔罗|奇门|遁甲|六爻|风水|姓名|取名|五运六气)/
 const PERSONAL_BAZI_TERMS = /(?:今年|明年|当下|目前|运势|工作|职业|事业|财运|感情|婚姻|正缘|健康|人际关系)/
+const DATE_SELECTION_TERMS_EN = /(?:almanac|auspicious|date selection|moving|move house|date night|matchmaking|wedding|marriage|opening|travel|contract|construction|renovation)/i
+const BAZI_TERMS_EN = /(?:bazi|four pillars|birth chart|luck cycle|day master|ten gods|favorable element|ziping|blind school)/i
+const OTHER_DIVINATION_TERMS_EN = /(?:ziwei|tarot|qimen|six lines|feng shui|name analysis|seasonal wellness)/i
+const PERSONAL_BAZI_TERMS_EN = /(?:this year|next year|outlook|career|work|wealth|love|relationship|wellness)/i
 
 /**
  * 只读取缘主已发送的文字来判断快捷追问，模型生成内容不参与分类，避免一段
  * 误判的回复把会话按钮带偏。倒序寻找最近有主题的提问，使“继续”这类短句也
  * 能沿用刚才的八字或择吉语境。
  */
-export function quickQuestionsForConversation(messages = [], { hasChart = false } = {}) {
+export function quickQuestionsForConversation(messages = [], { hasChart = false, locale = 'zh-CN' } = {}) {
+  const en = locale === 'en'
+  const defaults = en ? QUICK_DEFAULT_EN : QUICK_DEFAULT
+  const bazi = en ? QUICK_BAZI_EN : QUICK_BAZI
+  const dateSelection = en ? QUICK_DATE_SELECTION_EN : QUICK_DATE_SELECTION
   const userTurns = (Array.isArray(messages) ? messages : [])
     .filter(message => message?.role === 'user')
     .map(message => String(message.text || '').trim())
@@ -392,14 +408,14 @@ export function quickQuestionsForConversation(messages = [], { hasChart = false 
 
   for (let i = userTurns.length - 1; i >= 0; i -= 1) {
     const text = userTurns[i]
-    if (DATE_SELECTION_TERMS.test(text)) return { label: '择吉参考', questions: QUICK_DATE_SELECTION, topic: 'date-selection' }
-    if (BAZI_TERMS.test(text)) return { label: '八字追问', questions: QUICK_BAZI, topic: 'bazi' }
+    if ((en ? DATE_SELECTION_TERMS_EN : DATE_SELECTION_TERMS).test(text)) return { label: en ? 'Date selection' : '择吉参考', questions: dateSelection, topic: 'date-selection' }
+    if ((en ? BAZI_TERMS_EN : BAZI_TERMS).test(text)) return { label: en ? 'Bazi follow-ups' : '八字追问', questions: bazi, topic: 'bazi' }
     // 用户刚切到其它术数时，不能因为曾排过八字就继续显示八字追问。
-    if (OTHER_DIVINATION_TERMS.test(text)) return { label: '快捷问答', questions: QUICK_DEFAULT, topic: 'general' }
-    if (hasChart && PERSONAL_BAZI_TERMS.test(text)) return { label: '八字追问', questions: QUICK_BAZI, topic: 'bazi' }
+    if ((en ? OTHER_DIVINATION_TERMS_EN : OTHER_DIVINATION_TERMS).test(text)) return { label: en ? 'Quick questions' : '快捷问答', questions: defaults, topic: 'general' }
+    if (hasChart && (en ? PERSONAL_BAZI_TERMS_EN : PERSONAL_BAZI_TERMS).test(text)) return { label: en ? 'Bazi follow-ups' : '八字追问', questions: bazi, topic: 'bazi' }
   }
 
-  return { label: '快捷问答', questions: QUICK_DEFAULT, topic: 'general' }
+  return { label: en ? 'Quick questions' : '快捷问答', questions: defaults, topic: 'general' }
 }
 
 
@@ -407,13 +423,14 @@ export function timeNow() {
   return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
-export function fmtSessionTime(ts) {
+export function fmtSessionTime(ts, locale = 'zh-CN') {
   try {
     const d = new Date(ts)
     const now = new Date()
     const sameDay = d.toDateString() === now.toDateString()
-    const hm = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    if (sameDay) return `今天 ${hm}`
+    const hm = d.toLocaleTimeString(locale === 'en' ? 'en-US' : 'zh-CN', { hour: '2-digit', minute: '2-digit' })
+    if (sameDay) return locale === 'en' ? `Today ${hm}` : `今天 ${hm}`
+    if (locale === 'en') return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }) }) + ` ${hm}`
     const md = `${d.getMonth() + 1}月${d.getDate()}日`
     if (d.getFullYear() === now.getFullYear()) return `${md} ${hm}`
     return `${d.getFullYear()}年${md} ${hm}`
