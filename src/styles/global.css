@@ -12193,7 +12193,7 @@ select option { background: var(--paper-light); color: var(--ink); }
 .auth-forgot-row { display: flex; justify-content: flex-end; margin-top: -5px; }
 .auth-forgot { padding: 2px 0; border: 0; border-bottom: 1px solid transparent; background: transparent; color: var(--cinnabar-deep); cursor: pointer; font: inherit; font-size: 12px; }
 .auth-forgot:hover { border-bottom-color: currentColor; }
-.auth-wrap-reset { align-items: center; }
+.auth-wrap-reset { align-items: stretch; }
 .auth-reset-card { max-width: 480px; }
 .auth-tip {
   margin-top: 14px;
