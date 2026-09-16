@@ -67,6 +67,17 @@ test('新账号必须绑定邮箱；短信与微信认证未接入时明确关�
   } finally { srv.close() }
 })
 
+test('认证能力端点如实反映未配置的第三方通道，Google 启动端点拒绝未配置请求', async () => {
+  const { app } = mkApp()
+  const { srv, base } = await listen(app)
+  try {
+    const providers = await (await fetch(`${base}/api/auth/providers`)).json()
+    assert.deepEqual(providers, { ok: true, google: false, wechat: false, sms: false })
+    const google = await fetch(`${base}/api/auth/google/start`, { redirect: 'manual' })
+    assert.equal(google.status, 503)
+  } finally { srv.close() }
+})
+
 test('登录：正确口令通过，错误口令 401', async () => {
   const { app } = mkApp()
   const { srv, base } = await listen(app)

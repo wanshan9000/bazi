@@ -5,18 +5,20 @@
 // 签发的 JWT，把额度换成服务端扣减。
 import { Router } from 'express'
 import crypto from 'node:crypto'
-import { config, resolveJwtSecret, smsConfigured, wechatConfigured, emailConfigured } from '../config.js'
+import { config, resolveJwtSecret, smsConfigured, wechatConfigured, emailConfigured, googleConfigured } from '../config.js'
 import { sharedAccounts } from '../accounts.js'
 import { signJwt, verifyJwt } from '../jwt.js'
 import { exchangeCode } from '../wechat.js'
 import { createWindowLimiter } from '../rateLimit.js'
 import { sendVerifySms } from '../sms.js'
 import { sendPasswordResetEmail } from '../mail.js'
+import { googleAuthUrl, exchangeGoogleCode } from '../google.js'
 
 const ACCOUNT_RE = /^[a-zA-Z0-9._-]{3,24}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 const PHONE_RE = /^1\d{10}$/
 const MAX_PWD = 128 // scrypt 对超长输入照算不误，但没必要给人塞 1MB 口令的机会
+const OAUTH_TTL_MS = 5 * 60 * 1000
 
 /* ---- 登录/注册限流 ----
  * 只对**失败**计数：登录成功就清零，免得正常使用的人被自己的成功请求锁在门外。
@@ -103,6 +105,8 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
   const resetVerifyLimiter = createWindowLimiter({ windowMs: 60 * 60000, max: config.email.resetVerifyIpPerHour })
   const smsCodes = new Map()
   const resetCodes = new Map()
+  const googleStates = new Map()
+  const oauthExchanges = new Map()
   const ttlSec = config.auth.tokenTtlDays * 86400
 
   function smsKey(phone, purpose) { return `${phone}:${purpose}` }
@@ -163,6 +167,102 @@ export function createAuthRouter({ accounts = sharedAccounts(), onRemoveUser = n
   function ok(res, user) {
     res.json({ ok: true, token: issue(user), user: accounts.publicUser(user), expiresIn: ttlSec })
   }
+
+  function frontendLoginUrl(params = '') {
+    const base = String(config.deploy.baseUrl || config.allowedOrigins[0] || '').replace(/\/$/, '')
+    // Hash 路由中的 ? 属于 hash 本身，window.location.search 读不到；
+    // 参数放在 # 前，前端才能读取 oauth 状态并用 HttpOnly 票据换 JWT。
+    return `${base}/${params}#/login`
+  }
+
+  function clearExpiredOauth() {
+    const oldest = Date.now() - OAUTH_TTL_MS
+    for (const [key, item] of googleStates) if (item.createdAt < oldest) googleStates.delete(key)
+    for (const [key, item] of oauthExchanges) if (item.createdAt < oldest || item.used) oauthExchanges.delete(key)
+  }
+
+  function cookieValue(req, name) {
+    const pairs = String(req.get('cookie') || '').split(';')
+    for (const pair of pairs) {
+      const [key, ...rest] = pair.trim().split('=')
+      if (key === name) return decodeURIComponent(rest.join('='))
+    }
+    return ''
+  }
+
+  function clearOauthCookie(res) {
+    const secure = config.devMode ? '' : '; Secure'
+    res.append('Set-Cookie', `genki_oauth=; Max-Age=0; Path=/api/auth/oauth; HttpOnly; SameSite=Lax${secure}`)
+  }
+
+  // 公开能力状态只返回是否可用，永远不回传 client secret、回调地址或邮件配置。
+  r.get('/auth/providers', (req, res) => {
+    res.json({
+      ok: true,
+      google: googleConfigured(),
+      // 现有微信二维码仅用于订阅，并非账号 OAuth，认证入口必须保持关闭直至完整接入。
+      wechat: false,
+      sms: Boolean(config.auth.smsEnabled && (smsConfigured() || config.allowMockChannels)),
+    })
+  })
+
+  r.get('/auth/google/start', (req, res) => {
+    if (!googleConfigured()) return res.status(503).json({ ok: false, msg: 'Google 登录正在接入' })
+    clearExpiredOauth()
+    const state = crypto.randomBytes(24).toString('hex')
+    googleStates.set(state, { createdAt: Date.now() })
+    res.redirect(302, googleAuthUrl(state))
+  })
+
+  r.get('/auth/google/callback', async (req, res) => {
+    const state = String(req.query?.state || '')
+    const code = String(req.query?.code || '')
+    clearExpiredOauth()
+    const pending = googleStates.get(state)
+    googleStates.delete(state)
+    if (!pending || !code) return res.redirect(302, frontendLoginUrl('?oauth=google&error=authorization_failed'))
+    try {
+      const profile = await exchangeGoogleCode(code)
+      let user = accounts.byGoogleSub(profile.sub)
+      if (!user) {
+        // 用 Google 已验证邮箱匹配旧账号，免得老用户因切换认证方式重复建号；
+        // 绑定只接受 Google 返回的 subject，客户端无法自行声称一个身份。
+        user = accounts.byEmail(profile.email)
+        if (user) {
+          const bound = accounts.bindGoogleSub(user.id, profile.sub)
+          if (!bound.ok) throw new Error('GOOGLE_BIND_FAILED')
+          user = accounts.get(user.id)
+        } else {
+          const safeName = profile.name.slice(0, 16) || 'Google 用户'
+          const account = `google-${crypto.createHash('sha256').update(profile.sub).digest('hex').slice(0, 16)}`
+          user = await accounts.create({ account, email: profile.email, nickname: safeName, googleSub: profile.sub })
+        }
+      }
+      if (!accounts.isActive(user)) return res.redirect(302, frontendLoginUrl('?oauth=google&error=account_unavailable'))
+      accounts.touchLogin(user)
+      const exchange = crypto.randomBytes(24).toString('hex')
+      oauthExchanges.set(exchange, { createdAt: Date.now(), userId: user.id, used: false })
+      const secure = config.devMode ? '' : '; Secure'
+      res.append('Set-Cookie', `genki_oauth=${exchange}; Max-Age=300; Path=/api/auth/oauth; HttpOnly; SameSite=Lax${secure}`)
+      return res.redirect(302, frontendLoginUrl('?oauth=google'))
+    } catch (error) {
+      console.error('[auth/google/callback] 授权失败', error.message)
+      return res.redirect(302, frontendLoginUrl('?oauth=google&error=authorization_failed'))
+    }
+  })
+
+  // OAuth 回调不会把 JWT 放进 URL。前端只能在同源、一次性的 HttpOnly 交换 cookie 存活时换取它。
+  r.post('/auth/oauth/exchange', (req, res) => {
+    const ticket = cookieValue(req, 'genki_oauth')
+    clearOauthCookie(res)
+    clearExpiredOauth()
+    const item = oauthExchanges.get(ticket)
+    if (!item || item.used) return res.status(401).json({ ok: false, msg: '登录确认已过期，请重新使用 Google 登录' })
+    item.used = true
+    const user = accounts.get(item.userId)
+    if (!user || !accounts.isActive(user)) return res.status(401).json({ ok: false, msg: '登录确认无效，请重新登录' })
+    ok(res, user)
+  })
 
   r.post('/auth/register', async (req, res) => {
     const nickname = String(req.body?.nickname || '').trim()

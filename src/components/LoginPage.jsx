@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { login, loginBySms, registerByWechat, sendAuthSmsCode } from '../data/users.js'
-import { api } from '../api/client.js'
+import { useEffect, useState } from 'react'
+import { authProviders, completeOAuthLogin, login, loginBySms, sendAuthSmsCode, startGoogleLogin } from '../data/users.js'
 import { useLocale } from '../i18n.jsx'
+import { isMainlandChina } from '../data/authRegion.js'
 
 const LOGIN_COPY = {
   'zh-CN': { back: '返回', backHome: '返回首页', wish: '把好奇，', wishEm: '留给自己', wishCopy: '登录后，命盘、报告与咨询记录都会安稳地留在这里。', wishNote: '注册即可开始一段自己的探索', gift: '注册赠 20 积分', point: '点', credit: '1 积分 = 19,000 Token；元气 Agent 按实际用量结算，积分永久有效。', benefits: ['命盘留存', '报告同步', '咨询元气 Agent'], title: '欢迎回来', subtitle: '登录后保存你的命盘足迹，解锁会员权益', methods: ['扫码登录', '手机短信', '账号登录'], account: '账号', accountInput: '请输入账号', password: '密码', passwordInput: '请输入密码', login: '登 录', loggingIn: '登 录 中…', phone: '手机号', phoneInput: '请输入 11 位手机号', code: '验证码', codeInput: '6 位验证码', send: '获取验证码', smsLogin: '短信登录', qrTip: '使用微信扫一扫确认登录，无需输入密码。', qrOpen: '打开扫码登录', noAccount: '还没有账号？', register: '立即注册', legal: '登录即代表同意《用户协议》与《隐私政策》', hide: '隐藏密码', show: '显示密码', failed: '登录失败，请重试', smsSent: '验证码已发送，请注意查收。' },
@@ -12,7 +12,10 @@ const LOGIN_COPY = {
 export default function LoginPage({ onBack, onSwitch, onForgotPassword, onOpenLegal, onSuccess }) {
   const { locale } = useLocale()
   const copy = LOGIN_COPY[locale] || LOGIN_COPY['zh-CN']
+  const traditional = locale === 'zh-TW'
+  const mainland = isMainlandChina()
   const [method, setMethod] = useState('account')
+  const [providers, setProviders] = useState({ google: false, wechat: false, sms: false })
   const [account, setAccount] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -21,6 +24,26 @@ export default function LoginPage({ onBack, onSwitch, onForgotPassword, onOpenLe
   const [smsNote, setSmsNote] = useState('')
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    authProviders().then(value => { if (alive) setProviders(value) })
+    return () => { alive = false }
+  }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('oauth') !== 'google') return undefined
+    let alive = true
+    setLoading(true)
+    completeOAuthLogin().then(result => {
+      if (!alive) return
+      if (result.ok) onSuccess(result.user)
+      else setErr(params.get('error') === 'account_unavailable' ? (locale === 'en' ? 'This account is unavailable.' : '该账号当前不可用') : result.msg)
+    }).finally(() => { if (alive) setLoading(false) })
+    window.history.replaceState({}, '', `${window.location.pathname}${window.location.hash || '#/login'}`)
+    return () => { alive = false }
+  }, [locale, onSuccess])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -50,21 +73,6 @@ export default function LoginPage({ onBack, onSwitch, onForgotPassword, onOpenLe
     e.preventDefault(); setErr(''); setLoading(true)
     try {
       const res = await loginBySms(phone, code)
-      if (!res.ok) { setErr(res.msg); return }
-      onSuccess(res.user)
-    } finally { setLoading(false) }
-  }
-
-  const handleWechatLogin = async () => {
-    setErr(''); setLoading(true)
-    try {
-      const qr = await api.wechatQr()
-      if (!qr.mock && qr.url) {
-        window.location.href = qr.url
-        return
-      }
-      const done = await api.wechatMockDone({})
-      const res = await registerByWechat(done.openid || done.token, '微信用户')
       if (!res.ok) { setErr(res.msg); return }
       onSuccess(res.user)
     } finally { setLoading(false) }
@@ -105,17 +113,15 @@ export default function LoginPage({ onBack, onSwitch, onForgotPassword, onOpenLe
           </h2>
           <p className="auth-sub">{copy.subtitle}</p>
 
-          <div className="auth-methods auth-methods-three" role="tablist" aria-label={copy.login}>
-            <button className={`auth-method ${method === 'wechat' ? 'active' : ''}`} onClick={() => { setMethod('wechat'); setErr('') }} role="tab" aria-selected={method === 'wechat'}>{copy.methods[0]}</button>
-            <button className={`auth-method ${method === 'sms' ? 'active' : ''}`} onClick={() => { setMethod('sms'); setErr('') }} role="tab" aria-selected={method === 'sms'}>{copy.methods[1]}</button>
-            <button className={`auth-method ${method === 'account' ? 'active' : ''}`} onClick={() => { setMethod('account'); setErr('') }} role="tab" aria-selected={method === 'account'}>{copy.methods[2]}</button>
-          </div>
-          {method === 'sms' && <p className="auth-dev-note">手机短信登录正在接入，暂请使用账号登录。</p>}
-          {method === 'wechat' && <p className="auth-dev-note">微信扫码登录正在接入，暂请使用账号登录。</p>}
+          {mainland && <div className="auth-methods auth-methods-three" role="tablist" aria-label={copy.login}>
+            <button className={`auth-method ${method === 'wechat' ? 'active' : ''}`} onClick={() => { setMethod('wechat'); setErr('') }} role="tab" aria-selected={method === 'wechat'}>{locale === 'en' ? 'WeChat scan' : '微信扫码'}</button>
+            <button className={`auth-method ${method === 'sms' ? 'active' : ''}`} onClick={() => { setMethod('sms'); setErr('') }} role="tab" aria-selected={method === 'sms'}>{locale === 'en' ? 'SMS' : '手机短信'}</button>
+            <button className={`auth-method ${method === 'account' ? 'active' : ''}`} onClick={() => { setMethod('account'); setErr('') }} role="tab" aria-selected={method === 'account'}>{locale === 'en' ? 'Existing account' : traditional ? '帳號密碼' : '账号密码'}</button>
+          </div>}
 
           {method === 'account' && <form className="auth-form" onSubmit={handleSubmit} noValidate>
             <div className="auth-field">
-              <label htmlFor="login-account">{locale === 'en' ? 'Username or email' : '用户名 / 邮箱'}</label>
+              <label htmlFor="login-account">{locale === 'en' ? 'Email or username' : '用户名 / 邮箱'}</label>
               <input
                 id="login-account"
                 type="text"
@@ -146,28 +152,39 @@ export default function LoginPage({ onBack, onSwitch, onForgotPassword, onOpenLe
             </button>
           </form>}
 
+          {!mainland && method === 'account' && <>
+            <div className="auth-divider" aria-label={locale === 'en' ? 'or' : '或'}><span>{locale === 'en' ? 'or' : '或'}</span></div>
+            <button className="auth-google-btn" onClick={startGoogleLogin} disabled={loading || !providers.google}>
+              <GoogleMark />
+              <span>{locale === 'en' ? 'Continue with Google' : traditional ? '使用 Google 繼續' : '使用 Google 继续'}</span>
+            </button>
+            {!providers.google && <p className="auth-dev-note">{locale === 'en' ? 'Google sign-in is being configured.' : traditional ? 'Google 登入正在設定中。' : 'Google 登录正在配置中。'}</p>}
+          </>}
+
           {method === 'sms' && <form className="auth-form" onSubmit={handleSmsLogin} noValidate>
             <div className="auth-field">
               <label htmlFor="login-phone">{copy.phone}</label>
-              <input id="login-phone" type="tel" inputMode="numeric" placeholder={copy.phoneInput} value={phone} autoComplete="tel" disabled onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} />
+              <input id="login-phone" type="tel" inputMode="numeric" placeholder={copy.phoneInput} value={phone} autoComplete="tel" disabled={!providers.sms || loading} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} />
             </div>
             <div className="auth-field">
               <label htmlFor="login-code">{copy.code}</label>
               <div className="auth-code-wrap">
-                <input id="login-code" inputMode="numeric" placeholder={copy.codeInput} value={code} autoComplete="one-time-code" disabled onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
-                <button type="button" className="auth-code-send" onClick={handleSendCode} disabled>{copy.send}</button>
+                <input id="login-code" inputMode="numeric" placeholder={copy.codeInput} value={code} autoComplete="one-time-code" disabled={!providers.sms || loading} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+                <button type="button" className="auth-code-send" onClick={handleSendCode} disabled={!providers.sms || loading}>{copy.send}</button>
               </div>
             </div>
             {smsNote && <p className="auth-dev-note">{smsNote}</p>}
             {err && <p className="auth-err">{err}</p>}
-            <button type="submit" className="auth-btn" disabled>{copy.smsLogin}</button>
+            {!providers.sms && <p className="auth-dev-note">{locale === 'en' ? 'SMS sign-in is being configured.' : traditional ? '手機簡訊登入正在接入。' : '手机短信登录正在接入。'}</p>}
+            <button type="submit" className="auth-btn" disabled={!providers.sms || loading}>{copy.smsLogin}</button>
           </form>}
 
-          {method === 'wechat' && <div className="auth-wechat">
+          {method === 'wechat' && <div className="auth-wechat auth-provider-panel">
             <div className="auth-qr-box" aria-hidden="true"><span className="auth-qr-grid" /><span className="auth-qr-logo">微</span></div>
             <p className="auth-wechat-tip">{copy.qrTip}</p>
+            {!providers.wechat && <p className="auth-dev-note">{locale === 'en' ? 'WeChat scan sign-in is being integrated.' : traditional ? '微信掃碼登入正在接入。' : '微信扫码登录正在接入。'}</p>}
             {err && <p className="auth-err">{err}</p>}
-            <button className="auth-btn" onClick={handleWechatLogin} disabled>{copy.qrOpen}</button>
+            <button className="auth-btn" disabled>{copy.qrOpen}</button>
           </div>}
 
           <p className="auth-switch">
@@ -190,4 +207,8 @@ export default function LoginPage({ onBack, onSwitch, onForgotPassword, onOpenLe
 
 function EyeIcon({ open }) {
   return open ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 3l18 18" /><path d="M10.6 10.6a2 2 0 002.8 2.8" /><path d="M9.9 4.2A10.8 10.8 0 0112 4c5.2 0 8.6 4.1 9.6 6.1a1.9 1.9 0 010 1.8 13.9 13.9 0 01-3.3 4.1" /><path d="M6.3 6.3A13.8 13.8 0 002.4 10.1a1.9 1.9 0 000 1.8C3.4 13.9 6.8 18 12 18c1.2 0 2.3-.2 3.3-.6" /></svg> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2.4 12S5.8 6 12 6s9.6 6 9.6 6-3.4 6-9.6 6-9.6-6-9.6-6z" /><circle cx="12" cy="12" r="2.7" /></svg>
+}
+
+function GoogleMark() {
+  return <svg className="auth-google-mark" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.35 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.24a4.48 4.48 0 01-1.94 2.94v2.52h3.15c1.84-1.7 2.9-4.21 2.9-7.29z" /><path fill="#34A853" d="M12 21.75c2.63 0 4.84-.87 6.45-2.35l-3.15-2.4c-.87.58-1.99.92-3.3.92-2.54 0-4.7-1.72-5.47-4.02H3.28v2.49A9.75 9.75 0 0012 21.75z" /><path fill="#FBBC05" d="M6.53 13.9a5.87 5.87 0 010-3.8V7.61H3.28a9.75 9.75 0 000 8.78l3.25-2.49z" /><path fill="#EA4335" d="M12 6.08c1.43 0 2.7.49 3.71 1.45l2.78-2.78C16.84 3.2 14.63 2.25 12 2.25a9.75 9.75 0 00-8.72 5.36l3.25 2.49C7.3 7.8 9.46 6.08 12 6.08z" /></svg>
 }

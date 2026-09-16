@@ -12084,6 +12084,8 @@ select option { background: var(--paper-light); color: var(--ink); }
   border-radius: 12px;
 }
 .auth-methods-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.auth-provider-panel { min-height: 238px; justify-content: center; }
+.auth-provider-mark { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: #fff; border: 1px solid var(--ink-line); color: #4285f4; font: 700 25px/1 var(--sans); box-shadow: 0 4px 14px rgba(66, 133, 244, 0.13); }
 .auth-method {
   border: none;
   background: transparent;
@@ -12103,6 +12105,36 @@ select option { background: var(--paper-light); color: var(--ink); }
   color: var(--cinnabar-deep);
   box-shadow: 0 2px 10px rgba(224, 92, 133, 0.14);
 }
+.auth-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 16px;
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+.auth-divider::before,
+.auth-divider::after { content: ''; height: 1px; background: var(--ink-line); }
+.auth-google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 16px;
+  border: 1px solid var(--ink-line);
+  border-radius: 9px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.65);
+  font: 600 15px/1.2 var(--sans);
+  cursor: pointer;
+  transition: border-color .2s var(--ease), background .2s var(--ease), transform .2s var(--ease);
+}
+.auth-google-btn:hover:not(:disabled) { border-color: rgba(66, 133, 244, 0.55); background: #fff; transform: translateY(-1px); }
+.auth-google-btn:disabled { opacity: .5; cursor: not-allowed; }
+.auth-google-mark { width: 21px; height: 21px; flex: 0 0 auto; }
 /* 微信扫码注册 */
 .auth-wechat { display: flex; flex-direction: column; align-items: center; gap: 18px; }
 .auth-wechat-tip {

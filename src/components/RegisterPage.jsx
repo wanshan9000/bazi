@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { register, registerBySms, registerByWechat, sendAuthSmsCode } from '../data/users.js'
-import { api } from '../api/client.js'
+import { authProviders, register, registerBySms, sendAuthSmsCode, startGoogleLogin } from '../data/users.js'
 import { useLocale } from '../i18n.jsx'
+import { isMainlandChina } from '../data/authRegion.js'
 
 const REGISTER_COPY = {
   'zh-CN': {
@@ -24,8 +24,10 @@ const REGISTER_COPY = {
 export default function RegisterPage({ onBack, onSwitch, onOpenLegal, onSuccess }) {
   const { locale } = useLocale()
   const copy = REGISTER_COPY[locale] || REGISTER_COPY['zh-CN']
-  // 注册优先「扫码识别」：默认停在扫码注册 tab，扫码成功自动建号并登录
-  const [method, setMethod] = useState('wechat') // wechat | account
+  const traditional = locale === 'zh-TW'
+  const mainland = isMainlandChina()
+  const [method, setMethod] = useState(() => mainland ? 'account' : 'google')
+  const [providers, setProviders] = useState({ google: false, wechat: false, sms: false })
   const [nickname, setNickname] = useState('')
   const [account, setAccount] = useState('')
   const [email, setEmail] = useState('')
@@ -39,27 +41,9 @@ export default function RegisterPage({ onBack, onSwitch, onOpenLegal, onSuccess 
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // 微信扫码注册
-  const [busy, setBusy] = useState(false)
-  const [mock, setMock] = useState(null) // 后端降级时的二维码信息
-  const [serverOk, setServerOk] = useState(false)
-  const [serverChecked, setServerChecked] = useState(false)
-
-  // 后端可用性探测：决定扫码注册走真实授权还是本地演示
   useEffect(() => {
     let alive = true
-    api.health().then(r => {
-      if (alive) {
-        // 看「服务器答不答话」，不看 AI 通道就绪与否 —— 注册用不到 AI。
-        setServerOk(Boolean(r && r.reachable))
-        setServerChecked(true)
-      }
-    }).catch(() => {
-      if (alive) {
-        setServerOk(false)
-        setServerChecked(true)
-      }
-    })
+    authProviders().then(value => { if (alive) setProviders(value) })
     return () => { alive = false }
   }, [])
 
@@ -100,57 +84,6 @@ export default function RegisterPage({ onBack, onSwitch, onOpenLegal, onSuccess 
     } finally { setLoading(false) }
   }
 
-  // 扫码注册：后端已配置则跳转真实微信授权，未连接/未配置则本地演示（模拟扫码即自动建号登录）
-  const handleWechat = async () => {
-    setErr('')
-    setBusy(true)
-    try {
-      if (!serverChecked || !serverOk) {
-        // 本地降级：直接呈现演示二维码，点确认即模拟完成扫码
-        setMock({ mock: true, qrText: '（后端未连接 · 本地演示二维码，点击下方按钮即模拟「扫码完成」，自动注册并登录）' })
-        return
-      }
-      const r = await api.wechatQr()
-      if (r.mock) {
-        // 后端已配置但未接入：显示演示二维码，模拟扫码完成
-        setMock(r)
-      } else if (r.url) {
-        // 真实授权：跳转微信
-        window.location.href = r.url
-      }
-    } catch (e) {
-      setErr(copy.scanUnavailable)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  // 演示/降级模式：模拟扫码完成 → 用 openid 本地建号并自动登录
-  const handleMockScan = async () => {
-    setErr('')
-    setBusy(true)
-    try {
-      if (!serverChecked || !serverOk) {
-        // 账号已迁到服务端（R2 M1）：没有后端就没有账号可建。
-        // 此前这里会在本地凭空造一个账号，那种账号换台设备就不存在、也拿不到
-        // 任何服务端额度，等于给用户一个看着像登录成功、实际什么都不是的状态。
-        setErr(copy.serviceUnavailable)
-        return
-      }
-      const done = await api.wechatMockDone({})
-      const res = await registerByWechat(done.openid || done.token, '微信用户')
-      if (!res.ok) {
-        setErr(res.msg)
-        return
-      }
-      onSuccess(res.user)
-    } catch (e) {
-      setErr(copy.scanFailed)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <section className="auth-page">
       <button className="page-back auth-back" onClick={onBack} aria-label={copy.backHome}>
@@ -171,23 +104,15 @@ export default function RegisterPage({ onBack, onSwitch, onOpenLegal, onSuccess 
           </h2>
           <p className="auth-sub">{copy.subtitle}</p>
 
-          <div className="auth-methods auth-methods-three" role="tablist" aria-label={copy.register}>
+          {mainland && <div className="auth-methods auth-methods-three" role="tablist" aria-label={copy.register}>
             <button
               className={`auth-method ${method === 'wechat' ? 'active' : ''}`}
-              onClick={() => { setMethod('wechat'); setErr('') }}
-              role="tab"
-              aria-selected={method === 'wechat'}
-            >
-              {copy.methods[0]}
-            </button>
+              onClick={() => { setMethod('wechat'); setErr('') }} role="tab" aria-selected={method === 'wechat'}
+            >{locale === 'en' ? 'WeChat scan' : '微信扫码'}</button>
             <button
               className={`auth-method ${method === 'sms' ? 'active' : ''}`}
-              onClick={() => { setMethod('sms'); setErr('') }}
-              role="tab"
-              aria-selected={method === 'sms'}
-            >
-              {copy.methods[1]}<span className="auth-hot-tag">{copy.recommended}</span>
-            </button>
+              onClick={() => { setMethod('sms'); setErr('') }} role="tab" aria-selected={method === 'sms'}
+            >{copy.methods[1]}<span className="auth-hot-tag">{copy.recommended}</span></button>
             <button
               className={`auth-method ${method === 'account' ? 'active' : ''}`}
               onClick={() => { setMethod('account'); setErr('') }}
@@ -196,11 +121,16 @@ export default function RegisterPage({ onBack, onSwitch, onOpenLegal, onSuccess 
             >
               {copy.methods[2]}
             </button>
-          </div>
-          {method === 'sms' && <p className="auth-dev-note">{copy.smsDisabled}</p>}
-          {method === 'wechat' && <p className="auth-dev-note">{copy.wechatDisabled}</p>}
+          </div>}
 
-          {method === 'account' ? (
+          {!mainland && <div className="auth-wechat auth-provider-panel">
+            <div className="auth-provider-mark" aria-hidden="true">G</div>
+            <p className="auth-wechat-tip">{locale === 'en' ? 'Your first Google sign-in creates a Genki account automatically.' : traditional ? '首次 Google 登入會自動建立元氣帳號。' : '首次 Google 登录会自动创建元氣账号。'}</p>
+            {!providers.google && <p className="auth-dev-note">{locale === 'en' ? 'Google sign-in is being configured.' : traditional ? 'Google 登入正在設定中。' : 'Google 登录正在配置中。'}</p>}
+            <button className="auth-btn" onClick={startGoogleLogin} disabled={!providers.google || loading}>{locale === 'en' ? 'Continue with Google' : traditional ? '使用 Google 註冊' : '使用 Google 注册'}</button>
+          </div>}
+
+          {mainland && method === 'account' && (
             <form className="auth-form" onSubmit={handleSubmit} noValidate>
               <div className="auth-field">
                 <label htmlFor="reg-nick">{copy.nickname}</label>
@@ -260,50 +190,32 @@ export default function RegisterPage({ onBack, onSwitch, onOpenLegal, onSuccess 
                 {loading ? copy.registering : copy.register}
               </button>
             </form>
-          ) : method === 'sms' ? (
+          )}
+          {mainland && method === 'sms' && (
             <form className="auth-form" onSubmit={handleSmsRegister} noValidate>
               <div className="auth-field">
                 <label htmlFor="reg-phone">{copy.phone}</label>
-                <input id="reg-phone" type="tel" inputMode="numeric" placeholder={copy.phonePlaceholder} value={phone} autoComplete="tel" disabled onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} />
+                <input id="reg-phone" type="tel" inputMode="numeric" placeholder={copy.phonePlaceholder} value={phone} autoComplete="tel" disabled={!providers.sms || loading} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))} />
               </div>
               <div className="auth-field">
                 <label htmlFor="reg-code">{copy.code}</label>
                 <div className="auth-code-wrap">
-                  <input id="reg-code" inputMode="numeric" placeholder={copy.codePlaceholder} value={smsCode} autoComplete="one-time-code" disabled onChange={e => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
-                  <button type="button" className="auth-code-send" onClick={handleSendCode} disabled>{copy.getCode}</button>
+                  <input id="reg-code" inputMode="numeric" placeholder={copy.codePlaceholder} value={smsCode} autoComplete="one-time-code" disabled={!providers.sms || loading} onChange={e => setSmsCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+                  <button type="button" className="auth-code-send" onClick={handleSendCode} disabled={!providers.sms || loading}>{copy.getCode}</button>
                 </div>
               </div>
               {smsNote && <p className="auth-dev-note">{smsNote}</p>}
               {err && <p className="auth-err">{err}</p>}
-              <button type="submit" className="auth-btn" disabled>{copy.smsRegister}</button>
+              {!providers.sms && <p className="auth-dev-note">{locale === 'en' ? 'SMS sign-up is being configured.' : traditional ? '手機簡訊註冊正在接入。' : '手机短信注册正在接入。'}</p>}
+              <button type="submit" className="auth-btn" disabled={!providers.sms || loading}>{copy.smsRegister}</button>
             </form>
-          ) : (
-            <div className="auth-wechat">
-              <div className="auth-wechat-tip">
-                {copy.scanTip}
-              </div>
-              {mock ? (
-                <div className="auth-qr-demo">
-                  <div className="auth-qr-box" aria-hidden="true">
-                    <span className="auth-qr-grid" />
-                    <span className="auth-qr-logo">💬</span>
-                  </div>
-                  <div className="auth-qr-text">{mock.qrText || copy.demoMode}</div>
-                  <button className="auth-btn" onClick={handleMockScan} disabled>
-                    {copy.scanned}
-                  </button>
-                  </div>
-                  ) : (
-                  <button className="auth-btn" onClick={handleWechat} disabled>
-                  {copy.scan}
-                  </button>
-                  )}
-              {!serverOk && !mock && (
-                <div className="auth-dev-note">{copy.backendDown}</div>
-              )}
-              {err && <p className="auth-err">{err}</p>}
-            </div>
           )}
+          {mainland && method === 'wechat' && <div className="auth-wechat auth-provider-panel">
+            <div className="auth-qr-box" aria-hidden="true"><span className="auth-qr-grid" /><span className="auth-qr-logo">微</span></div>
+            <p className="auth-wechat-tip">{copy.scanTip}</p>
+            <p className="auth-dev-note">{locale === 'en' ? 'WeChat scan sign-up is being integrated.' : traditional ? '微信掃碼註冊正在接入。' : '微信扫码注册正在接入。'}</p>
+            <button className="auth-btn" disabled>{locale === 'en' ? 'Continue with WeChat' : traditional ? '使用微信掃碼註冊' : '使用微信扫码注册'}</button>
+          </div>}
 
           <p className="auth-switch">
             {copy.hasAccount}

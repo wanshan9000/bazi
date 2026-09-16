@@ -278,6 +278,12 @@ export function createAccountStore(file) {
     return load().users.find(u => u.wechatOpenid === key) || null
   }
 
+  function byGoogleSub(sub) {
+    const key = String(sub || '').trim()
+    if (!key) return null
+    return load().users.find(u => u.googleSub === key) || null
+  }
+
   const AVATARS = ['🐻', '🌸', '🌟', '🦋', '🍑', '🌙', '🪷', '☁️', '🍀', '🦊']
 
   function isCustomAvatar(value) {
@@ -291,11 +297,11 @@ export function createAccountStore(file) {
     return bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP'
   }
 
-  async function create({ account, email, password, nickname, avatar, wechatOpenid, plan = 'free' }) {
+  async function create({ account, email, password, nickname, avatar, wechatOpenid, googleSub, plan = 'free' }) {
     const db = load()
     const now = Date.now()
     const u = {
-      id: newId(wechatOpenid ? 'w' : 'u'),
+      id: newId(googleSub ? 'g' : wechatOpenid ? 'w' : 'u'),
       account: String(account).trim(),
       email: email ? String(email).trim().toLowerCase() : null,
       nickname: String(nickname).trim(),
@@ -303,6 +309,7 @@ export function createAccountStore(file) {
       passHash: password ? await hashPassword(password) : null,
       passwordVersion: 0,
       wechatOpenid: wechatOpenid || null,
+      googleSub: googleSub || null,
       status: 'active',
       plan,
       creditsUsed: 0,
@@ -339,6 +346,17 @@ export function createAccountStore(file) {
     u.lastLoginAt = Date.now()
     refresh(u)
     save()
+  }
+
+  function bindGoogleSub(id, sub) {
+    const u = get(id)
+    const key = String(sub || '').trim()
+    if (!u || !key) return { ok: false, msg: 'Google 身份无效' }
+    const existing = byGoogleSub(key)
+    if (existing && existing.id !== u.id) return { ok: false, msg: '该 Google 账号已绑定其它用户' }
+    u.googleSub = key
+    save()
+    return { ok: true, user: publicUser(u) }
   }
 
   function isActive(u) {
@@ -593,8 +611,8 @@ export function createAccountStore(file) {
   }
 
   return {
-    get, byAccount, byEmail, byLogin, byOpenid, create, checkPassword, dummyPasswordCheck,
-    touchLogin, isActive, setStatus, update, setPassword, resetPassword, changePlan, adminSetPlan, consumeCredit, consumeTokens, refundCredit, remove, grantSuperAdminByAccount,
+    get, byAccount, byEmail, byLogin, byOpenid, byGoogleSub, create, checkPassword, dummyPasswordCheck,
+    touchLogin, isActive, bindGoogleSub, setStatus, update, setPassword, resetPassword, changePlan, adminSetPlan, consumeCredit, consumeTokens, refundCredit, remove, grantSuperAdminByAccount,
     publicUser, refresh,
     count: () => load().users.length,
     list: () => load().users.map(publicUser),

@@ -135,6 +135,13 @@ export const config = {
     resetVerifyIpPerHour: Number(env.EMAIL_RESET_VERIFY_IP_PER_HOUR || 20),
   },
 
+  // ---- 第三方登录 ----
+  google: {
+    clientId: env.GOOGLE_CLIENT_ID || '',
+    clientSecret: env.GOOGLE_CLIENT_SECRET || '',
+    redirectUri: env.GOOGLE_REDIRECT_URI || '',
+  },
+
 
   // ---- 账号报告档案 ----
   reports: {
@@ -195,6 +202,10 @@ export const smsConfigured = () =>
   (config.sms.provider === 'tencent' && config.sms.tencentSecretId && config.sms.tencentSecretKey)
 
 export const emailConfigured = () => Boolean(config.email.resendApiKey && config.email.from)
+
+// Google OAuth 必须同时具备客户端标识、私钥与已在 Google Cloud 登记的回调地址。
+// 缺任一项时前端仅显示“正在接入”，绝不能产生看似可用的假登录入口。
+export const googleConfigured = () => Boolean(config.google.clientId && config.google.clientSecret && config.google.redirectUri)
 
 // 判断微信是否已配置
 export const wechatConfigured = () => Boolean(config.wechat.appId && config.wechat.appSecret)

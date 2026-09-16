@@ -29,6 +29,15 @@ test('新注册游客获得 20 永久积分，且不泄漏口令散列', async (
   assert.equal(u.password, undefined)
 })
 
+test('Google subject 可查询和绑定，且不能被第二个账号重复绑定', async () => {
+  const { store } = mkStore()
+  const first = await store.create({ account: 'first', password: 'secret123', nickname: '甲' })
+  const second = await store.create({ account: 'second', password: 'secret123', nickname: '乙' })
+  assert.equal(store.bindGoogleSub(first.id, 'google-sub-1').ok, true)
+  assert.equal(store.byGoogleSub('google-sub-1').id, first.id)
+  assert.equal(store.bindGoogleSub(second.id, 'google-sub-1').ok, false)
+})
+
 test('旧账号首次读取时按历史模型额度迁移为积分', () => {
   const { store, file } = mkStore()
   fs.writeFileSync(file, JSON.stringify({ users: [{

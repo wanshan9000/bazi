@@ -78,6 +78,25 @@ export async function login(account, password) {
   return { ok: false, msg: res.msg || '登录失败' }
 }
 
+export async function authProviders() {
+  const res = await api('/api/auth/providers')
+  return res.ok
+    ? { google: Boolean(res.google), wechat: Boolean(res.wechat), sms: Boolean(res.sms) }
+    : { google: false, wechat: false, sms: false }
+}
+
+export async function completeOAuthLogin() {
+  const res = await api('/api/auth/oauth/exchange', { method: 'POST' })
+  if (!res.ok) return { ok: false, msg: res.msg || '第三方登录确认失败' }
+  setAuth(res.token, res.user)
+  return { ok: true, user: res.user }
+}
+
+export function startGoogleLogin() {
+  const base = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE) || ''
+  window.location.assign(`${base}/api/auth/google/start`)
+}
+
 export async function sendPasswordResetCode(email) {
   const res = await api('/api/auth/password-reset/send-code', { method: 'POST', body: { email: String(email || '').trim() } })
   return res.ok ? { ok: true, msg: res.msg } : { ok: false, msg: res.msg || '验证码发送失败', wait: res.wait }

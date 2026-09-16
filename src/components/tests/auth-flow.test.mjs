@@ -40,10 +40,29 @@ const { default: MembershipModal } = await import('../MembershipModal.jsx')
 
 async function openAccountLogin(r) {
   const tab = r.findByText('账号登录')
-  assert.ok(tab, '应提供账号登录方式')
-  r.click(tab)
-  await flush()
+  // 海外页将邮箱/账号密码作为默认方式，不再额外放一个“账号登录”切换按钮。
+  if (tab) {
+    r.click(tab)
+    await flush()
+  }
 }
+
+test('海外登录页自动分流，不要求用户手动选择地区，并保留账号密码与 Google 入口', async () => {
+  const originalDateTimeFormat = Intl.DateTimeFormat
+  Intl.DateTimeFormat = () => ({ resolvedOptions: () => ({ timeZone: 'America/Los_Angeles' }) })
+  stubFetch({ '/api/auth/providers': { body: { ok: true, google: false, wechat: false, sms: false } } })
+  try {
+    const r = render(LoginPage, { onBack: () => {}, onSwitch: () => {}, onSuccess: () => {} })
+    await flush(2)
+    const text = r.text()
+    assert.ok(text.includes('用户名 / 邮箱'), `海外账号登录表单缺失：${text.slice(0, 300)}`)
+    assert.ok(text.includes('Google 登录正在配置中。'), `Google 配置状态未说明：${text.slice(0, 300)}`)
+    assert.ok(!text.includes('登录地区'), '不应要求用户手动选择地区')
+    r.unmount()
+  } finally {
+    Intl.DateTimeFormat = originalDateTimeFormat
+  }
+})
 
 test('登录成功：把服务端返回的用户交给 onSuccess，并存下 token', async () => {
   stubFetch({ '/api/auth/login': { body: { ok: true, token: 'jwt-abc', user: USER } } })
