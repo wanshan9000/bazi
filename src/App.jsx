@@ -75,7 +75,7 @@ function TopBar({ view, onNav, user, onUser, credits }) {
             <img src="/genki-logo.png" alt="" />
           </div>
           <div>
-            <span className="brand-name" aria-label={t('brand')}>GENKI</span>
+            <span className="brand-name" aria-label={t('brand')}>{t('brand')}</span>
           </div>
         </div>
         <nav className="topnav">

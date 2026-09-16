@@ -293,7 +293,7 @@ function agentResponsePaceProtocol(text) {
 function generatedSessionTitle(title) {
   const value = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 32)
   if (!value) return ''
-  if (/(?:【\s*(?:回答长度|问题覆盖校验|当前日期口径|日期换算核验|会话事实备忘|最终交付格式|当前缘主命盘)|这是一次常规咨询|不要复述整张命盘)/.test(value)) return ''
+  if (/(?:【\s*(?:回答长度|问题覆盖校验|当前日期口径|日期换算核验|会话事实备忘|最终交付格式|当前缘主命盘|输出语言|輸出語言|Output language)|这是一次常规咨询|不要复述整张命盘)/i.test(value)) return ''
   return value
 }
 

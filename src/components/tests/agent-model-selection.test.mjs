@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { render, flush } from '../../test/render.mjs'
 
-const { default: AgentChatDsh, resolveAgentRoute, serializeAgentRoute, safeThinkStep, appendSafeThinkStep } = await import('../AgentChatDsh.jsx')
+const { default: AgentChatDsh, resolveAgentRoute, serializeAgentRoute, safeThinkStep, appendSafeThinkStep, displaySessionTitle } = await import('../AgentChatDsh.jsx')
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -55,6 +55,12 @@ test('相同解读进度只展示一次，新的阶段按顺序追加', () => {
   assert.equal(duplicate.reasoning, safeThinkStep('start'))
   const withTool = appendSafeThinkStep(duplicate, safeThinkStep('tool_call', 'bazi'))
   assert.equal(withTool.reasoning, `${safeThinkStep('start')}\n${safeThinkStep('tool_call', 'bazi')}`)
+})
+
+test('会话标题不会展示内部输出语言控制文案', () => {
+  assert.equal(displaySessionTitle('【输出语言】所有面向用户的摘要一律使用简体中文'), '本次咨询')
+  assert.equal(displaySessionTitle('【輸出語言】所有面向使用者的摘要一律使用繁體中文', 'zh-TW'), '本次咨询')
+  assert.equal(displaySessionTitle('【Output language】Write every user-facing summary in English', 'en'), 'Session')
 })
 
 test('模型列表晚到时不会清空已恢复的历史会话', async () => {

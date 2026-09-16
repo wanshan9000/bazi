@@ -120,9 +120,9 @@ function chartLabel(c, locale = 'zh-CN') {
   if (locale === 'en') return `${c.gender === '女' ? 'Female' : 'Male'} · ${c.year}-${c.month}-${c.day}${Number.isInteger(c.hour) ? ` · ${SHI_CHEN[c.hour]} hour` : ''}`
   return `${c.gender === '女' ? '坤造' : '乾造'} · ${c.year}年${c.month}月${c.day}日${shiChen}`
 }
-function displaySessionTitle(title, locale = 'zh-CN') {
+export function displaySessionTitle(title, locale = 'zh-CN') {
   const value = String(title || '').replace(/\s+/g, ' ').trim()
-  return /(?:【\s*(?:回答长度|问题覆盖校验|当前日期口径|日期换算核验|会话事实备忘|最终交付格式|当前缘主命盘)|这是一次常规咨询|不要复述整张命盘)/.test(value)
+  return /(?:【\s*(?:回答长度|问题覆盖校验|当前日期口径|日期换算核验|会话事实备忘|最终交付格式|当前缘主命盘|输出语言|輸出語言|Output language)|这是一次常规咨询|不要复述整张命盘)/i.test(value)
     ? agentCopy(locale, 'session', '本次咨询')
     : value || agentCopy(locale, 'unnamedSession', '未命名会话')
 }
@@ -465,7 +465,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
         <div className="agent-head-main">
           <div className="agent-head-top">
             {activeChart ? <div className="current-chart-chip"><span className="current-chart-txt">{chartLabel(activeChart, locale)}</span></div>
-              : activeSession ? <div className="current-session-chip" title={activeSession.title}><span className="current-session-label">{agentCopy(locale, 'session', '会话')}</span><span className="current-session-title">{activeSession.title}</span></div>
+              : activeSession ? <div className="current-session-chip" title={displaySessionTitle(activeSession.title, locale)}><span className="current-session-label">{agentCopy(locale, 'session', '会话')}</span><span className="current-session-title">{displaySessionTitle(activeSession.title, locale)}</span></div>
                 : <div className="name"><span className="agent-name-full">{agentCopy(locale, 'agentName', '三门先生')}</span><span className="agent-name-short">{agentCopy(locale, 'shortName', '三门')}</span></div>}
           </div>
           <div className="agent-topic-status">{user ? agentCopy(locale, 'usage', '按实际用量结算 · 可持续追问') : agentCopy(locale, 'trial', '赠送体验积分 · 用完后订阅')}</div>
