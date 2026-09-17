@@ -31,6 +31,9 @@ function reasonOf(status) {
 }
 
 function scoreOf({ path, status }) {
+  // Agent 会在同一会话仍在生成时主动返回 429，保护模型并发。它是正常的
+  // 交互反馈，不应因用户连续点了快捷问题就升级为整网封禁。
+  if (status === 429 && path.startsWith('/agent/')) return 0
   if (status === 429) return 3
   if (status === 413) return 3
   if (status === 401 && (path === '/auth/login' || path === '/admin/auth')) return 2

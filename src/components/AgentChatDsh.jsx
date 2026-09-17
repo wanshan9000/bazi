@@ -179,6 +179,9 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
   const scrollRef = useRef(null)
   const followScrollRef = useRef(true)
   const abortRef = useRef(null)
+  // React 的 typing 状态要到下一次渲染才生效；快捷问题连续点击时用 ref 同步挡住
+  // 同一帧里的重复请求，避免触发服务端的并发保护。
+  const sendLockRef = useRef(false)
   const booted = useRef(false)
   const autoResumeAttempted = useRef(false)
   // 报告和会话的关联只需建立一次。重复 SSE session 事件或 React 重渲染都不能
@@ -261,8 +264,9 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
 
   const send = async (text) => {
     const { requestText: q, displayText } = normalizeAgentSeed(text, input)
-    if (!q || typing) return
+    if (!q || typing || sendLockRef.current) return
     if (user && !canAfford(user, 'agent.chat')) { onUpgrade && onUpgrade(nextPlanKey(user.plan)); return }
+    sendLockRef.current = true
     followScrollRef.current = true
     setInput('')
     setTyping(true)
@@ -379,6 +383,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
       patchLast(m => ({ ...m, streaming: false }))
       setTyping(false)
       abortRef.current = null
+      sendLockRef.current = false
     }
   }
 
@@ -613,7 +618,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
       <div className="quick-grid">
         <div className="quick-block">
           <div className="quick-label">{quick.label}</div>
-          <div className="quick-row" data-quick-topic={quick.topic}>{quick.questions.map(q => <button key={q} className="quick-chip quick-ask" onClick={() => send(q)}>{q}</button>)}</div>
+          <div className="quick-row" data-quick-topic={quick.topic}>{quick.questions.map(q => <button key={q} className="quick-chip quick-ask" onClick={() => send(q)} disabled={typing}>{q}</button>)}</div>
         </div>
       </div>
 

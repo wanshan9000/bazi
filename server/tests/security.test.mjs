@@ -28,6 +28,13 @@ test('注册字段校验失败不触发全站封禁，注册频率限制仍会�
   assert.equal(guard.snapshot().overview.blocked, 1)
 })
 
+test('Agent 并发保护返回 429 时不升级为网络风控封禁', () => {
+  const guard = createSecurityGuard({ file: tempFile(), secret: 'a'.repeat(48), blockThreshold: 3, blockMinutes: 10 })
+  guard.note({ ip: '198.51.100.5', path: '/agent/chat', status: 429 })
+  guard.note({ ip: '198.51.100.5', path: '/agent/chat', status: 429 })
+  assert.equal(guard.snapshot().overview.blocked, 0)
+})
+
 test('风控记录只保存来源指纹，不保存明文 IP', () => {
   const file = tempFile()
   const guard = createSecurityGuard({ file, secret: 'y'.repeat(48), blockThreshold: 99 })
