@@ -20,9 +20,19 @@ const SHI_CHEN = ['子', '丑', '丑', '寅', '寅', '卯', '卯', '辰', '辰',
 function agentCopy(locale, key, fallback = key) {
   const en = {
     session: 'Session', unnamedSession: 'Untitled session', report: 'Reading report', malformedReply: '⚠️ The reply format was incomplete. Please ask again.', loginExpired: '⚠️ Your session expired. Please sign in again.', stopped: '⏹ Generation stopped', networkFailed: 'Network issue. The reply was not completed.', historyFailed: 'Could not load conversations. Check your connection and try again.', sessionMissing: 'This conversation is unavailable.', deleteFailed: 'Could not delete this conversation. Please try again.', noChart: 'No chart is active. Share your birth details before saving one.', chartName: 'Name this chart (for example: Me, Mom, Child):',
-    agentName: 'Mr. Sanmen', shortName: 'Sanmen', usage: 'Usage-based billing · Keep asking', trial: 'Trial credits included · Subscribe when used', newChat: 'New chat', history: 'History', totalChats: count => `${count} chats · Select to restore`, close: 'Close', noHistory: 'No saved conversations yet. Start chatting to save one.', messages: count => `${count} messages`, delete: 'Delete', myCharts: 'My charts', totalCharts: count => `${count} saved · Select to switch`, saveChart: '+ Save current', noCharts: 'No saved charts. Create one, then save it here.', saved: 'saved', removeSaved: 'Remove saved chart', you: 'You', copyReport: 'Copy full report', askAnything: 'Ask Mr. Sanmen anything…', switchModel: 'Switch model', modelTitle: 'Choose model (starts a new chat)', stop: 'Stop generating',
+    agentName: 'Mr. Sanmen', shortName: 'Sanmen', usage: 'Usage-based billing · Keep asking', trial: 'Trial credits included · Subscribe when used', newChat: 'New chat', history: 'History', totalChats: count => `${count} chats · Select to restore`, close: 'Close', noHistory: 'No saved conversations yet. Start chatting to save one.', messages: count => `${count} messages`, delete: 'Delete', myCharts: 'My charts', totalCharts: count => `${count} saved · Select to switch`, saveChart: '+ Save current', noCharts: 'No saved charts. Create one, then save it here.', saved: 'saved', removeSaved: 'Remove saved chart', you: 'You', copyReport: 'Copy full report', askAnything: 'Ask Mr. Sanmen anything…', switchModel: 'Switch model', modelTitle: 'Choose model (starts a new chat)', modelDeepNote: 'Deep mode is more thorough and may take longer.', modelQuick: 'Quick', modelDeep: 'Deep', stop: 'Stop generating',
   }
   return locale === 'en' ? (en[key] ?? fallback) : fallback
+}
+
+function isDeepRoute(route) {
+  return route === 'deepseek-pro' || route === 'minimax'
+}
+
+function routeModeCopy(route, locale) {
+  return isDeepRoute(route)
+    ? agentCopy(locale, 'modelDeep', '深度')
+    : agentCopy(locale, 'modelQuick', '快速')
 }
 
 // v1 只存一个裸路由名，历史用户曾因此被永久锁在 MiniMax。v2 仅保存用户主动点选的
@@ -154,6 +164,9 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
   const [showCollection, setShowCollection] = useState(false)
   const [models, setModels] = useState({ routes: [], default: null })
   const [route, setRoute] = useState(readAgentRoutePreference)
+  // 历史会话的路由由服务端 session 决定。单独保存它，避免本地“下一段新会话”的偏好
+  // 被错误地显示成当前会话模型，特别是旧 MiniMax 会话会因此看起来像 Flash 却很慢。
+  const [sessionRoute, setSessionRoute] = useState(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const scrollRef = useRef(null)
   const followScrollRef = useRef(true)
@@ -235,11 +248,14 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     abortRef.current = ac
     try {
       await api.streamChat({
-        sessionId, text: q, chart: chartMeta(activeChart), route: route || models.default || undefined, locale, signal: ac.signal,
+        // 已有会话的真实路由不可由前端覆盖；服务端会从 session 读取。只给新会话传用户
+        // 明确选择的路由，既避免歧义，也使界面展示与实际调用保持一致。
+        sessionId, text: q, chart: chartMeta(activeChart), route: sessionId ? undefined : (route || models.default || undefined), locale, signal: ac.signal,
         onEvent: e => {
           switch (e.type) {
             case 'session':
               if (!sessionId) setSessionId(e.sessionId)
+              if (e.route) setSessionRoute(e.route)
               setActiveSession(prev => prev?.id === e.sessionId ? prev : { id: e.sessionId, title: q.slice(0, 14) })
               if (reportId && e.sessionId && !linkedReportSessions.current.has(e.sessionId)) {
                 linkedReportSessions.current.add(e.sessionId)
@@ -347,6 +363,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
   const newChat = () => {
     if (abortRef.current) abortRef.current.abort()
     setSessionId(null)
+    setSessionRoute(null)
     setActiveSession(null)
     setActiveChart(null)
     setShowHistory(false)
@@ -379,6 +396,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
         ? { id: `h-${i}`, role: 'ai', kind: 'report', report: { title: (m.text.match(/^# (.+)$/m) || [])[1] || agentCopy(locale, 'report', '测算报告'), markdown: m.text }, time: m.time, _counted: true }
         : { id: `h-${i}`, role: m.role, text: m.answer ? m.text : (parseStructuredAnswerText(m.text) ? '' : m.text), answer: m.answer || parseStructuredAnswerText(m.text), time: m.time, _counted: true }))
       setSessionId(restored.id)
+      setSessionRoute(restored.route || null)
       setActiveSession({ id: restored.id, title: sessionTitle(restored, locale) })
       setActiveChart(null)
       if (restored.chartKey) { const [y, mo, d, h, g] = restored.chartKey.split('-'); try { setActiveChart(buildChart(+y, +mo, +d, +h, g)) } catch { /* 命盘键格式异常：不影响正文恢复 */ } }
@@ -438,16 +456,17 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     refreshCollection()
   }
   const switchToCollected = (it) => {
-    try { setActiveChart(buildChart(it.year, it.month, it.day, it.hour, it.gender)); setSessionId(null); setActiveSession(null); setShowCollection(false) } catch { /* ignore invalid saved chart */ }
+    try { setActiveChart(buildChart(it.year, it.month, it.day, it.hour, it.gender)); setSessionId(null); setSessionRoute(null); setActiveSession(null); setShowCollection(false) } catch { /* ignore invalid saved chart */ }
   }
   // 换模型 = 换一个服务端会话。此前只把 sessionId 置空却保留了聊天记录：
   // 界面上还挂着上文，服务端却是一张白纸，模型完全不知道前面聊过什么，
   // 用户以为它「突然失忆」。直接开一段新对话，语义才是一致的。
   const pickRoute = (key) => {
+    const activeRoute = sessionRoute || route || models.default
     setRoute(key)
     try { localStorage.setItem(ROUTE_KEY, serializeAgentRoute(key)) } catch { /* 忽略 */ }
     setPickerOpen(false)
-    if (key !== route) newChat()
+    if (key !== activeRoute) newChat()
   }
   // ⚠ 必须避开输入法组合态：中文拼音输入时按回车是「确认候选词」，
   // 不判 isComposing / keyCode 229 的话，那一下会把还没选完的半截文本直接发出去。
@@ -458,6 +477,9 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     send()
   }
   const quick = quickQuestionsForConversation(messages, { hasChart: Boolean(activeChart), locale })
+  const currentRoute = sessionRoute || route || models.default || 'deepseek-flash'
+  const currentRouteMeta = models.routes.find(item => item.key === currentRoute)
+  const currentRouteIsDeep = isDeepRoute(currentRoute)
   return (
     <div className="agent-page-inner">
       <div className="agent-head">
@@ -571,17 +593,21 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
           onChange={e => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 110) + 'px' }}
           onKeyDown={handleKey} style={{ maxHeight: 110 }} />
         <div className="input-status-wrap">
-          <button type="button" className="input-status-dot on" onClick={() => setPickerOpen(v => !v)} title={agentCopy(locale, 'switchModel', '切换模型')} aria-label={agentCopy(locale, 'switchModel', '切换模型')} />
+          <button type="button" className={`input-model-control ${currentRouteIsDeep ? 'is-deep' : 'is-quick'}`} onClick={() => setPickerOpen(v => !v)} title={`${agentCopy(locale, 'switchModel', '切换模型')} · ${currentRouteMeta?.label || currentRoute}`} aria-label={agentCopy(locale, 'switchModel', '切换模型')}>
+            <span className="input-status-dot on" />
+            <span className="input-model-label">{routeModeCopy(currentRoute, locale)}</span>
+          </button>
           {pickerOpen && (
             <div className="model-picker" onClick={e => e.stopPropagation()}>
               <div className="model-picker-title">{agentCopy(locale, 'modelTitle', '切换模型（新会话生效）')}</div>
               {models.routes.map(r => (
-                <button key={r.key} type="button" className={`model-picker-item ${r.key === (route || models.default) ? 'active' : ''}`} onClick={() => pickRoute(r.key)}>
-                  <span className={`model-picker-dot ${r.key === (route || models.default) ? 'on' : ''}`} />
+                <button key={r.key} type="button" className={`model-picker-item ${r.key === currentRoute ? 'active' : ''}`} onClick={() => pickRoute(r.key)}>
+                  <span className={`model-picker-dot ${r.key === currentRoute ? 'on' : ''}`} />
                   <span className="model-picker-name">{r.label}</span>
                   <span className="model-picker-model">{r.hint || r.model}</span>
                 </button>
               ))}
+              <div className="model-picker-foot">{agentCopy(locale, 'modelDeepNote', '深度模式会进行更完整的推演，耗时会更长。')}</div>
             </div>
           )}
         </div>

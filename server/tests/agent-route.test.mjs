@@ -4,7 +4,7 @@ import express from 'express'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createAgentRouter } from '../routes/agent.js'
+import { agentSessionMemory, createAgentRouter } from '../routes/agent.js'
 import { createAgentStore } from '../dsh/agentStore.js'
 import { createAccountStore } from '../accounts.js'
 import { createGuestQuota } from '../guestQuota.js'
@@ -60,6 +60,19 @@ test('chat 流式返回并镜像消息', async () => {
     const msgs = store.listMessages(me.id, frames[0].sessionId)
     assert.deepEqual(msgs.map(m => [m.role, m.text]), [['user', '嗨'], ['ai', '你好']])
   } finally { srv.close() }
+})
+
+test('会话备忘只回灌有限的近期用户原话，避免每轮重复上下文拖慢首段回复', () => {
+  const messages = Array.from({ length: 10 }, (_, index) => ({
+    role: 'user', text: `第${index + 1}轮咨询 ${'内容'.repeat(100)}`,
+  }))
+  const memory = agentSessionMemory({}, messages)
+  assert.doesNotMatch(memory, /第1轮咨询|第2轮咨询/)
+  assert.match(memory, /第3轮咨询/)
+  assert.match(memory, /第10轮咨询/)
+  const recentLines = memory.split('\n').filter(line => line.startsWith('  - '))
+  assert.equal(recentLines.length, 8)
+  assert.ok(recentLines.every(line => line.length <= 144), '每条记忆应有长度上限')
 })
 
 test('内部回答长度协议不能覆盖用户会话标题', async () => {

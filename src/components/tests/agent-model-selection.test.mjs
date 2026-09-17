@@ -103,6 +103,49 @@ test('模型列表晚到时不会清空已恢复的历史会话', async () => {
   }
 })
 
+test('恢复深度历史会话时显示实际模型，续聊不携带错误路由覆盖服务端会话', async () => {
+  const originalFetch = globalThis.fetch
+  let chatBody = null
+  globalThis.fetch = async (url, init = {}) => {
+    const path = String(url)
+    if (path.endsWith('/api/agent/models')) return json({
+      ok: true,
+      routes: [
+        { key: 'deepseek-flash', label: 'DeepSeek Flash', hint: '推荐 · 快速' },
+        { key: 'minimax', label: 'MiniMax M2.7', hint: '深度模式 · 较慢' },
+      ],
+      default: 'deepseek-flash',
+    })
+    if (path.endsWith('/api/agent/sessions/deep-history/messages')) return json({
+      ok: true,
+      session: { id: 'deep-history', route: 'minimax', title: '完整事业分析' },
+      messages: [{ role: 'ai', text: '已恢复历史会话。', time: Date.now() }],
+    })
+    if (path.endsWith('/api/agent/chat')) {
+      chatBody = JSON.parse(init.body)
+      return sse([{ type: 'session', sessionId: 'deep-history', route: 'minimax' }, { type: 'text', delta: '继续回答。' }, { type: 'done' }])
+    }
+    throw new Error(`未预期的请求：${path}`)
+  }
+
+  const r = render(AgentChatDsh, {
+    initialSessionId: 'deep-history', user: null,
+    onRequireLogin() {}, onUpgrade() {}, onUserChange() {},
+  })
+  try {
+    await flush(5)
+    assert.equal(r.$('.input-model-label')?.textContent, '深度')
+    r.type(r.$('.chat-input'), '继续看今年事业')
+    r.click(r.$('.send-btn'))
+    await flush(5)
+    assert.equal(chatBody.sessionId, 'deep-history')
+    assert.equal('route' in chatBody, false, '续聊不得尝试以本地偏好覆盖服务端历史路由')
+  } finally {
+    r.unmount()
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('重新进入 Agent 时会自动恢复最新的可继续会话', async () => {
   // 要防的回归：sessionId 只存在 React 内存，用户离开页面再回来若不手动点
   // “会话历史”，下一句会被当作新话题，Agent 自然无法接住昨天的上下文。

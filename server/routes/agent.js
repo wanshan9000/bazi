@@ -297,8 +297,8 @@ function generatedSessionTitle(title) {
   return value
 }
 
-function compactUserMessage(text) {
-  return String(text || '').replace(/\s+/g, ' ').trim().slice(0, 180)
+function compactUserMessage(text, limit = 140) {
+  return String(text || '').replace(/\s+/g, ' ').trim().slice(0, limit)
 }
 
 // DSH 会在长会话中自行压缩上下文；服务端镜像却保留着缘主逐条给出的信息。
@@ -309,7 +309,10 @@ export function agentSessionMemory(session, messages) {
     .filter(message => message?.role === 'user')
     .map(message => compactUserMessage(message.text))
     .filter(Boolean)
-  const recentUserTurns = userTurns.slice(-12)
+  // DSH 会话本身已保留并压缩完整上下文；这里是防止压缩遗漏关键事实的二次保障，
+  // 而不是再把整段对话完整塞回去。限制最近 8 条、每条 140 字能保住连续追问，
+  // 同时显著减少每一轮重复上下文与上游首段等待。
+  const recentUserTurns = userTurns.slice(-8)
   const stableFacts = stableSessionFacts(userTurns)
   if (!chart && !recentUserTurns.length && !stableFacts.length) return ''
   const lines = ['【会话事实备忘·优先于模型记忆】']
