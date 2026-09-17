@@ -21,6 +21,16 @@ test('结构化 Agent 答案只接受带版本和必填摘要的 JSON', () => {
   assert.equal(parseStructuredAgentAnswer('这是一段普通文本'), null)
 })
 
+test('模型在字段文本内误用英文双引号时，仍恢复为可交付的结构化答案', () => {
+  const malformed = `{"version":1,"summary":"庚辰大运是命局"冲势"的强化期。","sections":[{"title":"行动建议","items":[{"label":"事业","text":"遇到"变化"时先准备方案。"}]}],"closing":"稳住节奏。"}`
+  assert.deepEqual(parseStructuredAgentAnswer(malformed), {
+    version: 1,
+    summary: '庚辰大运是命局“冲势”的强化期。',
+    sections: [{ title: '行动建议', items: [{ label: '事业', text: '遇到“变化”时先准备方案。' }] }],
+    closing: '稳住节奏。',
+  })
+})
+
 test('结构化答案会丢弃空字段、过量条目，并保留可读历史文本', () => {
   const parsed = parseStructuredAgentAnswer(JSON.stringify({
     ...valid,

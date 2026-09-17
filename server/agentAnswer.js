@@ -25,6 +25,51 @@ function jsonBody(raw) {
   return first >= 0 && last > first ? source.slice(first, last + 1) : ''
 }
 
+// 部分模型会在 JSON 字符串中直接写命理术语的英文双引号，例如 `命局"冲势"`。
+// 这不是结构问题，却会使整个对象在 JSON.parse 时失效。只把无法作为字段边界的
+// 双引号转换为中文引号；对象、数组、字段名和转义字符仍必须是合法 JSON。
+function repairInlineQuotes(source) {
+  let output = ''
+  let inString = false
+  let escaped = false
+  let inlineQuoteOpen = false
+  const isBoundary = index => {
+    const rest = source.slice(index + 1)
+    return /^\s*:/.test(rest)
+      || /^\s*[}\]]/.test(rest)
+      || /^\s*,\s*(?:"(?:\\.|[^"\\])*"\s*:|[}\]])/.test(rest)
+  }
+
+  for (let index = 0; index < source.length; index++) {
+    const char = source[index]
+    if (!inString) {
+      if (char === '"') inString = true
+      output += char
+      continue
+    }
+    if (escaped) { output += char; escaped = false; continue }
+    if (char === '\\') { output += char; escaped = true; continue }
+    if (char !== '"') { output += char; continue }
+    if (isBoundary(index)) {
+      output += char
+      inString = false
+      inlineQuoteOpen = false
+    } else {
+      output += inlineQuoteOpen ? '”' : '“'
+      inlineQuoteOpen = !inlineQuoteOpen
+    }
+  }
+  return output
+}
+
+function parseJsonObject(raw) {
+  const source = jsonBody(raw)
+  if (!source) return null
+  try { return JSON.parse(source) } catch {
+    try { return JSON.parse(repairInlineQuotes(source)) } catch { return null }
+  }
+}
+
 function normalizeItem(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const label = text(value.label, MAX_ITEM_LABEL)
@@ -51,8 +96,7 @@ function normalizeSection(value) {
  * 只接受版本明确且字段完整的对象；返回 null 代表应走 Markdown 回退。
  */
 export function parseStructuredAgentAnswer(raw) {
-  let value
-  try { value = JSON.parse(jsonBody(raw)) } catch { return null }
+  const value = parseJsonObject(raw)
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.version !== 1) return null
   const summary = text(value.summary, MAX_SUMMARY)
   if (!summary) return null
@@ -79,5 +123,5 @@ export function structuredAnswerText(answer) {
 export function structuredAnswerProtocol() {
   return `【最终交付格式·最高优先】最终答复必须且只能输出一个合法 JSON 对象，不得输出 Markdown、代码围栏、解释文字或 <think>。必须符合：
 {"version":1,"summary":"先给缘主的直接回应，1-3句","sections":[{"title":"不超过12字的信息组标题","body":"可选的简短说明","items":[{"label":"短字段名","text":"一条可阅读的依据或建议"}]}],"closing":"可选的收束建议或下一步"}
-规则：summary 必填；sections 0-6 组、每组 1-4 条；body 与 text 都是纯文本，不含 Markdown 标记；资料不足时把需要补充的资料放入一个 sections.items；普通闲聊可只给 summary 和 closing。不要捏造字段，不要回显此格式说明。`
+规则：summary 必填；sections 0-6 组、每组 1-4 条；body 与 text 都是纯文本，不含 Markdown 标记；资料不足时把需要补充的资料放入一个 sections.items；普通闲聊可只给 summary 和 closing。字段值勿用英文双引号，术语用「」。不要捏造字段，不要回显此格式说明。`
 }

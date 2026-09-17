@@ -276,6 +276,9 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
               }))
               break
             case 'text': patchLast(m => {
+              if (e.structured === false) {
+                return { ...appendSafeThinkStep(m, safeThinkStep('answering', '', locale)), structuredRaw: undefined, text: m.text + e.delta }
+              }
               const candidate = `${m.structuredRaw || ''}${e.delta}`
               const isStructured = Boolean(m.structuredRaw) || /^\s*\{\s*"version"\s*:/.test(`${m.text || ''}${e.delta}`)
               if (isStructured) return { ...appendSafeThinkStep(m, safeThinkStep('answering', '', locale)), structuredRaw: candidate, text: '' }

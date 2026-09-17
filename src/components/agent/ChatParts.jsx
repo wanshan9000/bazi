@@ -12,8 +12,31 @@ export function parseStructuredAnswerText(raw) {
   source = source.replace(/^<output[^>]*>/i, '').replace(/<\/output>$/i, '').trim()
   const fenced = source.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
   if (fenced) source = fenced[1].trim()
+  const repairInlineQuotes = value => {
+    let output = ''
+    let inString = false
+    let escaped = false
+    let inlineQuoteOpen = false
+    const isBoundary = index => {
+      const rest = value.slice(index + 1)
+      return /^\s*:/.test(rest)
+        || /^\s*[}\]]/.test(rest)
+        || /^\s*,\s*(?:"(?:\\.|[^"\\])*"\s*:|[}\]])/.test(rest)
+    }
+    for (let index = 0; index < value.length; index++) {
+      const char = value[index]
+      if (!inString) { if (char === '"') inString = true; output += char; continue }
+      if (escaped) { output += char; escaped = false; continue }
+      if (char === '\\') { output += char; escaped = true; continue }
+      if (char !== '"') { output += char; continue }
+      if (isBoundary(index)) { output += char; inString = false; inlineQuoteOpen = false }
+      else { output += inlineQuoteOpen ? '”' : '“'; inlineQuoteOpen = !inlineQuoteOpen }
+    }
+    return output
+  }
   try {
-    const value = JSON.parse(source)
+    let value
+    try { value = JSON.parse(source) } catch { value = JSON.parse(repairInlineQuotes(source)) }
     if (!value || typeof value !== 'object' || Array.isArray(value) || value.version !== 1 || typeof value.summary !== 'string' || !value.summary.trim()) return null
     const sections = Array.isArray(value.sections) ? value.sections.slice(0, 6).map(section => {
       if (!section || typeof section !== 'object' || typeof section.title !== 'string' || !section.title.trim()) return null

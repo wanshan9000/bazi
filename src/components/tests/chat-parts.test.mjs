@@ -46,6 +46,16 @@ test('旧服务误以 text 转发 JSON 时，前端仍能恢复固定字段答�
   assert.equal(parseStructuredAnswerText('{"version":1'), null, '半截 JSON 不得提前渲染')
 })
 
+test('旧服务文本中的未转义术语引号也能恢复固定字段答案', () => {
+  const raw = `{"version":1,"summary":"命局"冲势"需稳住。","sections":[],"closing":"先看时机。"}`
+  assert.deepEqual(parseStructuredAnswerText(raw), {
+    version: 1,
+    summary: '命局“冲势”需稳住。',
+    sections: [],
+    closing: '先看时机。',
+  })
+})
+
 test('解读过程按阶段列表展示，而不是一段空白说明', () => {
   const r = render(ThinkBlock, {
     content: '已接收咨询，正在确认解读主题…\n正在核对已知资料与命盘信息…',

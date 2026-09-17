@@ -949,7 +949,9 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
       // 绝不因为一次 JSON 失败把用户留在空白气泡里。
       if (!sawError) {
         if (answer) send({ type: 'answer', answer })
-        else if (finalText) send({ type: 'text', delta: finalText })
+        // 明示这是 Markdown 回退，避免前端把一个以 `{` 开头但未能修复的模型输出
+        // 再次误判为结构化 JSON 并隐藏整段正文。
+        else if (finalText) send({ type: 'text', delta: finalText, structured: false })
         if (storedText) store.appendMessage(req.uid, session.id, { role: 'ai', text: storedText, answer: answer || undefined, time: timeNow() })
       }
       streamed = ''
