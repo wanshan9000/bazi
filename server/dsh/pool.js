@@ -166,7 +166,7 @@ export class DshPool {
     })()
   }
 
-  async run({ routeKey, sessionId, text, onEvent, signal }) {
+  async run({ routeKey, sessionId, text, onEvent, onProgress, signal }) {
     if (this.busy.has(sessionId)) { const e = new Error('BUSY: 该会话正在回复中'); e.code = 'BUSY'; throw e }
     this.busy.add(sessionId)
     let sub = null
@@ -187,6 +187,9 @@ export class DshPool {
     let firstToolResultMs = null
     let firstTextMs = null
     const elapsedMs = () => Math.max(0, Math.round(performance.now() - startedAt))
+    // 这几个节点只描述连接与投递状态，供路由层展示等待反馈；不包含 prompt、Skill
+    // 或模型内部推理。onProgress 是可选回调，避免影响已有的 pool 调用方和测试替身。
+    const progress = stage => { if (typeof onProgress === 'function') onProgress({ stage, elapsedMs: elapsedMs() }) }
     const armDeadline = () => {
       clearTimeout(timer)
       timer = setTimeout(() => {
@@ -207,12 +210,15 @@ export class DshPool {
       if (signal && signal.aborted) return { finalText: '', usage: null, title: null }
       // 启动握手与 prompt 也要受整轮 deadline 约束：否则子进程卡在这两步时
       // 这一轮会永远挂着（deadline 的拒绝要到进入下面的 race 才会被消费）。
+      progress('engine_connecting')
       const client = await Promise.race([this.client(routeKey), deadline])
       initializeMs = elapsedMs()
+      progress('engine_ready')
       sub = client.subscribeSessionTree(sessionId)
       this.openSubs.add(sub)
       messageId = await Promise.race([client.prompt(sessionId, [{ type: 'text', text }]), deadline])
       promptAcceptedMs = elapsedMs()
+      progress('engine_requested')
       // 客户端没有返回 messageId 时无从校验收据，只能退化为"立即开始收事件"。
       received = !messageId
       let finalText = ''

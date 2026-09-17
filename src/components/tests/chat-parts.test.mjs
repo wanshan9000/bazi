@@ -81,6 +81,19 @@ test('解读过程按阶段列表展示，而不是一段空白说明', () => {
   }
 })
 
+test('服务端保活耗时会补偿被浏览器节流的前端计时器', () => {
+  const r = render(ThinkBlock, {
+    content: '正在连接解读引擎…',
+    streaming: true,
+    heartbeat: { stage: 'engine_connecting', elapsedSeconds: 12, at: Date.now() },
+  })
+  try {
+    assert.ok(r.text().includes('连接正常 · 解读中 · 12 秒'))
+  } finally {
+    r.unmount()
+  }
+})
+
 test('解读进度完成后自动收起，用户仍可手动展开', async () => {
   const r = render(ThinkBlock, { content: '正在推演命盘关系', streaming: true })
   assert.ok(r.$('.think-body'), '流式解读进度应默认展开')

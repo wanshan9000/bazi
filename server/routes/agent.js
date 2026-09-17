@@ -844,13 +844,13 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
     res.flushHeaders()
     const send = e => { if (!res.writableEnded) res.write(`data: ${JSON.stringify(e)}\n\n`) }
     const responseStartedAt = Date.now()
-    let liveStage = 'engine'
+    let liveStage = 'engine_connecting'
     // 这是公开、无敏感信息的状态心跳：既保住移动网络与中间代理，也让前端能确认
     // 本轮仍在运行。不能发送模型原始推理、Skill 名称或工具参数。
     const beat = setInterval(() => send({
       type: 'heartbeat', stage: liveStage,
       elapsedSeconds: Math.max(1, Math.ceil((Date.now() - responseStartedAt) / 1000)),
-    }), 8000)
+    }), 2000)
     const ac = new AbortController()
     // 流式过程中累积的正文：客户端中途断开时 pool.run 会以 abort 抛出，
     // result.finalText 拿不到，此前那一轮的 AI 回复就完全没进镜像 ——
@@ -883,9 +883,15 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
       // 不包含模型原始推理、Skill 名或参数，且不写入会话正文。
       send({ type: 'progress', stage: 'session_ready' })
       send({ type: 'progress', stage: 'context_ready' })
-      send({ type: 'progress', stage: 'engine_requested' })
+      // 首个保活不等待两秒定时器：用户提交后立即能确认连接仍由服务端维持。
+      send({ type: 'heartbeat', stage: liveStage, elapsedSeconds: 1 })
       const result = await pool.run({
         routeKey: session.route, sessionId: session.id, text: prompt, signal: ac.signal,
+        onProgress: ({ stage }) => {
+          liveStage = stage || liveStage
+          send({ type: 'progress', stage: liveStage })
+          send({ type: 'heartbeat', stage: liveStage, elapsedSeconds: Math.max(1, Math.ceil((Date.now() - responseStartedAt) / 1000)) })
+        },
         onEvent: e => {
           if (e.type === 'text' && e.delta) {
             liveStage = 'answering'

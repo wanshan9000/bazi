@@ -68,6 +68,22 @@ test('run 收集文本并在 idle 结束', async () => {
   await pool.close()
 })
 
+test('run 在连接、引擎就绪和请求投递时报告安全进度', async () => {
+  const client = fakeClient(sid => [idle(sid)])
+  const pool = new DshPool({ createClient: () => client })
+  const progress = []
+  await pool.run({
+    routeKey: DEFAULT_ROUTE,
+    sessionId: 'progress-route',
+    text: '测试进度',
+    onEvent: () => {},
+    onProgress: event => progress.push(event),
+  })
+  assert.deepEqual(progress.map(event => event.stage), ['engine_connecting', 'engine_ready', 'engine_requested'])
+  assert.ok(progress.every(event => Number.isFinite(event.elapsedMs) && event.elapsedMs >= 0))
+  await pool.close()
+})
+
 test('同一 session 并发 run 被拒绝', async () => {
   const client = fakeClient(sid => [])
   const pool = new DshPool({ createClient: () => client })

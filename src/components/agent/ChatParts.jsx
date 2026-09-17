@@ -141,10 +141,13 @@ export function ThinkBlock({ content, streaming = false, collapseWhenStreamingTe
   useLayoutEffect(() => {
     if (collapseWhenStreamingText) setOpen(false)
   }, [collapseWhenStreamingText])
+  // 浏览器在后台或低电量模式下会节流前端计时器。服务端保活带来的耗时是权威兜底，
+  // 因此用户切回页面后不会看到一个停在旧秒数的“解读中”。
+  const visibleElapsed = Math.max(elapsed, Number(heartbeat?.elapsedSeconds) || 0)
   const label = locale === 'en' ? (streaming
-    ? `${heartbeat ? 'Connected · ' : ''}Reading · ${Math.max(1, elapsed)}s`
+    ? `${heartbeat ? 'Connected · ' : ''}Reading · ${Math.max(1, visibleElapsed)}s`
     : elapsed ? `Reading complete · ${elapsed}s` : 'Reading progress') : streaming
-    ? `${heartbeat ? '连接正常 · ' : ''}解读中 · ${Math.max(1, elapsed)} 秒`
+    ? `${heartbeat ? '连接正常 · ' : ''}解读中 · ${Math.max(1, visibleElapsed)} 秒`
     : elapsed ? `解读完成 · ${elapsed} 秒` : '解读进度'
   const steps = String(content || '').split('\n').map(item => item.trim()).filter(Boolean)
   return (

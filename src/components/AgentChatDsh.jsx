@@ -62,7 +62,7 @@ export function normalizeAgentSeed(input, fallback = '') {
 export function safeThinkStep(type, toolName = '', locale = 'zh-CN') {
   if (locale === 'en') {
     const stages = {
-      start: 'Request received. Identifying the reading topic…', session_ready: 'Conversation ready. Connecting the reading engine…', context_ready: 'Conversation context is ready. Checking whether a chart or prior report is needed…', engine_requested: 'Reading request sent. Waiting for the first response…', reasoning: 'Reviewing the relevant chart relationships and key facts…\nCross-checking the available information…', answering: 'Organizing the key conclusion and practical guidance…\nChecking that the reply directly addresses your question…', completed: 'Reading complete. You can ask a follow-up question.',
+      start: 'Request received. Identifying the reading topic…', session_ready: 'Conversation ready. Preparing this consultation…', context_ready: 'Conversation context is ready. Checking whether a chart or prior report is needed…', engine_connecting: 'Connecting the reading engine…', engine_ready: 'Reading engine is ready. Delivering your request…', engine_requested: 'Reading request delivered. Waiting for the first response…', reasoning: 'Reviewing the relevant chart relationships and key facts…\nCross-checking the available information…', answering: 'Organizing the key conclusion and practical guidance…\nChecking that the reply directly addresses your question…', completed: 'Reading complete. You can ask a follow-up question.',
     }
     const calls = { bazi: 'Calculating the Four Pillars and luck cycles…', ziwei: 'Calculating the Ziwei chart and twelve palaces…', qimen: 'Casting the Qimen chart and reviewing the pattern…', liuyao: 'Casting the hexagram and reviewing changing lines…', huangli: 'Checking the date and Almanac guidance…', tarot: 'Reviewing the spread and card positions…', fengshui: 'Reviewing space, direction, and movement…', name: 'Reviewing name structure and element balance…', wuyunliuqi: 'Reviewing seasonal wellness factors…' }
     const results = { bazi: 'Four Pillars data returned. Checking its relevance to this question…', ziwei: 'Ziwei chart data returned. Checking palace and star relationships…', qimen: 'Qimen chart returned. Checking the relevant signifiers…', liuyao: 'Hexagram returned. Checking the changing-line relationship…', huangli: 'Date guidance confirmed. Converting it into practical advice…', tarot: 'Spread details are ready. Relating the positions to your question…', fengshui: 'Space details are ready. Preparing actionable suggestions…', name: 'Name details are ready. Organizing the key points…', wuyunliuqi: 'Wellness factors are ready. Organizing daily recommendations…' }
@@ -72,6 +72,8 @@ export function safeThinkStep(type, toolName = '', locale = 'zh-CN') {
   if (type === 'start') return '已接收咨询，正在识别本次解读主题…'
   if (type === 'session_ready') return '已建立本次咨询会话，正在接入解读引擎…'
   if (type === 'context_ready') return '已同步本轮会话上下文与可用资料…\n正在确认本次问题是否需要命盘或历史报告辅助判断…'
+  if (type === 'engine_connecting') return '正在连接解读引擎…\n连接建立后将立即提交本次咨询…'
+  if (type === 'engine_ready') return '解读引擎已就绪…\n正在提交本次咨询并等待接收确认…'
   if (type === 'engine_requested') return '已将咨询主题与上下文提交给解读引擎…\n正在等待模型返回首个推断片段…'
   if (type === 'reasoning') return '模型已开始推断，正在梳理命盘关系与问题重点…\n正在对照已有资料，检查关键信息是否一致…\n正在提取与本次问题最相关的判断依据…\n正在交叉核验信息之间的关联…'
   if (type === 'answering') return '已收到模型正文，正在整理核心判断…\n正在把判断转成清晰、可执行的建议…\n正在检查结论是否直接回应本次问题…'
@@ -297,8 +299,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
               break
             case 'progress': patchLast(m => appendSafeThinkStep(m, safeThinkStep(e.stage, '', locale))); break
             case 'heartbeat':
-              patchLast(m => ({
-                ...m,
+              patchLast(m => ({ ...appendSafeThinkStep(m, safeThinkStep(e.stage, '', locale)),
                 heartbeat: { stage: e.stage, elapsedSeconds: e.elapsedSeconds, at: Date.now() },
               }))
               break

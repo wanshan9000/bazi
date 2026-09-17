@@ -55,10 +55,36 @@ test('chat 流式返回并镜像消息', async () => {
     const body = await res.text()
     const frames = body.split('\n\n').filter(Boolean).map(l => JSON.parse(l.replace(/^data: /, '')))
     assert.equal(frames[0].type, 'session')
-    assert.deepEqual(frames.filter(frame => frame.type === 'progress').map(frame => frame.stage), ['session_ready', 'context_ready', 'engine_requested'])
+    assert.deepEqual(frames.filter(frame => frame.type === 'progress').map(frame => frame.stage), ['session_ready', 'context_ready'])
+    assert.equal(frames.find(frame => frame.type === 'heartbeat')?.elapsedSeconds, 1, '首个连通状态不应等待定时器')
     assert.equal(frames.at(-1).type, 'done')
     const msgs = store.listMessages(me.id, frames[0].sessionId)
     assert.deepEqual(msgs.map(m => [m.role, m.text]), [['user', '嗨'], ['ai', '你好']])
+  } finally { srv.close() }
+})
+
+test('DSH 生命周期进度在首段答案之前立即透传给客户端', async () => {
+  const pool = {
+    isBusy: () => false,
+    async run({ onEvent, onProgress }) {
+      onProgress({ stage: 'engine_connecting' })
+      onProgress({ stage: 'engine_ready' })
+      onProgress({ stage: 'engine_requested' })
+      onEvent({ type: 'text', delta: '已收到。' })
+      return { finalText: '已收到。', usage: null, title: null }
+    },
+  }
+  const { app, accounts } = mkApp(pool)
+  const me = await mkUser(accounts, 'progress-user')
+  const { srv, base } = await listen(app)
+  try {
+    const res = await fetch(`${base}/api/agent/chat`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify({ text: '看看事业' }),
+    })
+    const frames = sseFrames(await res.text())
+    const stages = frames.filter(frame => frame.type === 'progress').map(frame => frame.stage)
+    assert.deepEqual(stages, ['session_ready', 'context_ready', 'engine_connecting', 'engine_ready', 'engine_requested'])
+    assert.ok(frames.findIndex(frame => frame.type === 'progress' && frame.stage === 'engine_requested') < frames.findIndex(frame => frame.type === 'text'))
   } finally { srv.close() }
 })
 
