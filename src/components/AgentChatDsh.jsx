@@ -112,6 +112,14 @@ export function appendSafeThinkStep(message, step) {
   return { ...message, reasoning: [...currentSteps, ...additions].join('\n') }
 }
 
+// 状态恢复、热更新和最终渲染都使用同一个判断。即使旧消息绕过了状态迁移，
+// 也绝不能把结构化协议的 JSON 原文直接呈现给用户。
+export function renderableAgentAnswer(message) {
+  if (!message || message.role !== 'ai' || message.streaming) return null
+  if (message.answer && typeof message.answer === 'object' && typeof message.answer.summary === 'string') return message.answer
+  return parseStructuredAnswerText(message.text)
+}
+
 function readAgentRoutePreference() {
   try {
     const stored = localStorage.getItem(ROUTE_KEY)
@@ -206,8 +214,8 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     setMessages(prev => {
       let recovered = false
       const next = prev.map(message => {
-        if (message.role !== 'ai' || message.streaming || message.answer || !message.text) return message
-        const answer = parseStructuredAnswerText(message.text)
+        if (message.answer || !message.text) return message
+        const answer = renderableAgentAnswer(message)
         if (!answer) return message
         recovered = true
         return { ...message, answer, text: '' }
@@ -569,7 +577,9 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
       </div>
 
       <div className="chat-scroll" ref={scrollRef} onScroll={handleChatScroll}>
-        {messages.map(m => (
+        {messages.map(m => {
+          const answer = renderableAgentAnswer(m)
+          return (
           <div key={m.id} className={`msg ${m.role}`}>
             <div className="avatar">{m.role === 'ai' ? '三' : m.role === 'tool' ? '🔧' : agentCopy(locale, 'you', '我')}</div>
             <div className="msg-content">
@@ -585,9 +595,9 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
                 <ToolCallsBlock names={m.text} locale={locale} />
               ) : (
                 <div className={`bubble ${m.streaming ? 'bubble-streaming' : ''}`}>
-                  {m.reasoning ? <ThinkBlock content={m.reasoning} streaming={!!m.streaming} collapseWhenStreamingText={Boolean(m.text || m.answer)} heartbeat={m.heartbeat} locale={locale} /> : null}
+                  {m.reasoning ? <ThinkBlock content={m.reasoning} streaming={!!m.streaming} collapseWhenStreamingText={Boolean(m.text || answer)} heartbeat={m.heartbeat} locale={locale} /> : null}
                   {m.tools && m.tools.length > 0 ? <ToolCallsBlock tools={m.tools} streaming={!!m.streaming} heartbeat={m.heartbeat} locale={locale} /> : null}
-                  {m.answer ? <StructuredAnswer answer={m.answer} /> : m.streaming && !m.text ? (
+                  {answer ? <StructuredAnswer answer={answer} /> : m.streaming && !m.text ? (
                     <span className="typing"><i /><i /><i /></span>
                   ) : (
                     <>{renderAiText(m.role === 'user' ? (m.displayText || m.text) : m.text, !!m.streaming, { suppressThinkBlocks: Boolean(m.reasoning) })}{m.streaming && <span className="stream-cursor">▍</span>}</>
@@ -596,7 +606,8 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
               )}
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       <div className="quick-grid">

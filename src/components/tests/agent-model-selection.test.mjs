@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { render, flush } from '../../test/render.mjs'
 
-const { default: AgentChatDsh, resolveAgentRoute, serializeAgentRoute, safeThinkStep, appendSafeThinkStep, displaySessionTitle } = await import('../AgentChatDsh.jsx')
+const { default: AgentChatDsh, resolveAgentRoute, serializeAgentRoute, safeThinkStep, appendSafeThinkStep, displaySessionTitle, renderableAgentAnswer } = await import('../AgentChatDsh.jsx')
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -61,6 +61,19 @@ test('会话标题不会展示内部输出语言控制文案', () => {
   assert.equal(displaySessionTitle('【输出语言】所有面向用户的摘要一律使用简体中文'), '本次咨询')
   assert.equal(displaySessionTitle('【輸出語言】所有面向使用者的摘要一律使用繁體中文', 'zh-TW'), '本次咨询')
   assert.equal(displaySessionTitle('【Output language】Write every user-facing summary in English', 'en'), 'Session')
+})
+
+test('最终渲染仍会恢复旧消息中的异常 JSON，不能直接显示协议原文', () => {
+  const message = {
+    role: 'ai', streaming: false,
+    text: `{"version":1,"summary":"庚辰大运对应偏印透出。","sections":[{"title":"本义","items":[{"label":"提示","text":"资源等\"被生\"的力量来到台前。"}]}],"closing":"先借力再发力。"}`,
+  }
+  assert.deepEqual(renderableAgentAnswer(message), {
+    version: 1,
+    summary: '庚辰大运对应偏印透出。',
+    sections: [{ title: '本义', items: [{ label: '提示', text: '资源等“被生”的力量来到台前。' }] }],
+    closing: '先借力再发力。',
+  })
 })
 
 test('模型列表晚到时不会清空已恢复的历史会话', async () => {
