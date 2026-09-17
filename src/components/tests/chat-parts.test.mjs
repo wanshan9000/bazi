@@ -56,6 +56,16 @@ test('旧服务文本中的未转义术语引号也能恢复固定字段答案',
   })
 })
 
+test('已保存消息混入说明文字时仍提取并恢复固定字段答案', () => {
+  const raw = '以下是本次结论：\n{"version":1,"summary":"庚辰大运带来调整。","sections":[],"closing":"先稳住节奏。"}\n以上供参考。'
+  assert.deepEqual(parseStructuredAnswerText(raw), {
+    version: 1,
+    summary: '庚辰大运带来调整。',
+    sections: [],
+    closing: '先稳住节奏。',
+  })
+})
+
 test('解读过程按阶段列表展示，而不是一段空白说明', () => {
   const r = render(ThinkBlock, {
     content: '已接收咨询，正在确认解读主题…\n正在核对已知资料与命盘信息…',

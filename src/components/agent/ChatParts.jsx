@@ -12,6 +12,12 @@ export function parseStructuredAnswerText(raw) {
   source = source.replace(/^<output[^>]*>/i, '').replace(/<\/output>$/i, '').trim()
   const fenced = source.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
   if (fenced) source = fenced[1].trim()
+  // 已保存的旧会话可能在 JSON 前后混入了模型的说明文字。与服务端保持同一提取
+  // 规则，只解析最外层对象，避免把协议原文留在气泡中。
+  const first = source.indexOf('{')
+  const last = source.lastIndexOf('}')
+  source = first >= 0 && last > first ? source.slice(first, last + 1) : ''
+  if (!source) return null
   const repairInlineQuotes = value => {
     let output = ''
     let inString = false

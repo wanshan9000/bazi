@@ -200,6 +200,21 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     const el = scrollRef.current
     if (el && followScrollRef.current) el.scrollTop = el.scrollHeight
   }, [messages, typing])
+  // 历史消息有时在热更新前已经进入浏览器状态，因而不会再次走 restore()。
+  // 对已完成的 AI 消息做一次幂等恢复，让旧 JSON 信封也进入固定字段渲染。
+  useEffect(() => {
+    setMessages(prev => {
+      let recovered = false
+      const next = prev.map(message => {
+        if (message.role !== 'ai' || message.streaming || message.answer || !message.text) return message
+        const answer = parseStructuredAnswerText(message.text)
+        if (!answer) return message
+        recovered = true
+        return { ...message, answer, text: '' }
+      })
+      return recovered ? next : prev
+    })
+  }, [messages])
   useEffect(() => {
     if (!pickerOpen) return
     const close = () => setPickerOpen(false)
