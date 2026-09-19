@@ -10,17 +10,17 @@ const COPY = {
   'zh-CN': {
     'nav.home': '首页', 'nav.agent': '元氣AI', 'nav.bazi': '八字', 'nav.huangli': '黄历', 'nav.ziwei': '紫微', 'nav.tarot': '塔罗', 'nav.wenku': '文库', 'nav.profile': '我的',
     'brand': '元氣满满', 'auth.login': '登录', 'profile.credits': '查看 Token 积分余额', 'profile.title': '我的元氣',
-    'language': '语言', 'language.aria': '切换显示语言', 'loading': '页面载入中', 'common.back': '返回', 'common.backHome': '返回首页', 'agent.title': '元氣', 'agent.subtitle': '问三门 · 八字 · 紫微，两门通晓', 'agent.languageNote': 'Agent 会以所选语言回复；盘面术语保留原文。',
+    'language': '语言', 'language.aria': '切换显示语言', 'loading': '页面载入中', 'common.back': '返回', 'common.backHome': '返回首页', 'agent.title': '元氣', 'agent.subtitle': '随时在身边的玄学 AI 助手', 'agent.languageNote': 'Agent 会以所选语言回复；盘面术语保留原文。',
   },
   'zh-TW': {
     'nav.home': '首頁', 'nav.agent': '元氣AI', 'nav.bazi': '八字', 'nav.huangli': '黃曆', 'nav.ziwei': '紫微', 'nav.tarot': '塔羅', 'nav.wenku': '文庫', 'nav.profile': '我的',
     'brand': '元氣滿滿', 'auth.login': '登入', 'profile.credits': '查看 Token 積分餘額', 'profile.title': '我的元氣',
-    'language': '語言', 'language.aria': '切換顯示語言', 'loading': '頁面載入中', 'common.back': '返回', 'common.backHome': '返回首頁', 'agent.title': '元氣', 'agent.subtitle': '問三門 · 八字 · 紫微，兩門通曉', 'agent.languageNote': 'Agent 會以所選語言回覆；盤面術語保留原文。',
+    'language': '語言', 'language.aria': '切換顯示語言', 'loading': '頁面載入中', 'common.back': '返回', 'common.backHome': '返回首頁', 'agent.title': '元氣', 'agent.subtitle': '隨時在身邊的玄學 AI 助手', 'agent.languageNote': 'Agent 會以所選語言回覆；盤面術語保留原文。',
   },
   en: {
     'nav.home': 'Home', 'nav.agent': 'AI Agent', 'nav.bazi': 'Bazi', 'nav.huangli': 'Almanac', 'nav.ziwei': 'Ziwei', 'nav.tarot': 'Tarot', 'nav.wenku': 'Library', 'nav.profile': 'Profile',
     'brand': 'Genki', 'auth.login': 'Sign in', 'profile.credits': 'View Token credits', 'profile.title': 'My Genki',
-    'language': 'Language', 'language.aria': 'Change display language', 'loading': 'Loading page', 'common.back': 'Back', 'common.backHome': 'Back to home', 'agent.title': 'Genki', 'agent.subtitle': 'Bazi and Ziwei, clearly explained', 'agent.languageNote': 'Agent replies in your selected language; chart terms remain in their original form.',
+    'language': 'Language', 'language.aria': 'Change display language', 'loading': 'Loading page', 'common.back': 'Back', 'common.backHome': 'Back to home', 'agent.title': 'Genki', 'agent.subtitle': 'Your always-available Chinese metaphysics AI assistant', 'agent.languageNote': 'Agent replies in your selected language; chart terms remain in their original form.',
   },
 }
 

@@ -7,11 +7,12 @@
 
 ## 搜索收录
 
-生产站唯一规范域名是 `https://keymm.me`。公开功能页可直接访问 `/bazi`、`/ziwei`、`/huangli`、`/ai-bazi`、`/tarot`、`/fengshui`、`/name` 与 `/wenku`；旧的 `#/` 地址仍兼容。
+生产站唯一规范域名是 `https://keymm.me`。公开功能页可直接访问 `/bazi`、`/ziwei`、`/huangli`、`/ai-bazi`、`/tarot`、`/fengshui`、`/name`、`/wenku`、中文八字入门 `/learn/bazi-basics` 与英文 BaZi 指南 `/learn/bazi-four-pillars`；旧的 `#/` 地址仍兼容。
 
 - `https://keymm.me/robots.txt` 允许公开页面抓取，禁止 API、登录、账户、报告与管理页。
-- `npm run build` 会额外生成首页、`/bazi`、`/ziwei`、`/huangli`、`/ai-bazi`、`/tarot`、`/fengshui`、`/name`、`/wenku` 的独立 HTML。Caddy 会优先返回这些静态页，React 加载后再接管交互，因此百度等不执行 JavaScript 的抓取器仍能读取正文、title、description、canonical 和 JSON-LD。
+- `npm run build` 会为所有公开页面生成独立 HTML。Caddy 会优先返回这些静态页，React 加载后再接管交互，因此不执行 JavaScript 的抓取器仍能读取正文、title、description、canonical 和 JSON-LD；中英文 BaZi 指南均提供 `Article`、`FAQPage` 与 `WebApplication` 结构化数据。
 - `https://keymm.me/sitemap.xml` 列出首页和核心公开落地页；发布后在 Google Search Console 与百度搜索资源平台分别添加 `keymm.me` 域名资源，完成验证并提交此地址。
+- `https://keymm.me/llms.txt` 提供面向 AI 检索器的公开资源索引。它是补充说明，不替代可抓取正文、结构化数据、真实产品质量或第三方引用。
 - 不要为排名批量生成同质化或无实际内容的页面；持续发布有作者、日期、事实来源和实际解读价值的文库文章。微信公众号搜一搜与普通网页收录是两套体系，仍需通过已认证公众号或小程序发布原创内容。
 
 ## 快速开始

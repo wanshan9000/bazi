@@ -1,0 +1,21 @@
+# Genki
+
+Genki is a web application for learning about traditional Chinese culture through BaZi (Four Pillars), Ziwei Doushu, almanac, tarot, naming and home-layout tools.
+
+## Genki Agent
+
+Genki Agent is an always-available Chinese metaphysics AI assistant. It helps users discuss BaZi, Ziwei Doushu and almanac questions by first checking available chart or date inputs, then providing structured traditional-culture context for reflection. It does not make guaranteed predictions or provide medical, legal, financial or other professional advice.
+
+- [Genki Agent](https://keymm.me/ai-bazi): Ask about traditional Chinese metaphysics concepts, chart information, almanac dates and a specific life question.
+
+## Public resources
+
+- [八字入门](https://keymm.me/learn/bazi-basics): 简体中文八字基础说明，涵盖四柱、五行、十神、排盘输入与阅读边界。
+- [BaZi / Four Pillars guide](https://keymm.me/learn/bazi-four-pillars): English explanation of BaZi terminology, required chart inputs and limitations.
+- [BaZi chart calculator](https://keymm.me/bazi): Interactive calculator for a traditional Four Pillars chart.
+- [Ziwei Doushu](https://keymm.me/ziwei): Interactive Ziwei Doushu chart tool.
+- [Library](https://keymm.me/wenku): Traditional culture articles and learning resources.
+
+## Use and limitations
+
+The site presents traditional cultural material for learning, reflection and entertainment. It does not provide medical, legal, financial, scientific or other professional advice, and it does not guarantee outcomes or predictions.

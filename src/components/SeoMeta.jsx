@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { SITE_URL, publicPathForView, seoRoute, shouldIndex } from '../seo.js'
+import { structuredDataForPage } from '../seo-pages.js'
 
 function setMeta(selector, attributes) {
   let node = document.head.querySelector(selector)
@@ -39,15 +40,7 @@ export default function SeoMeta({ view, articleId }) {
       structured.type = 'application/ld+json'
       document.head.appendChild(structured)
     }
-    structured.textContent = JSON.stringify({
-      '@context': 'https://schema.org',
-      '@type': view === 'wenku' ? 'CollectionPage' : 'WebPage',
-      name: seo.title,
-      description: seo.description,
-      url: canonicalUrl,
-      isPartOf: { '@type': 'WebSite', name: '元氣满满', url: SITE_URL },
-      inLanguage: 'zh-CN',
-    })
+    structured.textContent = JSON.stringify(structuredDataForPage(seo, canonicalUrl, SITE_URL))
   }, [articleId, view])
 
   return null

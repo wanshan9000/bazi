@@ -104,11 +104,80 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 700; }
 .seo-prerender-links { display: flex; flex-wrap: wrap; gap: 10px 16px; margin: 25px 0 20px; }
 .seo-prerender-links a { color: var(--cinnabar-deep); font-size: 14px; text-decoration: none; }
 .seo-prerender-disclaimer { border-top: 1px solid var(--ink-line-soft); padding-top: 16px; }
+.seo-prerender dl { display: grid; gap: 10px; }
+.seo-prerender dt { color: var(--ink); font-weight: 700; }
+.seo-prerender dd { margin: 2px 0 0; color: var(--ink-soft); }
+.seo-prerender ol { padding-left: 20px; color: var(--ink-soft); }
+.seo-prerender details { padding: 12px 0; border-top: 1px solid var(--ink-line-soft); }
+.seo-prerender summary { color: var(--ink); cursor: pointer; font-weight: 700; }
+.seo-prerender details p { margin: 6px 0 0; }
 @media (max-width: 520px) {
   .seo-prerender { width: min(100% - 32px, 760px); padding-top: 28px; }
   .seo-prerender header { display: block; }
   .seo-prerender header p { margin-top: 2px; }
   .seo-prerender article { padding-top: 30px; }
+}
+
+/* BaZi English guide: restrained editorial page for a citation-friendly public resource. */
+.bazi-guide { width: min(100% - 32px, 1040px); margin: 0 auto; padding: 34px 0 78px; color: var(--ink); font-family: Georgia, 'Times New Roman', serif; letter-spacing: normal; }
+.bazi-guide * { letter-spacing: normal; }
+.bazi-guide-hero { position: relative; overflow: hidden; min-height: 560px; padding: clamp(26px, 6vw, 72px); border: 1px solid rgba(199, 74, 115, .32); background: #f9e6ec; }
+.bazi-guide-hero::before { content: ''; position: absolute; inset: 0; opacity: .25; background-image: linear-gradient(90deg, rgba(199,74,115,.18) 1px, transparent 1px), linear-gradient(rgba(199,74,115,.18) 1px, transparent 1px); background-size: 48px 48px; pointer-events: none; }
+.bazi-guide-frame { position: relative; max-width: 650px; }
+.bazi-guide-back { display: inline-flex; align-items: center; gap: 8px; padding: 0; border: 0; background: transparent; color: var(--ink); font: 700 12px/1 var(--latin); letter-spacing: .12em; cursor: pointer; }
+.bazi-guide-mark { position: absolute; top: 0; right: -260px; width: 94px; height: 94px; padding: 10px; border: 1px solid rgba(199,74,115,.35); background: rgba(255,255,255,.7); transform: rotate(8deg); }
+.bazi-guide-mark img { width: 100%; height: 100%; object-fit: contain; }
+.bazi-guide-kicker { margin-top: clamp(76px, 12vw, 128px); color: #a45c75; font: 700 11px/1.4 var(--latin); letter-spacing: .15em; }
+.bazi-guide h1 { margin: 12px 0 16px; color: var(--ink); font: 500 clamp(62px, 12vw, 118px)/.82 Georgia, 'Times New Roman', serif; }
+.bazi-guide h1 em { color: var(--cinnabar); font-style: italic; }
+.bazi-guide-deck { max-width: 540px; font-size: clamp(18px, 2.4vw, 24px); line-height: 1.4; }
+.bazi-guide-actions { display: flex; flex-wrap: wrap; gap: 13px; align-items: center; margin-top: 34px; }
+.bazi-guide-primary, .bazi-guide-close button { display: inline-flex; align-items: center; gap: 20px; border: 1px solid var(--cinnabar-deep); border-radius: 0; padding: 13px 16px; color: #fff; background: var(--cinnabar-deep); font: 700 13px/1.2 var(--latin); cursor: pointer; transition: transform .2s var(--ease), background .2s; }
+.bazi-guide-primary:hover, .bazi-guide-close button:hover { background: #a83d61; border-color: #a83d61; transform: translateY(-2px); }
+.bazi-guide-primary span, .bazi-guide-close span { font-size: 18px; line-height: .8; }
+.bazi-guide-secondary { border: 0; padding: 0; color: var(--ink); background: transparent; font: 700 13px/1.2 var(--latin); text-decoration-color: var(--cinnabar); text-underline-offset: 4px; cursor: pointer; }
+.bazi-guide-note { margin-top: 22px; color: #9e7484; font: 12px/1.5 var(--latin); }
+.bazi-guide-section { display: grid; grid-template-columns: minmax(135px, .72fr) minmax(0, 2fr); gap: clamp(22px, 5vw, 76px); padding: clamp(38px, 6vw, 76px) 0; border-bottom: 1px solid rgba(199,74,115,.27); }
+.bazi-guide-index { color: var(--cinnabar-deep); font: 700 11px/1.4 var(--latin); letter-spacing: .12em; }
+.bazi-guide-section h2 { margin: 0 0 20px; color: var(--ink); font: 500 clamp(30px, 4vw, 46px)/1.04 Georgia, 'Times New Roman', serif; }
+.bazi-guide-section p { max-width: 660px; margin: 0 0 14px; color: #745866; font-size: 17px; line-height: 1.62; }
+.bazi-guide-terms dl { border-top: 1px solid rgba(199,74,115,.27); }
+.bazi-guide-terms dl > div { display: grid; grid-template-columns: minmax(145px, .75fr) minmax(0, 1.65fr); gap: 20px; padding: 17px 0; border-bottom: 1px solid rgba(199,74,115,.27); }
+.bazi-guide-terms dt { color: var(--ink); font-size: 16px; font-weight: 700; }
+.bazi-guide-terms dd { margin: 0; color: #745866; font-size: 16px; line-height: 1.5; }
+.bazi-guide-method ol { list-style: none; counter-reset: guide-step; }
+.bazi-guide-method li { display: grid; grid-template-columns: 42px 1fr; gap: 14px; padding: 15px 0; border-top: 1px solid rgba(199,74,115,.27); }
+.bazi-guide-method li:last-child { border-bottom: 1px solid rgba(199,74,115,.27); }
+.bazi-guide-method li span { color: var(--cinnabar-deep); font: 700 12px/1.6 var(--latin); }
+.bazi-guide-method li p { margin: 0; }
+.bazi-guide-method aside { margin-top: 26px; padding: 20px; border-left: 3px solid var(--cinnabar); background: #fbeef2; }
+.bazi-guide-method aside strong { display: block; margin-bottom: 4px; color: var(--ink); font: 700 14px/1.5 var(--latin); }
+.bazi-guide-method aside p { margin: 0; font-size: 15px; }
+.bazi-guide-faq details { border-top: 1px solid rgba(199,74,115,.27); }
+.bazi-guide-faq details:last-child { border-bottom: 1px solid rgba(199,74,115,.27); }
+.bazi-guide-faq summary { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 17px 0; color: var(--ink); cursor: pointer; font: 700 17px/1.35 Georgia, 'Times New Roman', serif; list-style: none; }
+.bazi-guide-faq summary::-webkit-details-marker { display: none; }
+.bazi-guide-faq summary span { color: var(--cinnabar-deep); font: 400 24px/1 var(--latin); }
+.bazi-guide-faq details[open] summary span { transform: rotate(45deg); }
+.bazi-guide-faq details p { padding-bottom: 16px; }
+.bazi-guide-close { margin: clamp(38px, 7vw, 86px) auto 0; max-width: 760px; padding: clamp(30px, 6vw, 64px); text-align: center; color: #fff; background: var(--cinnabar); }
+.bazi-guide-close p { margin-bottom: 18px; font-size: clamp(23px, 4vw, 38px); line-height: 1.1; }
+.bazi-guide-close button { border-color: #fff; background: transparent; }
+@media (max-width: 620px) {
+  .bazi-guide { width: min(100% - 24px, 1040px); padding-top: 18px; }
+  .bazi-guide-hero { min-height: 510px; padding: 25px; }
+  .bazi-guide-mark { right: 4px; width: 62px; height: 62px; }
+  .bazi-guide-kicker { margin-top: 94px; max-width: 200px; }
+  .bazi-guide h1 { font-size: 66px; }
+  .bazi-guide-section { grid-template-columns: 1fr; gap: 16px; }
+  .bazi-guide-terms dl > div { grid-template-columns: 1fr; gap: 5px; }
+}
+
+/* 中文八字入门页统一使用站内黑体字族，英文指南保留其编辑式衬线排版。 */
+.bazi-guide.bazi-basics,
+.bazi-guide.bazi-basics * {
+  font-family: var(--sans);
+  font-style: normal;
 }
 
 /* ============ 应用壳层 ============ */

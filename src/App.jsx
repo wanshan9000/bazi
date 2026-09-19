@@ -15,6 +15,8 @@ import { publicPathForView, routeFromPath } from './seo.js'
 
 // 首屏只需要首页和应用壳；具体阅读、排盘与管理页进入后才下载。
 const BaziPage = lazy(() => import('./components/BaziPage.jsx'))
+const BaziGuidePage = lazy(() => import('./components/BaziGuidePage.jsx'))
+const BaziBasicsPage = lazy(() => import('./components/BaziBasicsPage.jsx'))
 const ZiweiPage = lazy(() => import('./components/ZiweiPage.jsx'))
 const ChengguPage = lazy(() => import('./components/ChengguPage.jsx'))
 const NamePage = lazy(() => import('./components/NamePage.jsx'))
@@ -250,7 +252,7 @@ export default function App() {
   //  · 有渲染分支、但名单里没有 → goNav 不写 hash，刷新后回落首页
   //    （此前的 astro、fengshui、register，已补上）。
   const HASH_VIEWS = ['home', 'agent', 'bazi', 'ziwei', 'qimen', 'chenggu', 'huangli',
-    'name', 'fengshui', 'astro', 'tarot', 'tarot-reading', 'wenku', 'article',
+    'name', 'fengshui', 'astro', 'tarot', 'tarot-reading', 'wenku', 'article', 'baziGuide', 'baziBasics',
     'profile', 'reports', 'report-detail', 'login', 'register', 'forgot-password', 'terms', 'privacy', 'admin', 'share']
 
   // 启动时检测 URL hash：
@@ -523,6 +525,8 @@ export default function App() {
             onReportReady={saveReportArchive}
           />
         ))}
+        {view === 'baziGuide' && <BaziGuidePage onBack={() => goNav('home')} onStartCalculator={() => goNav('bazi')} onOpenAgent={() => goNav('agent')} />}
+        {view === 'baziBasics' && <BaziBasicsPage onBack={() => goNav('home')} onStartCalculator={() => goNav('bazi')} onOpenAgent={() => goNav('agent')} />}
         {view === 'huangli' && (archiveReportId ? (
           <NativeReportHistory view="huangli" reportId={archiveReportId} onBack={() => goNav('reports')} onAskAgent={openReportAgent} onOpenSession={sessionId => { setAgentReportId(null); setAgentSessionId(sessionId); goNav('agent') }} onDeleted={() => goNav('reports')} />
         ) : (
@@ -821,6 +825,8 @@ function TailBand({ onNav, hideOnMobile, user }) {
             <p className="tail-col-title">{l('发现更多', 'Discover')}</p>
             <ul>
               <li><a onClick={() => onNav('wenku')}>{l('文库精选', 'Library')}</a></li>
+              <li><a onClick={() => onNav('baziBasics')}>{l('八字入门', 'BaZi basics')}</a></li>
+              <li><a onClick={() => onNav('baziGuide')}>{l('BaZi 英文指南', 'BaZi guide')}</a></li>
               <li><a onClick={() => onNav('huangli')}>{l('订阅黄历', 'Almanac')}</a></li>
               <li><a onClick={() => onNav('profile')}>{l('我的元氣', 'My Genki')}</a></li>
             </ul>

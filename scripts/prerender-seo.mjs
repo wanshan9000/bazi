@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { DEFAULT_SITE_URL, SEO_ROUTES } from '../src/seo-pages.js'
+import { DEFAULT_SITE_URL, SEO_ROUTES, structuredDataForPage } from '../src/seo-pages.js'
 
 const DIST_DIR = new URL('../dist/', import.meta.url)
 const siteUrl = (process.env.VITE_SITE_URL || DEFAULT_SITE_URL).replace(/\/$/, '')
@@ -19,23 +19,48 @@ function replaceTag(html, pattern, value) {
   return html.replace(pattern, value)
 }
 
+function guideBody(page) {
+  const guide = page.guide
+  if (!guide) return ''
+  const labels = page.language === 'en'
+    ? ['Key terms', 'How to read a chart responsibly', 'Frequently asked questions']
+    : ['核心术语', '如何稳妥地阅读命盘', '常见问题']
+  const terms = guide.terms.map(([term, definition]) => `<dt>${escapeHtml(term)}</dt><dd>${escapeHtml(definition)}</dd>`).join('')
+  const steps = guide.steps.map(step => `<li>${escapeHtml(step)}</li>`).join('')
+  const faqs = guide.faqs.map(([question, answer]) => `<details><summary>${escapeHtml(question)}</summary><p>${escapeHtml(answer)}</p></details>`).join('')
+  return `
+      <section><h2>${labels[0]}</h2><dl>${terms}</dl></section>
+      <section><h2>${labels[1]}</h2><ol>${steps}</ol></section>
+      <section><h2>${labels[2]}</h2>${faqs}</section>`
+}
+
+function faqBody(page) {
+  if (!page.faqs?.length) return ''
+  const heading = page.language === 'en' ? 'Frequently asked questions' : '常见问题'
+  const faqs = page.faqs.map(([question, answer]) => `<details><summary>${escapeHtml(question)}</summary><p>${escapeHtml(answer)}</p></details>`).join('')
+  return `\n      <section><h2>${heading}</h2>${faqs}</section>`
+}
+
 function staticBody(page) {
   const sections = page.sections.map(([heading, content]) => `
         <section>
           <h2>${escapeHtml(heading)}</h2>
           <p>${escapeHtml(content)}</p>
         </section>`).join('')
+  const agentLink = page.path === '/ai-bazi'
+    ? ''
+    : `<a href="/ai-bazi">${page.language === 'en' ? 'Ask Genki Agent' : '咨询元氣 Agent'}</a>`
   return `<div id="root" data-seo-prerendered="true">
   <main class="seo-prerender" aria-label="${escapeHtml(page.heading)}">
     <header>
-      <a href="/" aria-label="元氣满满首页">元氣满满</a>
-      <p>随时在身边的玄学助手</p>
+      <a href="/" aria-label="Genki home">GENKI</a>
+      <p>${page.language === 'en' ? 'Traditional culture, clearly explained' : '随时在身边的玄学助手'}</p>
     </header>
     <article>
       <h1>${escapeHtml(page.heading)}</h1>
-      <p class="seo-prerender-summary">${escapeHtml(page.summary)}</p>${sections}
-      <p class="seo-prerender-links"><a href="/bazi">八字排盘</a><a href="/ziwei">紫微斗数</a><a href="/huangli">黄历</a><a href="/ai-bazi">元氣AI</a><a href="/wenku">命理文库</a></p>
-      <p class="seo-prerender-disclaimer">本站内容仅供传统文化学习与娱乐参考，不构成医疗、投资、法律或其他专业建议。</p>
+      <p class="seo-prerender-summary">${escapeHtml(page.summary)}</p>${sections}${guideBody(page)}${faqBody(page)}
+      <p class="seo-prerender-links"><a href="/bazi">${page.language === 'en' ? 'Try the BaZi calculator' : '八字排盘'}</a>${agentLink}<a href="${page.language === 'en' ? '/learn/bazi-four-pillars' : '/learn/bazi-basics'}">${page.language === 'en' ? 'BaZi guide' : '八字入门'}</a><a href="/ziwei">${page.language === 'en' ? 'Ziwei Doushu' : '紫微斗数'}</a><a href="/wenku">${page.language === 'en' ? 'Library' : '命理文库'}</a></p>
+      <p class="seo-prerender-disclaimer">${page.language === 'en' ? 'This site is for traditional culture, learning and entertainment. It is not medical, legal, financial or other professional advice.' : '本站内容仅供传统文化学习与娱乐参考，不构成医疗、投资、法律或其他专业建议。'}</p>
     </article>
   </main>
 </div>`
@@ -43,15 +68,7 @@ function staticBody(page) {
 
 function pageHtml(template, page) {
   const canonicalUrl = `${siteUrl}${page.path}`
-  const jsonLd = JSON.stringify({
-    '@context': 'https://schema.org',
-    '@type': page.path === '/wenku' ? 'CollectionPage' : 'WebPage',
-    name: page.title,
-    description: page.description,
-    url: canonicalUrl,
-    isPartOf: { '@type': 'WebSite', name: '元氣满满', url: siteUrl },
-    inLanguage: 'zh-CN',
-  }).replaceAll('<', '\\u003c')
+  const jsonLd = JSON.stringify(structuredDataForPage(page, canonicalUrl, siteUrl)).replaceAll('<', '\\u003c')
 
   let html = template
   html = replaceTag(html, /<title>[\s\S]*?<\/title>/, `<title>${escapeHtml(page.title)}</title>`)
@@ -63,6 +80,7 @@ function pageHtml(template, page) {
   html = replaceTag(html, /<link rel="canonical"[^>]*>/, `<link rel="canonical" href="${escapeHtml(canonicalUrl)}" />`)
   html = replaceTag(html, /<script id="site-jsonld" type="application\/ld\+json">[\s\S]*?<\/script>/, `<script id="site-jsonld" type="application/ld+json">${jsonLd}</script>`)
   html = replaceTag(html, /<div id="root"><\/div>/, staticBody(page))
+  if (page.language) html = html.replace('<html lang="zh-CN">', `<html lang="${escapeHtml(page.language)}">`)
   return html
 }
 
