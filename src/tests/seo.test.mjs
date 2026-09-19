@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { publicPathForView, routeFromPath, seoRoute, shouldIndex } from '../seo.js'
-import { SEO_ROUTES, structuredDataForPage } from '../seo-pages.js'
+import { pairedGuideViewForLocale, publicPathForView, routeFromPath, seoRoute, shouldIndex } from '../seo.js'
+import { languageAlternatesForPage, SEO_ROUTES, structuredDataForPage } from '../seo-pages.js'
+import { ARTICLES } from '../data/articles.js'
 
 test('核心公开页使用 keymm.me 对应的干净路由', () => {
   assert.equal(publicPathForView('bazi'), '/bazi')
@@ -13,6 +14,13 @@ test('核心公开页使用 keymm.me 对应的干净路由', () => {
   assert.equal(routeFromPath('/learn/bazi-four-pillars').view, 'baziGuide')
   assert.equal(routeFromPath('/learn/bazi-basics').view, 'baziBasics')
   assert.equal(routeFromPath('/articles/zodiac-rat-2026').articleId, 'zodiac-rat-2026')
+})
+
+test('八字指南随显示语言切换到对应的中英文页面', () => {
+  assert.equal(pairedGuideViewForLocale('baziBasics', 'en'), 'baziGuide')
+  assert.equal(pairedGuideViewForLocale('baziGuide', 'zh-CN'), 'baziBasics')
+  assert.equal(pairedGuideViewForLocale('baziGuide', 'zh-TW'), 'baziBasics')
+  assert.equal(pairedGuideViewForLocale('baziBasics', 'zh-CN'), null)
 })
 
 test('中文八字入门页提供可引用的中文 FAQ、文章与工具结构化数据', () => {
@@ -43,7 +51,7 @@ test('中英文八字指南使用同一主题实体，并提供稳定的页面�
   const pages = [SEO_ROUTES.baziBasics, SEO_ROUTES.baziGuide]
   const data = pages.map(page => structuredDataForPage(page, `https://keymm.me${page.path}`, 'https://keymm.me'))
 
-  for (const graph of data) {
+  for (const [index, graph] of data.entries()) {
     const webPage = graph['@graph'].find(node => node['@type'] === 'WebPage')
     const article = graph['@graph'].find(node => node['@type'] === 'Article')
     const terms = graph['@graph'].find(node => node['@type'] === 'DefinedTermSet')
@@ -55,6 +63,9 @@ test('中英文八字指南使用同一主题实体，并提供稳定的页面�
     assert.equal(terms.hasDefinedTerm.length >= 5, true)
     assert.ok(article.mentions.some(node => node['@id'] === application['@id']))
     assert.ok(article.mentions.some(node => node['@id'] === 'https://keymm.me/ai-bazi#application'))
+    assert.equal(article.author['@id'], `https://keymm.me${pages[index].path}#byline`)
+    assert.equal(article.editor['@id'], article.author['@id'])
+    assert.equal(article.citation.length, 4)
   }
 })
 
@@ -78,6 +89,31 @@ test('私密与账户页面不应进入搜索索引', () => {
   assert.equal(shouldIndex('profile'), false)
   assert.equal(shouldIndex('report-detail'), false)
   assert.match(seoRoute('bazi').title, /八字排盘/)
+})
+
+test('静态文库文章有独立索引页、canonical 数据与可追溯的内容版本日期', () => {
+  const article = ARTICLES.find(item => item.id === 'bazi-intro')
+  const page = seoRoute('article', article.id)
+  const data = structuredDataForPage(page, 'https://keymm.me/articles/bazi-intro', 'https://keymm.me')
+  const schema = data['@graph'].find(node => node['@type'] === 'Article')
+
+  assert.equal(shouldIndex('article', article.id), true)
+  assert.equal(shouldIndex('article', 'missing-article'), false)
+  assert.equal(page.path, '/articles/bazi-intro')
+  assert.equal(schema.headline, article.title)
+  assert.equal(schema.datePublished, '2026-09-04')
+  assert.equal(schema.author['@id'], 'https://keymm.me/articles/bazi-intro#byline')
+  assert.equal(schema.editor['@id'], schema.author['@id'])
+  assert.equal('citation' in schema, false)
+})
+
+test('中英文八字指南提供双向 hreflang 和国际默认页', () => {
+  const alternates = languageAlternatesForPage(SEO_ROUTES.baziGuide, 'https://keymm.me')
+  assert.deepEqual(alternates, [
+    { language: 'zh-CN', href: 'https://keymm.me/learn/bazi-basics' },
+    { language: 'en', href: 'https://keymm.me/learn/bazi-four-pillars' },
+    { language: 'x-default', href: 'https://keymm.me/learn/bazi-four-pillars' },
+  ])
 })
 
 test('每个可索引路由均具有供静态预渲染使用的页面正文', () => {

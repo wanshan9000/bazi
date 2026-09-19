@@ -1,4 +1,5 @@
 import { SEO_ROUTES } from '../seo-pages.js'
+import BaziGuideEditorial from './BaziGuideEditorial.jsx'
 
 const page = SEO_ROUTES.baziBasics
 
@@ -9,7 +10,6 @@ export default function BaziBasicsPage({ onBack, onStartCalculator, onOpenAgent 
       <section className="bazi-guide-hero">
         <div className="bazi-guide-frame">
           <button className="bazi-guide-back" type="button" onClick={onBack} aria-label="返回元氣满满首页">← <span>元氣满满</span></button>
-          <div className="bazi-guide-mark" aria-hidden="true"><img src="/genki-logo.png" alt="" /></div>
           <p className="bazi-guide-kicker">传统文化 · 八字入门 01</p>
           <h1><em>八字</em>是什么？</h1>
           <p className="bazi-guide-deck">从四柱、五行、十神到排盘输入，先把八字读懂，再看命盘。</p>
@@ -55,6 +55,8 @@ export default function BaziBasicsPage({ onBack, onStartCalculator, onOpenAgent 
           {faqs.map(([question, answer]) => <details key={question}><summary>{question}<span aria-hidden="true">+</span></summary><p>{answer}</p></details>)}
         </div>
       </section>
+
+      <BaziGuideEditorial editorial={page.editorial} language="zh" />
 
       <section className="bazi-guide-close">
         <p>准备好先看盘面结构了吗？</p>

@@ -1,4 +1,5 @@
 import { SEO_ROUTES } from '../seo-pages.js'
+import BaziGuideEditorial from './BaziGuideEditorial.jsx'
 
 const page = SEO_ROUTES.baziGuide
 
@@ -9,7 +10,6 @@ export default function BaziGuidePage({ onBack, onStartCalculator, onOpenAgent }
       <section className="bazi-guide-hero">
         <div className="bazi-guide-frame">
           <button className="bazi-guide-back" type="button" onClick={onBack} aria-label="Back to Genki home">← <span>GENKI</span></button>
-          <div className="bazi-guide-mark" aria-hidden="true"><img src="/genki-logo.png" alt="" /></div>
           <p className="bazi-guide-kicker">TRADITIONAL CHINESE CULTURE · FIELD GUIDE 01</p>
           <h1>What is <em>BaZi</em>?</h1>
           <p className="bazi-guide-deck">A clear introduction to the Four Pillars of Destiny, the information a chart uses, and the questions a chart cannot answer.</p>
@@ -57,6 +57,8 @@ export default function BaziGuidePage({ onBack, onStartCalculator, onOpenAgent }
           {faqs.map(([question, answer]) => <details key={question}><summary>{question}<span aria-hidden="true">+</span></summary><p>{answer}</p></details>)}
         </div>
       </section>
+
+      <BaziGuideEditorial editorial={page.editorial} language="en" />
 
       <section className="bazi-guide-close">
         <p>Ready to see the chart structure?</p>

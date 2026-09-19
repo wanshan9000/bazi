@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { SITE_URL, publicPathForView, seoRoute, shouldIndex } from '../seo.js'
-import { structuredDataForPage } from '../seo-pages.js'
+import { languageAlternatesForPage, structuredDataForPage } from '../seo-pages.js'
 
 function setMeta(selector, attributes) {
   let node = document.head.querySelector(selector)
@@ -13,10 +13,10 @@ function setMeta(selector, attributes) {
 
 export default function SeoMeta({ view, articleId }) {
   useEffect(() => {
-    const seo = seoRoute(view)
+    const seo = seoRoute(view, articleId)
     const path = publicPathForView(view, articleId) || `/${view}`
     const canonicalUrl = `${SITE_URL}${path}`
-    const indexable = shouldIndex(view)
+    const indexable = shouldIndex(view, articleId)
 
     document.title = seo.title
     setMeta('meta[name="description"]', { name: 'description', content: seo.description })
@@ -32,6 +32,16 @@ export default function SeoMeta({ view, articleId }) {
       document.head.appendChild(canonical)
     }
     canonical.setAttribute('href', canonicalUrl)
+
+    document.head.querySelectorAll('link[data-language-alternate="true"]').forEach(node => node.remove())
+    for (const alternate of languageAlternatesForPage(seo, SITE_URL)) {
+      const link = document.createElement('link')
+      link.setAttribute('rel', 'alternate')
+      link.setAttribute('hreflang', alternate.language)
+      link.setAttribute('href', alternate.href)
+      link.dataset.languageAlternate = 'true'
+      document.head.appendChild(link)
+    }
 
     let structured = document.getElementById('site-jsonld')
     if (!structured) {

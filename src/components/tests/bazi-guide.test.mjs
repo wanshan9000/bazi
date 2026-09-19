@@ -11,6 +11,8 @@ test('英文 BaZi 指南展示术语、FAQ 与真实排盘入口', async () => {
     assert.ok(r.text().includes('What is BaZi?'))
     assert.ok(r.text().includes('Day Master'))
     assert.ok(r.text().includes('Can a BaZi chart predict my future?'))
+    assert.ok(r.text().includes('三门先生'))
+    assert.ok(r.text().includes('References and public texts'))
     assert.equal(r.$('.bazi-guide'), r.container.firstElementChild)
     r.click(r.findByText('Open the BaZi calculator'))
     assert.equal(opened, 1)

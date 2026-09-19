@@ -11,6 +11,8 @@ test('中文八字入门页展示术语、FAQ 与真实排盘入口', async () =
     assert.ok(r.text().includes('八字是什么？'))
     assert.ok(r.text().includes('天干地支'))
     assert.ok(r.text().includes('八字可以准确预测未来吗？'))
+    assert.ok(r.text().includes('三门先生'))
+    assert.ok(r.text().includes('《滴天髓》'))
     r.click(r.findByText('开始八字排盘'))
     assert.equal(opened, 1)
     r.click(r.findByText('咨询元氣 Agent'))

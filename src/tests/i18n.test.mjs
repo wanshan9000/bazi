@@ -15,8 +15,9 @@ test('多语言层只接受简体、繁体和英文三种显示语言', () => {
 test('语言选择器切换英文后同步页面语言并记住偏好', () => {
   localStorage.clear()
   document.documentElement.lang = ''
+  const changes = []
   function Fixture() {
-    return createElement(LocaleProvider, null, createElement(LanguageSwitcher))
+    return createElement(LocaleProvider, null, createElement(LanguageSwitcher, { onLocaleChange: locale => changes.push(locale) }))
   }
   const r = render(Fixture)
   try {
@@ -26,6 +27,7 @@ test('语言选择器切换英文后同步页面语言并记住偏好', () => {
     r.click(r.findByText('English', '.language-switcher-option'))
     assert.equal(localStorage.getItem('genki-locale'), 'en')
     assert.equal(document.documentElement.lang, 'en')
+    assert.deepEqual(changes, ['en'])
   } finally {
     r.unmount()
     localStorage.clear()

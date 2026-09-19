@@ -11,7 +11,7 @@ import { reportApi } from './api/reports.js'
 import { createArchiveDraft, legacyArchiveDrafts } from './engine/reportArchive.js'
 import { historyRouteForReport, isHistoryReportView } from './engine/reportHistoryRoute.js'
 import SeoMeta from './components/SeoMeta.jsx'
-import { publicPathForView, routeFromPath } from './seo.js'
+import { pairedGuideViewForLocale, publicPathForView, routeFromPath } from './seo.js'
 
 // 首屏只需要首页和应用壳；具体阅读、排盘与管理页进入后才下载。
 const BaziPage = lazy(() => import('./components/BaziPage.jsx'))
@@ -67,7 +67,7 @@ function RouteFallback() {
   return <div className="route-loading" role="status" aria-label={t('loading')}><span /></div>
 }
 
-function TopBar({ view, onNav, user, onUser, credits }) {
+function TopBar({ view, onNav, onLocaleChange, user, onUser, credits }) {
   const { t } = useLocale()
   return (
     <header className="topbar">
@@ -111,7 +111,7 @@ function TopBar({ view, onNav, user, onUser, credits }) {
               <span className="user-chip-name">{t('auth.login')}</span>
             </button>
           )}
-          <LanguageSwitcher />
+          <LanguageSwitcher onLocaleChange={onLocaleChange} />
         </div>
       </div>
     </header>
@@ -382,6 +382,11 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const syncGuideLanguage = nextLocale => {
+    const pairedView = pairedGuideViewForLocale(view, nextLocale)
+    if (pairedView) goNav(pairedView)
+  }
+
   const openAgentWith = (q) => {
     // 首页智能体入口始终开启一段无命盘上下文的新会话。否则用户此前排过八字后，
     // App 里残留的 chart 会被带入元氣 AI，造成未提供生辰却被默认按八字解读。
@@ -495,6 +500,7 @@ export default function App() {
       <TopBar
         view={view}
         onNav={goNav}
+        onLocaleChange={syncGuideLanguage}
         user={user}
         onUser={v => goNav(v)}
         credits={user ? getCreditBalance(user).total : 0}
@@ -738,7 +744,7 @@ export default function App() {
         </Suspense>
       </main>
       <BottomNav view={view} onNav={goNav} user={user} />
-      {view !== 'agent' && <LanguageSwitcher mobile />}
+      {view !== 'agent' && <LanguageSwitcher mobile onLocaleChange={syncGuideLanguage} />}
       <TailBand onNav={goNav} hideOnMobile={view === 'share'} user={user} />
 
       {/* 全局订阅 Modal（会员方案 · 三重境界） */}

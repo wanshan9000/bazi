@@ -2,6 +2,23 @@
 // prerenderer and the React runtime use exactly the same public-page data.
 export const DEFAULT_SITE_URL = 'https://keymm.me'
 
+const BAZI_EDITORIAL = {
+  byline: '三门先生',
+  publisher: '元氣满满',
+  datePublished: '2026-09-19',
+  dateModified: '2026-09-19',
+  method: {
+    zh: '术语与历法口径：年、月柱以节气为分界，年柱以立春为界，月柱依节令转换；日、时沿用传统干支与时辰表达。输入使用公历日期；出生时刻不明时，不补定时柱。',
+    en: 'Terminology and calendar convention: the year and month pillars use solar terms as their boundaries. The year pillar changes at Start of Spring, and the month pillar follows the seasonal nodes; day and hour use traditional stem-branch and double-hour expressions. Inputs use Gregorian dates, and an unknown birth time is not filled in.',
+  },
+  sources: [
+    { title: '《渊海子平》', url: 'https://zh.wikisource.org/wiki/%E6%B7%B5%E6%B5%B7%E5%AD%90%E5%B9%B3' },
+    { title: '《三命通会》（四库全书本）', url: 'https://zh.wikisource.org/wiki/%E4%B8%89%E5%91%BD%E9%80%9A%E6%9C%83_(%E5%9B%9B%E5%BA%AB%E5%85%A8%E6%9B%B8%E6%9C%AC)' },
+    { title: '《滴天髓》', url: 'https://zh.wikisource.org/wiki/%E6%BB%B4%E5%A4%A9%E9%AB%93' },
+    { title: '《子平真诠》' },
+  ],
+}
+
 export const SEO_ROUTES = {
   home: {
     path: '/',
@@ -69,6 +86,7 @@ export const SEO_ROUTES = {
         description: 'A web calculator for exploring a traditional BaZi / Four Pillars chart using birth date, time and stated sex.',
       },
     },
+    editorial: BAZI_EDITORIAL,
   },
   baziBasics: {
     path: '/learn/bazi-basics',
@@ -115,6 +133,7 @@ export const SEO_ROUTES = {
         description: '基于出生日期、时间与性别展示传统四柱八字盘面的在线工具。',
       },
     },
+    editorial: BAZI_EDITORIAL,
   },
   ziwei: {
     path: '/ziwei',
@@ -215,6 +234,15 @@ export const SEO_ROUTES = {
   },
 }
 
+export function languageAlternatesForPage(page, siteUrl = DEFAULT_SITE_URL) {
+  if (page.path !== '/learn/bazi-basics' && page.path !== '/learn/bazi-four-pillars') return []
+  return [
+    { language: 'zh-CN', href: `${siteUrl}/learn/bazi-basics` },
+    { language: 'en', href: `${siteUrl}/learn/bazi-four-pillars` },
+    { language: 'x-default', href: `${siteUrl}/learn/bazi-four-pillars` },
+  ]
+}
+
 export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE_URL) {
   const language = page.language || 'zh-CN'
   const faqs = page.guide?.faqs || page.faqs || []
@@ -227,6 +255,7 @@ export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE
   const applicationId = `${siteUrl}${page.schema?.application?.url || '/bazi'}#application`
   const baziTopicId = `${siteUrl}/#bazi-four-pillars`
   const termSetId = `${canonicalUrl}#terms`
+  const editorialPersonId = `${canonicalUrl}#byline`
   const organization = {
     '@type': 'Organization',
     '@id': organizationId,
@@ -242,6 +271,7 @@ export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE
     url: siteUrl,
     publisher: { '@id': organizationId },
   }
+  const hasArticle = Boolean(page.schema?.article)
   const nodes = [organization, website, {
     '@type': page.path === '/wenku' ? 'CollectionPage' : 'WebPage',
     '@id': pageId,
@@ -250,11 +280,22 @@ export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE
     url: canonicalUrl,
     isPartOf: { '@id': websiteId },
     inLanguage: language,
-    ...(isBaziGuide ? {
-      about: { '@id': baziTopicId },
+    ...(hasArticle ? {
       mainEntity: { '@id': articleId },
     } : {}),
+    ...(isBaziGuide ? {
+      about: { '@id': baziTopicId },
+    } : {}),
   }]
+
+  if (page.editorial) {
+    nodes.push({
+      '@type': 'Person',
+      '@id': editorialPersonId,
+      name: page.editorial.byline,
+      description: '元氣满满内容编辑署名，不代表学术或其他专业资质。',
+    })
+  }
 
   if (isBaziGuide) {
     nodes.push({
@@ -291,9 +332,13 @@ export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE
       datePublished: page.schema.article.datePublished,
       dateModified: page.schema.article.dateModified,
       mainEntityOfPage: { '@id': pageId },
-      author: { '@id': organizationId },
+      author: page.editorial ? { '@id': editorialPersonId } : { '@id': organizationId },
       publisher: { '@id': organizationId },
       inLanguage: language,
+      ...(page.editorial ? {
+        editor: { '@id': editorialPersonId },
+        ...(page.editorial.sources?.length ? { citation: page.editorial.sources.map(source => source.url || source.title) } : {}),
+      } : {}),
       ...(isBaziGuide ? {
         about: { '@id': baziTopicId },
         mentions: [{ '@id': termSetId }, { '@id': applicationId }, { '@id': `${siteUrl}/ai-bazi#application` }],

@@ -10,3 +10,4 @@ Disallow: /report-detail
 Disallow: /share
 
 Sitemap: https://keymm.me/sitemap.xml
+Sitemap: https://keymm.me/sitemap.txt

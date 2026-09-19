@@ -125,8 +125,6 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 700; }
 .bazi-guide-hero::before { content: ''; position: absolute; inset: 0; opacity: .25; background-image: linear-gradient(90deg, rgba(199,74,115,.18) 1px, transparent 1px), linear-gradient(rgba(199,74,115,.18) 1px, transparent 1px); background-size: 48px 48px; pointer-events: none; }
 .bazi-guide-frame { position: relative; max-width: 650px; }
 .bazi-guide-back { display: inline-flex; align-items: center; gap: 8px; padding: 0; border: 0; background: transparent; color: var(--ink); font: 700 12px/1 var(--latin); letter-spacing: .12em; cursor: pointer; }
-.bazi-guide-mark { position: absolute; top: 0; right: -260px; width: 94px; height: 94px; padding: 10px; border: 1px solid rgba(199,74,115,.35); background: rgba(255,255,255,.7); transform: rotate(8deg); }
-.bazi-guide-mark img { width: 100%; height: 100%; object-fit: contain; }
 .bazi-guide-kicker { margin-top: clamp(76px, 12vw, 128px); color: #a45c75; font: 700 11px/1.4 var(--latin); letter-spacing: .15em; }
 .bazi-guide h1 { margin: 12px 0 16px; color: var(--ink); font: 500 clamp(62px, 12vw, 118px)/.82 Georgia, 'Times New Roman', serif; }
 .bazi-guide h1 em { color: var(--cinnabar); font-style: italic; }
@@ -160,17 +158,28 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 700; }
 .bazi-guide-faq summary span { color: var(--cinnabar-deep); font: 400 24px/1 var(--latin); }
 .bazi-guide-faq details[open] summary span { transform: rotate(45deg); }
 .bazi-guide-faq details p { padding-bottom: 16px; }
+.bazi-guide-editorial-note strong { color: var(--ink); }
+.bazi-guide-editorial-meta { margin: 24px 0 28px; border-top: 1px solid rgba(199,74,115,.27); }
+.bazi-guide-editorial-meta > div { display: grid; grid-template-columns: minmax(150px, .72fr) minmax(0, 1.68fr); gap: 20px; padding: 15px 0; border-bottom: 1px solid rgba(199,74,115,.27); }
+.bazi-guide-editorial-meta dt { color: var(--ink); font-size: 14px; font-weight: 700; }
+.bazi-guide-editorial-meta dd { margin: 0; color: #745866; font-size: 15px; line-height: 1.55; }
+.bazi-guide-editorial h3 { margin: 0 0 12px; color: var(--ink); font: 700 15px/1.4 var(--latin); }
+.bazi-guide-sources { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.bazi-guide-sources li { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding-bottom: 8px; border-bottom: 1px solid rgba(199,74,115,.16); color: #745866; font-size: 15px; line-height: 1.5; }
+.bazi-guide-sources a { color: var(--ink); font-weight: 700; text-decoration-color: var(--cinnabar); text-underline-offset: 3px; }
+.bazi-guide-sources span { flex: 0 0 auto; color: #9e7484; font: 11px/1.4 var(--latin); }
 .bazi-guide-close { margin: clamp(38px, 7vw, 86px) auto 0; max-width: 760px; padding: clamp(30px, 6vw, 64px); text-align: center; color: #fff; background: var(--cinnabar); }
 .bazi-guide-close p { margin-bottom: 18px; font-size: clamp(23px, 4vw, 38px); line-height: 1.1; }
 .bazi-guide-close button { border-color: #fff; background: transparent; }
 @media (max-width: 620px) {
   .bazi-guide { width: min(100% - 24px, 1040px); padding-top: 18px; }
   .bazi-guide-hero { min-height: 510px; padding: 25px; }
-  .bazi-guide-mark { right: 4px; width: 62px; height: 62px; }
   .bazi-guide-kicker { margin-top: 94px; max-width: 200px; }
   .bazi-guide h1 { font-size: 66px; }
   .bazi-guide-section { grid-template-columns: 1fr; gap: 16px; }
   .bazi-guide-terms dl > div { grid-template-columns: 1fr; gap: 5px; }
+  .bazi-guide-editorial-meta > div { grid-template-columns: 1fr; gap: 5px; }
+  .bazi-guide-sources li { align-items: flex-start; flex-direction: column; gap: 2px; }
 }
 
 /* 中文八字入门页统一使用站内黑体字族，英文指南保留其编辑式衬线排版。 */
@@ -182,6 +191,11 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 700; }
 
 /* 六个字在桌面与 iPad 的导读列内保持完整一行；手机仍允许自然换行。 */
 @media (min-width: 621px) {
+  .bazi-guide:not(.bazi-basics) h1 {
+    font-size: clamp(64px, 7vw, 96px);
+    white-space: nowrap;
+  }
+
   .bazi-guide.bazi-basics h1 {
     font-size: clamp(64px, 7.5vw, 104px);
     white-space: nowrap;
@@ -778,7 +792,7 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 700; }
 .hero-line-2 { margin-left: 0.14em; }
 /* 英文标题的单词密度远高于中文，沿用中文的大字号会显得笨重。 */
 html:lang(en) .hero h1 {
-  font-size: clamp(31px, 5.1vw, 60px);
+  font-size: clamp(30px, 4.6vw, 54px);
   letter-spacing: 0;
 }
 .hero .subtitle-en {
@@ -14848,10 +14862,8 @@ select option { background: var(--paper-light); color: var(--ink); }
 
 /* 浏览器放大或较窄桌面时，压缩非核心的顶栏文案，保留所有入口。 */
 @media (min-width: 870px) and (max-width: 1210px) {
-  /* 紧凑栏两侧均已收为图标入口，可恢复对称列，让导航组居中于整条顶栏。 */
+  /* 紧凑栏保留品牌名称，导航组居中并允许横向浏览。 */
   .topbar-inner { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); column-gap: 0; }
-  .brand { gap: 0; }
-  .brand-name { display: none; }
   .topnav { justify-self: center; justify-content: center; gap: 30px; }
   .topnav-link { padding: 8px 9px; font-size: 13px; letter-spacing: 0.08em; }
   .topnav-link[data-nav-key="agent"] { width: auto; padding-left: 9px; padding-right: 9px; }

@@ -48,9 +48,16 @@ test('窄桌面顶栏让导航收缩，不与品牌和账户入口重叠', () =>
   assert.match(css, /@media \(min-width: 870px\) and \(max-width: 1210px\) \{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);[\s\S]*?\.topnav\s*\{\s*justify-self:\s*center;\s*justify-content:\s*center;\s*gap:\s*30px;[\s\S]*?\.user-chip-login\s*\{\s*min-width:\s*auto;\s*padding:\s*6px 16px;/)
 })
 
+test('桌面与 iPad 顶栏始终保留 Logo 右侧的品牌名称', () => {
+  const compactBar = css.match(/@media \(min-width: 870px\) and \(max-width: 1210px\) \{([\s\S]*?)\n\}/)?.[1] || ''
+
+  assert.doesNotMatch(compactBar, /\.brand-name\s*\{\s*display:\s*none;/)
+  assert.doesNotMatch(compactBar, /\.brand\s*\{\s*gap:\s*0;/)
+})
+
 test('手机 Agent 在头部切换语言，底部不再出现第二个切换器', () => {
   assert.match(agent, /import \{ LanguageSwitcher \} from '\.\.\/i18n\.jsx'/)
   assert.match(agent, /<div className="agent-head-actions">\s*<LanguageSwitcher mobile \/>/)
-  assert.match(app, /\{view !== 'agent' && <LanguageSwitcher mobile \/>\}/)
+  assert.match(app, /\{view !== 'agent' && <LanguageSwitcher mobile onLocaleChange=\{syncGuideLanguage\} \/>\}/)
   assert.match(css, /\.agent-head-actions \.language-switcher-mobile\s*\{[\s\S]*?position:\s*relative;/)
 })

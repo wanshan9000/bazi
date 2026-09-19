@@ -176,12 +176,13 @@ export function useLocale() {
   return context || FALLBACK_CONTEXT
 }
 
-export function LanguageSwitcher({ mobile = false }) {
+export function LanguageSwitcher({ mobile = false, onLocaleChange }) {
   const { locale, setLocale, t } = useLocale()
   const [open, setOpen] = useState(false)
   const current = LOCALES.find(option => option.key === locale) || LOCALES[0]
   const choose = key => {
     setLocale(key)
+    onLocaleChange?.(key)
     setOpen(false)
   }
   return (
