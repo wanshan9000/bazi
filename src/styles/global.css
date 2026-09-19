@@ -180,6 +180,14 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 700; }
   font-style: normal;
 }
 
+/* 六个字在桌面与 iPad 的导读列内保持完整一行；手机仍允许自然换行。 */
+@media (min-width: 621px) {
+  .bazi-guide.bazi-basics h1 {
+    font-size: clamp(64px, 7.5vw, 104px);
+    white-space: nowrap;
+  }
+}
+
 /* ============ 应用壳层 ============ */
 .app-shell { min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; }
 .app-main {
