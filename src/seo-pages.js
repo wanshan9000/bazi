@@ -218,43 +218,105 @@ export const SEO_ROUTES = {
 export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE_URL) {
   const language = page.language || 'zh-CN'
   const faqs = page.guide?.faqs || page.faqs || []
-  const website = { '@type': 'WebSite', name: 'Genki', url: siteUrl }
-  const nodes = [{
+  const isBaziGuide = Boolean(page.guide)
+  const organizationId = `${siteUrl}/#organization`
+  const websiteId = `${siteUrl}/#website`
+  const pageId = `${canonicalUrl}#webpage`
+  const articleId = `${canonicalUrl}#article`
+  const faqId = `${canonicalUrl}#faq`
+  const applicationId = `${siteUrl}${page.schema?.application?.url || '/bazi'}#application`
+  const baziTopicId = `${siteUrl}/#bazi-four-pillars`
+  const termSetId = `${canonicalUrl}#terms`
+  const organization = {
+    '@type': 'Organization',
+    '@id': organizationId,
+    name: 'Genki',
+    alternateName: '元氣满满',
+    url: siteUrl,
+  }
+  const website = {
+    '@type': 'WebSite',
+    '@id': websiteId,
+    name: 'Genki',
+    alternateName: '元氣满满',
+    url: siteUrl,
+    publisher: { '@id': organizationId },
+  }
+  const nodes = [organization, website, {
     '@type': page.path === '/wenku' ? 'CollectionPage' : 'WebPage',
+    '@id': pageId,
     name: page.title,
     description: page.description,
     url: canonicalUrl,
-    isPartOf: website,
+    isPartOf: { '@id': websiteId },
     inLanguage: language,
+    ...(isBaziGuide ? {
+      about: { '@id': baziTopicId },
+      mainEntity: { '@id': articleId },
+    } : {}),
   }]
+
+  if (isBaziGuide) {
+    nodes.push({
+      '@type': 'DefinedTerm',
+      '@id': baziTopicId,
+      name: 'BaZi',
+      alternateName: ['八字', 'Four Pillars', 'Four Pillars of Destiny'],
+      description: 'A traditional Chinese system that represents a birth year, month, day and hour as four stem-and-branch pillars.',
+    })
+    nodes.push({
+      '@type': 'DefinedTermSet',
+      '@id': termSetId,
+      name: language === 'en' ? 'BaZi / Four Pillars key terms' : '八字核心术语',
+      description: page.description,
+      inLanguage: language,
+      about: { '@id': baziTopicId },
+      hasDefinedTerm: page.guide.terms.map(([name, description], index) => ({
+        '@type': 'DefinedTerm',
+        '@id': `${termSetId}-${index + 1}`,
+        name,
+        description,
+        url: `${canonicalUrl}#terms`,
+        inDefinedTermSet: { '@id': termSetId },
+      })),
+    })
+  }
 
   if (page.schema?.article) {
     nodes.push({
       '@type': 'Article',
+      '@id': articleId,
       headline: page.schema.article.headline,
       description: page.description,
       datePublished: page.schema.article.datePublished,
       dateModified: page.schema.article.dateModified,
-      mainEntityOfPage: canonicalUrl,
-      author: { '@type': 'Organization', name: 'Genki', url: siteUrl },
-      publisher: { '@type': 'Organization', name: 'Genki', url: siteUrl },
+      mainEntityOfPage: { '@id': pageId },
+      author: { '@id': organizationId },
+      publisher: { '@id': organizationId },
       inLanguage: language,
+      ...(isBaziGuide ? {
+        about: { '@id': baziTopicId },
+        mentions: [{ '@id': termSetId }, { '@id': applicationId }, { '@id': `${siteUrl}/ai-bazi#application` }],
+      } : {}),
     })
   }
   if (faqs.length) {
     nodes.push({
       '@type': 'FAQPage',
+      '@id': faqId,
       mainEntity: faqs.map(([name, text]) => ({
         '@type': 'Question',
         name,
         acceptedAnswer: { '@type': 'Answer', text },
       })),
       inLanguage: language,
+      ...(isBaziGuide ? { about: { '@id': baziTopicId } } : {}),
     })
   }
   if (page.schema?.application) {
     nodes.push({
       '@type': 'WebApplication',
+      '@id': applicationId,
       name: page.schema.application.name,
       description: page.schema.application.description,
       applicationCategory: 'LifestyleApplication',
@@ -263,6 +325,7 @@ export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE
       isAccessibleForFree: true,
       inLanguage: language,
       ...(page.schema.application.featureList ? { featureList: page.schema.application.featureList } : {}),
+      ...(isBaziGuide ? { about: { '@id': baziTopicId } } : {}),
     })
   }
   return { '@context': 'https://schema.org', '@graph': nodes }

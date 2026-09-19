@@ -41,6 +41,14 @@ function faqBody(page) {
   return `\n      <section><h2>${heading}</h2>${faqs}</section>`
 }
 
+function pairedGuideLink(page) {
+  if (page.path === '/learn/bazi-four-pillars') return { href: '/learn/bazi-basics', label: '八字入门（中文）' }
+  if (page.path === '/learn/bazi-basics') return { href: '/learn/bazi-four-pillars', label: 'BaZi guide (English)' }
+  return page.language === 'en'
+    ? { href: '/learn/bazi-four-pillars', label: 'BaZi guide' }
+    : { href: '/learn/bazi-basics', label: '八字入门' }
+}
+
 function staticBody(page) {
   const sections = page.sections.map(([heading, content]) => `
         <section>
@@ -50,6 +58,7 @@ function staticBody(page) {
   const agentLink = page.path === '/ai-bazi'
     ? ''
     : `<a href="/ai-bazi">${page.language === 'en' ? 'Ask Genki Agent' : '咨询元氣 Agent'}</a>`
+  const guideLink = pairedGuideLink(page)
   return `<div id="root" data-seo-prerendered="true">
   <main class="seo-prerender" aria-label="${escapeHtml(page.heading)}">
     <header>
@@ -59,7 +68,7 @@ function staticBody(page) {
     <article>
       <h1>${escapeHtml(page.heading)}</h1>
       <p class="seo-prerender-summary">${escapeHtml(page.summary)}</p>${sections}${guideBody(page)}${faqBody(page)}
-      <p class="seo-prerender-links"><a href="/bazi">${page.language === 'en' ? 'Try the BaZi calculator' : '八字排盘'}</a>${agentLink}<a href="${page.language === 'en' ? '/learn/bazi-four-pillars' : '/learn/bazi-basics'}">${page.language === 'en' ? 'BaZi guide' : '八字入门'}</a><a href="/ziwei">${page.language === 'en' ? 'Ziwei Doushu' : '紫微斗数'}</a><a href="/wenku">${page.language === 'en' ? 'Library' : '命理文库'}</a></p>
+      <p class="seo-prerender-links"><a href="/bazi">${page.language === 'en' ? 'Try the BaZi calculator' : '八字排盘'}</a>${agentLink}<a href="${guideLink.href}">${guideLink.label}</a><a href="/ziwei">${page.language === 'en' ? 'Ziwei Doushu' : '紫微斗数'}</a><a href="/wenku">${page.language === 'en' ? 'Library' : '命理文库'}</a></p>
       <p class="seo-prerender-disclaimer">${page.language === 'en' ? 'This site is for traditional culture, learning and entertainment. It is not medical, legal, financial or other professional advice.' : '本站内容仅供传统文化学习与娱乐参考，不构成医疗、投资、法律或其他专业建议。'}</p>
     </article>
   </main>

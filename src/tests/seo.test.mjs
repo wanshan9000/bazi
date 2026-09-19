@@ -39,6 +39,25 @@ test('英文 BaZi 指南提供可引用的 FAQ、文章与工具结构化数据'
   assert.ok(types.includes('WebApplication'))
 })
 
+test('中英文八字指南使用同一主题实体，并提供稳定的页面、术语和工具关系', () => {
+  const pages = [SEO_ROUTES.baziBasics, SEO_ROUTES.baziGuide]
+  const data = pages.map(page => structuredDataForPage(page, `https://keymm.me${page.path}`, 'https://keymm.me'))
+
+  for (const graph of data) {
+    const webPage = graph['@graph'].find(node => node['@type'] === 'WebPage')
+    const article = graph['@graph'].find(node => node['@type'] === 'Article')
+    const terms = graph['@graph'].find(node => node['@type'] === 'DefinedTermSet')
+    const application = graph['@graph'].find(node => node['@type'] === 'WebApplication')
+
+    assert.equal(webPage.mainEntity['@id'], article['@id'])
+    assert.equal(webPage.about['@id'], 'https://keymm.me/#bazi-four-pillars')
+    assert.equal(article.about['@id'], webPage.about['@id'])
+    assert.equal(terms.hasDefinedTerm.length >= 5, true)
+    assert.ok(article.mentions.some(node => node['@id'] === application['@id']))
+    assert.ok(article.mentions.some(node => node['@id'] === 'https://keymm.me/ai-bazi#application'))
+  }
+})
+
 test('元氣 Agent 以独立助手实体提供能力、问答与正确落地页', () => {
   const page = SEO_ROUTES.agent
   const data = structuredDataForPage(page, 'https://keymm.me/ai-bazi', 'https://keymm.me')
