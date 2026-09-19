@@ -1891,7 +1891,7 @@ const main = (s.data.items || []).filter(it => it.sub || it.desc)
               </div>
             )}
             <div className="br-share-url">
-              <span>{shareModal.url}</span>
+              <span title={shareModal.url}>{shareModal.url.replace(/([?#]).*$/, '…')}</span>
               <button className="br-share-copy" onClick={copyLink}>{linkCopied ? '已复制 ✓' : '复制链接'}</button>
             </div>
           </div>

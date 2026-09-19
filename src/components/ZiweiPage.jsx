@@ -461,7 +461,7 @@ function ZiweiBoard({ chart, user, paid, reason, onRequireLogin, onUpgrade, onAs
             icon="🌟"
             eyebrow="紫微斗数 · 详批全章节"
             title="命宫三方四正 · 逐宫详批 · 大限流年"
-            desc="上方十二宫盘面、星曜概览已为你免费排定；命宫解析、三方四正、十二宫逐宫详批与当下大限流年开放给玄者及以上会员。"
+            desc="上方十二宫盘面、星曜概览已为你免费排定；登录后使用积分，即可查看命宫解析、三方四正、十二宫详批与大限流年。"
             lockedCount={lockedCount}
           />
         </div>
@@ -477,7 +477,7 @@ function ZiweiBoard({ chart, user, paid, reason, onRequireLogin, onUpgrade, onAs
         />
       ) : null}
 
-      <ReportAgentFooter onAskAgent={handleAskAgent} onBack={onBack} />
+      <ReportAgentFooter onAskAgent={handleAskAgent} />
     </div>
   )
 }

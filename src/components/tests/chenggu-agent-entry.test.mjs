@@ -16,7 +16,7 @@ test('称骨歌诀卡可将本次报告带入元气 Agent', async () => {
   r.click(calculate)
   await flush()
 
-  const ask = r.findByText('咨询元气 AI')
+  const ask = r.findByText('问元气 AI')
   assert.ok(ask, `歌诀卡右侧应有咨询入口，实际：${r.text().slice(0, 300)}`)
   r.click(ask)
 

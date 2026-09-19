@@ -8,6 +8,8 @@ import { config, smsConfigured, wechatConfigured, wechatTemplateConfigured } fro
 import { startScheduler } from './scheduler.js'
 import subscribeRouter from './routes/subscribe.js'
 import shareRouter from './routes/share.js'
+import analyticsRouter from './routes/analytics.js'
+import growthRouter from './routes/growth.js'
 import skillsRouter from './routes/skills.js'
 import articlesRouter from './routes/articles.js'
 import membershipsRouter from './routes/memberships.js'
@@ -79,6 +81,10 @@ app.use('/api', createAuthRouter({
 }))
 app.use('/api', subscribeRouter)
 app.use('/api', shareRouter)
+app.use('/api', analyticsRouter)
+// growthRouter 是工厂函数；直接传入会在请求时只返回 Router 而不继续 next()，
+// 从而把后面挂载的 Agent 等 API 全部卡住。
+app.use('/api', growthRouter())
 app.use('/api', skillsRouter)
 app.use('/api', articlesRouter)
 app.use('/api', membershipsRouter)

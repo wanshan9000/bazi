@@ -12,11 +12,15 @@ import { createArchiveDraft, legacyArchiveDrafts } from './engine/reportArchive.
 import { historyRouteForReport, isHistoryReportView } from './engine/reportHistoryRoute.js'
 import SeoMeta from './components/SeoMeta.jsx'
 import { guideViewForLocale, pairedGuideViewForLocale, publicPathForView, routeFromPath } from './seo.js'
+import { SEO_ROUTES } from './seo-pages.js'
+import { trackEvent } from './utils/analytics.js'
+import ShareRewardHint from './components/ShareRewardHint.jsx'
 
 // 首屏只需要首页和应用壳；具体阅读、排盘与管理页进入后才下载。
 const BaziPage = lazy(() => import('./components/BaziPage.jsx'))
 const BaziGuidePage = lazy(() => import('./components/BaziGuidePage.jsx'))
 const BaziBasicsPage = lazy(() => import('./components/BaziBasicsPage.jsx'))
+const BaziTermPage = lazy(() => import('./components/BaziTermPage.jsx'))
 const ZiweiPage = lazy(() => import('./components/ZiweiPage.jsx'))
 const ChengguPage = lazy(() => import('./components/ChengguPage.jsx'))
 const NamePage = lazy(() => import('./components/NamePage.jsx'))
@@ -239,11 +243,22 @@ export default function App() {
     return () => setUnauthorizedHandler(null)
   }, [])
 
+  // 分享奖励等独立组件会更新服务端账户后通过事件同步顶栏与个人中心。
+  useEffect(() => {
+    const updateAccount = event => { if (event.detail?.id) setUser(event.detail) }
+    window.addEventListener('genki:account-updated', updateAccount)
+    return () => window.removeEventListener('genki:account-updated', updateAccount)
+  }, [])
+
   useEffect(() => {
     try {
       localStorage.setItem(LS_KEY, JSON.stringify(history.slice(0, 8)))
     } catch { /* ignore */ }
   }, [history])
+
+  useEffect(() => {
+    trackEvent('page_view', { page: view, locale })
+  }, [locale, view])
 
   // 可被 hash 直达/恢复的视图白名单。
   // 必须与下方实际渲染的 view 分支保持一致：
@@ -252,7 +267,7 @@ export default function App() {
   //  · 有渲染分支、但名单里没有 → goNav 不写 hash，刷新后回落首页
   //    （此前的 astro、fengshui、register，已补上）。
   const HASH_VIEWS = ['home', 'agent', 'bazi', 'ziwei', 'qimen', 'chenggu', 'huangli',
-    'name', 'fengshui', 'astro', 'tarot', 'tarot-reading', 'wenku', 'article', 'baziGuide', 'baziBasics',
+    'name', 'fengshui', 'astro', 'tarot', 'tarot-reading', 'wenku', 'article', 'baziGuide', 'baziBasics', 'fiveElementsMissing', 'baziDayMaster',
     'profile', 'reports', 'report-detail', 'login', 'register', 'forgot-password', 'terms', 'privacy', 'admin', 'share']
 
   // 启动时检测 URL hash：
@@ -396,6 +411,7 @@ export default function App() {
     goNav('agent', { seedQuery: q })
   }
   const openReportAgent = ({ chart: reportChart, prompt, reportId = null, displayText }) => {
+    trackEvent('agent_consult_opened', { page: 'agent', locale })
     if (reportChart) setChart(reportChart)
     setAgentReportId(reportId)
     setAgentSessionId(null)
@@ -416,7 +432,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // 塔罗重抽也必须经过服务端：全部牌阵共用会员每月内含次数，超出后按积分扣减。
+  // 塔罗重抽同样走服务端积分扣减，不能绕过实际模型用量的结算。
   // 首次抽牌由 TarotPage 在跳转前扣，这里服务于解读页里的「换一批 / 重抽这组」——
   // 那两个按钮此前直接重新 drawCards，把配额与扣费彻底绕过去了。
   const chargeTarotReading = async (feature = 'tarot.reading') => {
@@ -478,6 +494,7 @@ export default function App() {
     c.timeKnown = data.timeKnown !== false
     c.name = data.name || ''
     setChart(c)
+    trackEvent('bazi_chart_created', { page: 'bazi', locale })
     setHistory(prev => [
       {
         id: Date.now(),
@@ -533,6 +550,8 @@ export default function App() {
         ))}
         {view === 'baziGuide' && <BaziGuidePage onBack={() => goNav('home')} onStartCalculator={() => goNav('bazi')} onOpenAgent={() => goNav('agent')} />}
         {view === 'baziBasics' && <BaziBasicsPage onBack={() => goNav('home')} onStartCalculator={() => goNav('bazi')} onOpenAgent={() => goNav('agent')} />}
+        {view === 'fiveElementsMissing' && <BaziTermPage page={SEO_ROUTES.fiveElementsMissing} onBack={() => goNav('home')} onStartCalculator={() => goNav('bazi')} />}
+        {view === 'baziDayMaster' && <BaziTermPage page={SEO_ROUTES.baziDayMaster} onBack={() => goNav('home')} onStartCalculator={() => goNav('bazi')} />}
         {view === 'huangli' && (archiveReportId ? (
           <NativeReportHistory view="huangli" reportId={archiveReportId} onBack={() => goNav('reports')} onAskAgent={openReportAgent} onOpenSession={sessionId => { setAgentReportId(null); setAgentSessionId(sessionId); goNav('agent') }} onDeleted={() => goNav('reports')} />
         ) : (
@@ -745,6 +764,7 @@ export default function App() {
       </main>
       <BottomNav view={view} onNav={goNav} user={user} />
       {view !== 'agent' && <LanguageSwitcher mobile onLocaleChange={syncGuideLanguage} />}
+      <ShareRewardHint className="mobile-share-reward" />
       <TailBand onNav={goNav} hideOnMobile={view === 'share'} user={user} />
 
       {/* 全局订阅 Modal（会员方案 · 三重境界） */}
@@ -814,12 +834,13 @@ function TailBand({ onNav, hideOnMobile, user }) {
           <div>
             <p className="tail-brand-name">GENKI</p>
             <p className="tail-brand-slogan">{l('把心事交给星星，把好运留给自己', 'Bring your questions to the stars. Keep the next step for yourself.')}</p>
+            <p className="tail-brand-reward">{l('分享可获得元氣 AI 聊天积分', 'Share to earn credits for Genki AI chats.')}</p>
           </div>
         </div>
 
         <div className="tail-cols">
           <div className="tail-col">
-            <p className="tail-col-title">{l('开始占卜', 'Explore')}</p>
+            <p className="tail-col-title">{l('开始测算', 'Explore')}</p>
             <ul>
               <li><a onClick={() => onNav('bazi')}>{l('八字排盘', 'Bazi chart')}</a></li>
               <li><a onClick={() => onNav('ziwei')}>{l('紫微斗数', 'Ziwei Doushu')}</a></li>

@@ -3,6 +3,7 @@ import { SHENGXIAO } from '../data/ganzhi.js'
 import AgentSettings from './AgentSettings.jsx'
 import MemberManagement from './MemberManagement.jsx'
 import SecurityManagement from './SecurityManagement.jsx'
+import GrowthMetrics from './GrowthMetrics.jsx'
 import { loadConfig, saveConfig } from '../engine/llm.js'
 import { api } from '../api/client.js'
 import { loadAdminSkills, saveAdminSkills } from '../data/skills.js'
@@ -49,7 +50,7 @@ export default function AdminPage({ onBack }) {
   const [err, setErr] = useState('')
   const [charts, setCharts] = useState([])
   const [tarots, setTarots] = useState([])
-  const [tab, setTab] = useState('charts') // charts | tarot | agent | members | security | skills | articles
+  const [tab, setTab] = useState('charts') // charts | tarot | agent | members | growth | security | skills | articles
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState(null)
   const [agentCfg, setAgentCfg] = useState(null)
@@ -518,7 +519,7 @@ export default function AdminPage({ onBack }) {
           <h1 className="ah-title">管理控制台</h1>
         </div>
         <div className="ah-actions">
-          {tab !== 'agent' && tab !== 'members' && tab !== 'skills' && tab !== 'articles' && (
+          {!['agent', 'members', 'growth', 'security', 'skills', 'articles'].includes(tab) && (
             <>
               <button className="ah-btn ghost" onClick={exportData}>导出 {tab === 'charts' ? '命盘' : '塔罗'} JSON</button>
               <button className="ah-btn ghost warn" onClick={clearAll}>清空 {tab === 'charts' ? '命盘' : '塔罗'}</button>
@@ -575,12 +576,18 @@ export default function AdminPage({ onBack }) {
         >
           元氣AI设置
         </button>
-        <button
-          className={`atab ${tab === 'members' ? 'on' : ''}`}
-          onClick={() => { setTab('members'); setSelected(null); }}
-        >
-          会员管理
-        </button>
+          <button
+            className={`atab ${tab === 'members' ? 'on' : ''}`}
+            onClick={() => { setTab('members'); setSelected(null); }}
+          >
+            会员管理
+          </button>
+          <button
+            className={`atab ${tab === 'growth' ? 'on' : ''}`}
+            onClick={() => { setTab('growth'); setSelected(null); }}
+          >
+            推广数据
+          </button>
         <button
           className={`atab ${tab === 'security' ? 'on' : ''}`}
           onClick={() => { setTab('security'); setSelected(null); }}
@@ -602,7 +609,7 @@ export default function AdminPage({ onBack }) {
       </div>
 
       {/* 搜索 */}
-      {tab !== 'agent' && tab !== 'members' && tab !== 'security' && tab !== 'skills' && tab !== 'articles' && (
+      {tab !== 'agent' && tab !== 'members' && tab !== 'growth' && tab !== 'security' && tab !== 'skills' && tab !== 'articles' && (
         <div className="admin-tools">
           <input
             type="text"
@@ -723,6 +730,7 @@ export default function AdminPage({ onBack }) {
 
       {/* 会员、退款与投诉 */}
       {tab === 'members' && <MemberManagement token={adminToken} />}
+      {tab === 'growth' && <GrowthMetrics token={adminToken} />}
       {tab === 'security' && <SecurityManagement token={adminToken} />}
 
       {/* 文库管理 */}

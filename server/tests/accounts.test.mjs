@@ -7,7 +7,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createAccountStore } from '../accounts.js'
-import { planByKey, FREE_PLAN, SUPER_PLAN, getCreditBalance, getMonthlyCredits } from '../../src/engine/membership.js'
+import { planByKey, FREE_PLAN, SUPER_PLAN, getCreditBalance, getMonthlyCredits, SHARE_REWARD_DAILY_LIMIT, SHARE_REWARD_MAX_PER_PERIOD } from '../../src/engine/membership.js'
 
 function mkStore() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'acct-'))
@@ -123,53 +123,65 @@ test('Agent 按实际 Token 用量折算积分，并保留审计字段', async (
   )
 })
 
-test('高阶术数由服务端按会员档位拦截，不能仅靠积分绕过', async () => {
+test('分享奖励进入永久积分，重复事件、每日和周期上限均不可重复领取', async () => {
   const { store } = mkStore()
-  const guest = await store.create({ account: 'feature-guest', password: 'secret123', nickname: '游客' })
-  const earth = await store.create({ account: 'feature-earth', password: 'secret123', nickname: '凡者', plan: 'earth' })
-  const heaven = await store.create({ account: 'feature-heaven', password: 'secret123', nickname: '玄者', plan: 'heaven' })
+  const u = await store.create({ account: 'share-reward', password: 'secret123', nickname: '分享用户' })
+  const first = store.grantShareReward(u.id, 'share_event_0001', 'report')
+  assert.equal(first.ok, true)
+  assert.equal(first.rewarded, true)
+  assert.equal(first.credits, 24)
+  assert.equal(first.user.permanentCredits, 44)
+  assert.equal(store.grantShareReward(u.id, 'share_event_0001', 'report').reason, 'duplicate')
+  for (let i = 2; i <= SHARE_REWARD_DAILY_LIMIT; i++) {
+    assert.equal(store.grantShareReward(u.id, `share_event_000${i}`, 'report').rewarded, true)
+  }
+  assert.equal(store.grantShareReward(u.id, 'share_event_daily_limit', 'report').reason, 'daily_limit')
 
-  const guestDenied = store.consumeCredit(guest.id, 'ziwei.full')
-  assert.deepEqual({ ok: guestDenied.ok, reason: guestDenied.reason, requiredPlan: guestDenied.requiredPlan }, { ok: false, reason: 'plan_required', requiredPlan: 'heaven' })
-  assert.equal(store.get(guest.id).permanentCredits, 20, '档位未开放不能消耗赠送积分')
-  assert.equal(store.consumeCredit(earth.id, 'qimen.reading').reason, 'plan_required')
-
-  const unlocked = store.consumeCredit(heaven.id, 'qimen.reading')
-  assert.equal(unlocked.ok, true)
-  assert.equal(unlocked.cost, 5)
+  const raw = store.get(u.id)
+  for (const event of raw.shareRewardEvents) event.createdAt = Date.now() - 2 * 86400000
+  for (let i = SHARE_REWARD_DAILY_LIMIT + 1; i <= SHARE_REWARD_MAX_PER_PERIOD; i++) {
+    const result = store.grantShareReward(u.id, `share_event_${String(i).padStart(4, '0')}`, 'report')
+    assert.equal(result.rewarded, true)
+    for (const event of store.get(u.id).shareRewardEvents) event.createdAt = Date.now() - 2 * 86400000
+  }
+  assert.equal(store.grantShareReward(u.id, 'share_event_period_limit', 'report').reason, 'period_limit')
 })
 
-test('凡者全部牌阵共用每月二十次解读，第二十一次才开始扣积分', async () => {
+test('全部注册用户可使用 AI 术数，实际用量统一扣积分', async () => {
+  const { store } = mkStore()
+  const guest = await store.create({ account: 'feature-guest', password: 'secret123', nickname: '注册用户' })
+  const earth = await store.create({ account: 'feature-earth', password: 'secret123', nickname: '凡者', plan: 'earth' })
+
+  const guestUsed = store.consumeCredit(guest.id, 'ziwei.full')
+  assert.equal(guestUsed.ok, true)
+  assert.equal(guestUsed.cost, 5)
+  assert.equal(store.get(guest.id).permanentCredits, 15, '注册赠送积分可用于所有 AI 功能')
+
+  const earthUsed = store.consumeCredit(earth.id, 'qimen.reading')
+  assert.equal(earthUsed.ok, true)
+  assert.equal(earthUsed.cost, 5)
+})
+
+test('塔罗解读不再随档位赠送次数，统一按积分结算', async () => {
   const { store } = mkStore()
   const u = await store.create({ account: 'tarot-earth', password: 'secret123', nickname: '凡者', plan: 'earth' })
-  for (let i = 0; i < 20; i++) {
-    const included = store.consumeCredit(u.id, 'tarot.reading')
-    assert.equal(included.ok, true)
-    assert.equal(included.included, true)
-    assert.equal(included.cost, 0)
-  }
-  assert.equal(store.get(u.id).monthlyFeatureUsage['tarot.reading'], 20)
-  assert.equal(store.get(u.id).permanentCredits, 20, '附赠次数不得挤占积分')
-
-  const extra = store.consumeCredit(u.id, 'tarot.reading')
-  assert.equal(extra.ok, true)
-  assert.equal(extra.included, undefined)
-  assert.equal(extra.cost, 5)
+  const charged = store.consumeCredit(u.id, 'tarot.reading')
+  assert.equal(charged.ok, true)
+  assert.equal(charged.included, undefined)
+  assert.equal(charged.cost, 5)
   assert.equal(store.get(u.id).permanentCredits, 20)
-  assert.equal(store.get(u.id).monthlyCreditsUsed, 5, '第二十一次优先使用月度积分')
+  assert.equal(store.get(u.id).monthlyCreditsUsed, 5, '优先使用月度积分')
 })
 
-test('旧单牌用量并入全牌阵总额后，继续解读不会重复计数', async () => {
+test('旧塔罗次数不会影响新的积分结算', async () => {
   const { store } = mkStore()
   const u = await store.create({ account: 'tarot-migrated', password: 'secret123', nickname: '凡者', plan: 'earth' })
   store.get(u.id).monthlyFeatureUsage = { 'tarot.single': 4 }
 
-  const included = store.consumeCredit(u.id, 'tarot.reading')
-  assert.equal(included.ok, true)
-  assert.equal(included.included, true)
-  assert.deepEqual(store.get(u.id).monthlyFeatureUsage, { 'tarot.single': 4, 'tarot.reading': 1 })
-  assert.equal(included.allowance.used, 5)
-  assert.equal(included.allowance.remaining, 15)
+  const charged = store.consumeCredit(u.id, 'tarot.reading')
+  assert.equal(charged.ok, true)
+  assert.equal(charged.cost, 5)
+  assert.equal(store.get(u.id).monthlyCreditsUsed, 5)
 })
 
 test('续费在原到期时间之上顺延；换档从当下重算', async () => {

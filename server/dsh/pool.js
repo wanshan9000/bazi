@@ -49,7 +49,7 @@ export function isRouteAvailable(routeKey, env = process.env) {
 }
 
 export function resolveDefaultRoute(env = process.env) {
-  const requested = env.AGENT_DEFAULT_ROUTE || 'deepseek-flash'
+  const requested = env.AGENT_DEFAULT_ROUTE || 'minimax'
   if (isRouteAvailable(requested, env)) return requested
   return availableRoutes(env)[0]?.[0] || requested
 }

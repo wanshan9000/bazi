@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseStructuredAgentAnswer, structuredAnswerText, structuredAnswerProtocol } from '../agentAnswer.js'
+import { extractStructuredAnswerPreview, parseStructuredAgentAnswer, structuredAnswerText, structuredAnswerProtocol } from '../agentAnswer.js'
 
 const valid = {
   version: 1,
@@ -29,6 +29,15 @@ test('模型在字段文本内误用英文双引号时，仍恢复为可交付�
     sections: [{ title: '行动建议', items: [{ label: '事业', text: '遇到“变化”时先准备方案。' }] }],
     closing: '稳住节奏。',
   })
+})
+
+test('只在完整 summary 字符串已经闭合时提前提取公开预览', () => {
+  const raw = JSON.stringify(valid)
+  const summaryEnd = raw.indexOf('","sections"') + 1
+  assert.equal(extractStructuredAnswerPreview(raw.slice(0, summaryEnd + 1)), valid.summary)
+  assert.equal(extractStructuredAnswerPreview(raw.slice(0, summaryEnd)), null)
+  assert.equal(extractStructuredAnswerPreview('先给结论：很好'), null)
+  assert.equal(extractStructuredAnswerPreview('{"version":1,"summary":"含有未闭合的'), null)
 })
 
 test('结构化答案会丢弃空字段、过量条目，并保留可读历史文本', () => {

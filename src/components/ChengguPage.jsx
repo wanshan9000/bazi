@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { generateChenggu } from '../engine/chenggu.js'
 import ShichenPicker from './ShichenPicker.jsx'
 import { getLunarMonths, getLunarDayCount, tryLunarToSolar } from '../utils/lunar.js'
-import { buildReportAgentPrompt } from './ReportAgentFooter.jsx'
+import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx'
+import { consumeGuestFeature } from '../engine/freeQuota.js'
 
 const SHICHEN = [
   ['子时', '23-01'], ['丑时', '01-03'], ['寅时', '03-05'], ['卯时', '05-07'],
@@ -23,8 +24,14 @@ export default function ChengguPage({ user, onBack, onAskAgent, onReportReady })
   const [editing, setEditing] = useState(true)
   const [birth, setBirth] = useState(null)
   const [archiveId, setArchiveId] = useState(null)
+  const [guestLimitNotice, setGuestLimitNotice] = useState('')
 
   const handleGenerate = ({ year, month, day, hour, gender, hourKnown }) => {
+    if (!user) {
+      const quota = consumeGuestFeature('chenggu')
+      if (!quota.ok) { setGuestLimitNotice('游客今日免费称骨已达 20 次，登录后可不限次使用。'); return }
+      setGuestLimitNotice(`游客今日还可免费称骨 ${quota.remaining} 次`)
+    }
     setBirth({ year, month, day, hour, gender, hourKnown })
     setArchiveId(null)
     setResult(generateChenggu({ birth: { year, month, day, hour, gender, hourKnown }, gender }))
@@ -104,7 +111,10 @@ export default function ChengguPage({ user, onBack, onAskAgent, onReportReady })
         <p className="page-sub rise rise-2">称骨民俗参考 · 标准 51 档查表 · 八字建议另层生成</p>
 
         {editing || !result ? (
-          <ChengguForm onDone={handleGenerate} />
+          <>
+            <ChengguForm onDone={handleGenerate} />
+            {guestLimitNotice && <p className="form-note" role="status">{guestLimitNotice}</p>}
+          </>
         ) : (
           <div className="chenggu-result rise rise-3">
             <section className="cg-summary">
@@ -155,7 +165,7 @@ export default function ChengguPage({ user, onBack, onAskAgent, onReportReady })
                   </div>
                   {onAskAgent && (
                     <button className="cg-agent-btn" onClick={handleAskAgent}>
-                      ✦ 咨询元气 AI
+                      ✦ 问元气 AI
                     </button>
                   )}
                 </div>
@@ -184,6 +194,7 @@ export default function ChengguPage({ user, onBack, onAskAgent, onReportReady })
             </section>
 
             <p className="cg-foot">「称骨歌诀」流传千古，权作参考。命由我作，福自己求。</p>
+            <ReportAgentFooter onAskAgent={handleAskAgent} />
           </div>
         )}
       </div>

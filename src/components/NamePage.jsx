@@ -219,7 +219,7 @@ export default function NamePage({ chart, onBack, onChart, onAskAgent, user, onR
           </section>
         )}
 
-        {(result || recs?.length) && <ReportAgentFooter onAskAgent={handleAskAgent} onBack={onBack} />}
+        {(result || recs?.length) && <ReportAgentFooter onAskAgent={handleAskAgent} />}
       </div>
     </div>
   )

@@ -24,7 +24,7 @@ const requireAccount = requireAuth(sharedAccounts())
 function requireReminderMember(req, res, next) {
   requireAccount(req, res, () => {
     if (!canUseHuangliReminder(req.account)) {
-      return res.status(403).json({ ok: false, msg: '每日黄历提醒为凡者及以上会员权益' })
+      return res.status(403).json({ ok: false, msg: '请登录后定制个人黄历提醒' })
     }
     next()
   })

@@ -105,7 +105,7 @@ export default function QimenPage({ user, onBack, onRequireLogin, onUpgrade, onU
       const res = await consumeCredit(user.id, 'qimen.reading')
       if (!res.ok) {
         if (res.reason === 'insufficient' || res.reason === 'plan_required') {
-          setError(res.reason === 'plan_required' ? '奇门遁甲完整解读开放给玄者及以上会员' : '积分不足，开通会员或购买永久积分后可继续起盘解读')
+          setError('积分不足，开通会员或购买永久积分后可继续起盘解读')
           setInsufficient(true)
           setAccessDenied(res.reason === 'plan_required')
         } else {
@@ -217,8 +217,8 @@ export default function QimenPage({ user, onBack, onRequireLogin, onUpgrade, onU
               icon="◈"
               eyebrow="奇门遁甲 · 登录后解读"
               title="登录后查看奇门完整解读"
-              desc="奇门起局与完整解读开放给玄者及以上会员，并按次消耗积分。"
-              note="登录后可浏览基础内容；升级玄者即可起局解读"
+              desc="登录后使用积分，即可进行奇门起局与完整解读。"
+              note="注册即得永久积分，可先体验起局解读"
             />
           </div>
         ) : (
@@ -347,7 +347,7 @@ export default function QimenPage({ user, onBack, onRequireLogin, onUpgrade, onU
           </div>
         </div>
         {report && <div style={{ marginTop: 16 }}><ReportView ref={reportRef} report={report} hideLead /></div>}
-        {report && <ReportAgentFooter onAskAgent={handleAskAgent} onBack={onBack} />}
+        {report && <ReportAgentFooter onAskAgent={handleAskAgent} />}
       </div>
     </section>
   );

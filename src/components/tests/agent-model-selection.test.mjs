@@ -15,15 +15,15 @@ function sse(events) {
   })
 }
 
-test('历史 MiniMax 缓存不会再自动覆盖默认 Flash', () => {
-  // 若回退为直接读取 localStorage，老用户会继续走慢模型，首轮等待问题会复发。
-  assert.equal(resolveAgentRoute('minimax', 'deepseek-flash'), 'deepseek-flash')
+test('历史裸路由缓存不会自动覆盖默认 MiniMax', () => {
+  // 旧缓存没有“用户主动选择”的标记，须回到当前成本可控的默认路由。
+  assert.equal(resolveAgentRoute('deepseek-flash', 'minimax'), 'minimax')
 })
 
 test('用户重新选择的深度模型会作为显式偏好保留', () => {
   // 新偏好必须可区分于旧字符串缓存，否则为了迁移旧缓存会误伤用户的手动选择。
   const saved = serializeAgentRoute('minimax')
-  assert.equal(resolveAgentRoute(saved, 'deepseek-flash'), 'minimax')
+  assert.equal(resolveAgentRoute(saved, 'minimax'), 'minimax')
 })
 
 test('已失效的显式模型偏好会回退到服务端当前可用的默认模型', () => {
@@ -61,6 +61,7 @@ test('会话标题不会展示内部输出语言控制文案', () => {
   assert.equal(displaySessionTitle('【输出语言】所有面向用户的摘要一律使用简体中文'), '本次咨询')
   assert.equal(displaySessionTitle('【輸出語言】所有面向使用者的摘要一律使用繁體中文', 'zh-TW'), '本次咨询')
   assert.equal(displaySessionTitle('【Output language】Write every user-facing summary in English', 'en'), 'Session')
+  assert.equal(displaySessionTitle('/tarot 【强制测算规约·不可跳过】'), '本次咨询')
 })
 
 test('最终渲染仍会恢复旧消息中的异常 JSON，不能直接显示协议原文', () => {

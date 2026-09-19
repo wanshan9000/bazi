@@ -118,7 +118,7 @@ test('风水页提供书桌座位输入、结果卡，并把结论保存和带�
     assert.ok(r.$('.fs-desk-score-card .ov-score'), '座位分析应以统一评分卡给出独立评分')
     assert.ok(saved.at(-1)?.result?.desk, '保存的风水报告必须包含书桌座位结论')
 
-    r.click(r.findByText('咨询元气 AI'))
+    r.click(r.findByText('问元气 AI'))
     assert.match(agentRequest.prompt, /书桌.*座位|座位.*书桌/, '元气 Agent 上下文必须带入座位结论')
   } finally {
     r.unmount()

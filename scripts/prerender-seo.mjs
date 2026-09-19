@@ -65,6 +65,17 @@ function articleBody(page) {
         </section>`).join('')
 }
 
+function termPageBody(page) {
+  if (!page.termPage) return ''
+  const english = page.language === 'en'
+  const terms = (page.definedTerms || [])
+    .map(([term, definition]) => `<dt>${escapeHtml(term)}</dt><dd>${escapeHtml(definition)}</dd>`)
+    .join('')
+  return `
+      <section><h2>${escapeHtml(page.termPage.definitionLabel)}</h2><p>${escapeHtml(page.termPage.definition)}</p></section>
+      <section><h2>${english ? 'Related terms' : '相关术语'}</h2><dl>${terms}</dl></section>`
+}
+
 function faqBody(page) {
   if (!page.faqs?.length) return ''
   const heading = page.language === 'en' ? 'Frequently asked questions' : '常见问题'
@@ -90,6 +101,9 @@ function staticBody(page) {
     ? ''
     : `<a href="/ai-bazi">${page.language === 'en' ? 'Ask Genki Agent' : '咨询元氣 Agent'}</a>`
   const guideLink = pairedGuideLink(page)
+  const termLinks = (page.termPage?.related || [])
+    .map(link => `<a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`)
+    .join('')
   return `<div id="root" data-seo-prerendered="true">
   <main class="seo-prerender" aria-label="${escapeHtml(page.heading)}">
     <header>
@@ -98,8 +112,8 @@ function staticBody(page) {
     </header>
     <article>
       <h1>${escapeHtml(page.heading)}</h1>
-      <p class="seo-prerender-summary">${escapeHtml(page.summary)}</p>${articleBody(page) || sections}${guideBody(page)}${editorialBody(page)}${faqBody(page)}
-      <p class="seo-prerender-links"><a href="/bazi">${page.language === 'en' ? 'Try the BaZi calculator' : '八字排盘'}</a>${agentLink}<a href="${guideLink.href}">${guideLink.label}</a><a href="/ziwei">${page.language === 'en' ? 'Ziwei Doushu' : '紫微斗数'}</a><a href="/wenku">${page.language === 'en' ? 'Library' : '命理文库'}</a></p>
+      <p class="seo-prerender-summary">${escapeHtml(page.summary)}</p>${termPageBody(page)}${articleBody(page) || sections}${guideBody(page)}${editorialBody(page)}${faqBody(page)}
+      <p class="seo-prerender-links"><a href="/bazi">${page.language === 'en' ? 'Try the BaZi calculator' : '八字排盘'}</a>${agentLink}<a href="${guideLink.href}">${guideLink.label}</a>${termLinks}<a href="/ziwei">${page.language === 'en' ? 'Ziwei Doushu' : '紫微斗数'}</a><a href="/wenku">${page.language === 'en' ? 'Library' : '命理文库'}</a></p>
       <p class="seo-prerender-disclaimer">${page.language === 'en' ? 'This site is for traditional culture, learning and entertainment. It is not medical, legal, financial or other professional advice.' : '本站内容仅供传统文化学习与娱乐参考，不构成医疗、投资、法律或其他专业建议。'}</p>
     </article>
   </main>
@@ -155,6 +169,8 @@ function llmsText(pages) {
 
 - [八字入门](${siteUrl}/learn/bazi-basics): 简体中文八字基础说明，涵盖四柱、五行、十神、排盘输入与阅读边界。
 - [BaZi / Four Pillars guide](${siteUrl}/learn/bazi-four-pillars): English explanation of BaZi terminology, required chart inputs and limitations.
+- [五行缺什么是什么意思？](${siteUrl}/learn/wuxing-que-shenme-yisi): 解释八字中五行“缺”、偏弱与喜用的区别，以及不能从“缺”直接推导现实结论的原因。
+- [What is a Day Master in BaZi?](${siteUrl}/learn/what-is-a-day-master-in-bazi): English definition of the Day Master, its place in the Day Pillar, and its relationship to Five Elements and Ten Gods.
 - [八字排盘](${siteUrl}/bazi): 基于出生日期、时间与性别展示传统四柱八字盘面的在线工具。
 - [元氣 Agent](${siteUrl}/ai-bazi): 随时在身边的玄学 AI 助手，可围绕八字、紫微斗数与黄历等传统文化问题继续追问。
 - [命理文库](${siteUrl}/wenku): 传统文化主题文章集合。

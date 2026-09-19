@@ -1,10 +1,15 @@
 import { SEO_ROUTES } from '../seo-pages.js'
 import BaziGuideEditorial from './BaziGuideEditorial.jsx'
+import { trackEvent } from '../utils/analytics.js'
 
 const page = SEO_ROUTES.baziGuide
 
-export default function BaziGuidePage({ onBack, onStartCalculator, onOpenAgent }) {
+export default function BaziGuidePage({ onBack, onStartCalculator }) {
   const { terms, steps, faqs } = page.guide
+  const startCalculator = () => {
+    trackEvent('guide_calculator_opened', { page: 'bazi-guide', locale: 'en' })
+    onStartCalculator?.()
+  }
   return (
     <main className="bazi-guide" lang="en">
       <section className="bazi-guide-hero">
@@ -14,8 +19,8 @@ export default function BaziGuidePage({ onBack, onStartCalculator, onOpenAgent }
           <h1>What is <em>BaZi</em>?</h1>
           <p className="bazi-guide-deck">A clear introduction to the Four Pillars of Destiny, the information a chart uses, and the questions a chart cannot answer.</p>
           <div className="bazi-guide-actions">
-            <button type="button" className="bazi-guide-primary" onClick={onStartCalculator}>Open the BaZi calculator <span aria-hidden="true">→</span></button>
-            <button type="button" className="bazi-guide-secondary" onClick={onOpenAgent}>Ask Genki Agent</button>
+            <button type="button" className="bazi-guide-primary" onClick={startCalculator}>Open the BaZi calculator <span aria-hidden="true">→</span></button>
+            <a className="bazi-guide-secondary" href="#method">Before you begin</a>
             <a className="bazi-guide-secondary" href="#terms">Read the terms</a>
           </div>
           <p className="bazi-guide-note">A traditional cultural framework for learning and reflection. Not a prediction service.</p>
@@ -41,7 +46,7 @@ export default function BaziGuidePage({ onBack, onStartCalculator, onOpenAgent }
         </div>
       </section>
 
-      <section className="bazi-guide-section bazi-guide-method">
+      <section className="bazi-guide-section bazi-guide-method" id="method">
         <p className="bazi-guide-index">03 / A REPRODUCIBLE START</p>
         <div>
           <h2>Begin with the inputs, not the conclusion.</h2>
@@ -61,8 +66,13 @@ export default function BaziGuidePage({ onBack, onStartCalculator, onOpenAgent }
       <BaziGuideEditorial editorial={page.editorial} language="en" />
 
       <section className="bazi-guide-close">
-        <p>Ready to see the chart structure?</p>
-        <button type="button" onClick={onStartCalculator}>Calculate your four pillars <span aria-hidden="true">→</span></button>
+        <p>Ready to begin with your Four Pillars?</p>
+        <ol className="bazi-guide-route" aria-label="From guide to consultation">
+          <li><b>01</b><span>Create a free chart</span></li>
+          <li><b>02</b><span>Read your elemental snapshot</span></li>
+          <li><b>03</b><span>Ask Genki AI with your chart</span></li>
+        </ol>
+        <button type="button" onClick={startCalculator}>Calculate your four pillars <span aria-hidden="true">→</span></button>
       </section>
     </main>
   )

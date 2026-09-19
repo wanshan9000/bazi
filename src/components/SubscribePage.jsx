@@ -13,6 +13,7 @@ import { api } from '../api/client.js'
 import { getLunarMonths, getLunarDayCount, tryLunarToSolar } from '../utils/lunar.js'
 import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx'
 import { canUseHuangliReminder } from '../engine/membership.js'
+import { consumeGuestFeature } from '../engine/freeQuota.js'
 
 const IDENTITY_OPTIONS = [
   { key: 'worker', name: '打工人', emoji: '💼' },
@@ -44,6 +45,16 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
   const [today] = useState(() => new Date())
   // 整页"当前查看日期"（默认今天），本周速览 / 30 天选择器 / 今日黄历卡片都以此同步
   const [viewDate, setViewDate] = useState(() => new Date(today))
+  const [guestLimitNotice, setGuestLimitNotice] = useState('')
+
+  const changeGuestDate = nextDate => {
+    if (!user) {
+      const quota = consumeGuestFeature('huangli.daily')
+      if (!quota.ok) { setGuestLimitNotice('游客今日免费查看黄历已达 20 次，登录后可不限次使用。'); return }
+      setGuestLimitNotice(`游客今日还可免费查看黄历 ${quota.remaining} 次`)
+    }
+    setViewDate(nextDate)
+  }
 
   // 若外部八字变化，同步（App 里排完盘再来订阅）
   useEffect(() => { if (extChart) setChart(extChart) }, [extChart])
@@ -200,22 +211,23 @@ export default function SubscribePage({ chart: extChart, onBack, user, onRequire
               <FusedHuangliCard
                 chart={chart}
                 date={viewDate}
-                onChangeDate={setViewDate}
+                onChangeDate={changeGuestDate}
                 defaultScenario={sceneKey}
                 myZodiac={profile?.shengxiao}
                 favZodiac={pref.favZodiac || []}
               />
             </div>
 
-            <WeekStrip week={week} personalized={Boolean(chart)} viewDate={viewDate} onSelectDate={setViewDate} />
+            <WeekStrip week={week} personalized={Boolean(chart)} viewDate={viewDate} onSelectDate={changeGuestDate} />
 
             {chart && <MonthCurve chart={chart} today={today} />}
 
             <p className="form-note" style={{ marginTop: 14, textAlign: 'center' }}>
               {chart ? '已结合你的命局与当天日气生成提示 · 用作安排参考，主动选择始终在你' : '当前展示传统黄历信息 · 输入生辰后，可获得更贴近你的节奏与安排提示'}
             </p>
+            {guestLimitNotice && <p className="form-note" role="status">{guestLimitNotice}</p>}
 
-            <ReportAgentFooter onAskAgent={openHuangliAgent} onBack={onBack} />
+            <ReportAgentFooter onAskAgent={openHuangliAgent} />
           </>
         )}
       </div>
@@ -426,7 +438,7 @@ function birthFromChart(chart) {
   }
 }
 
-function SubscribeBar({ pref, setPref, chart, subToken, onSubscribed, serverOk, channels = {}, user, onRequireLogin, onUpgrade }) {
+function SubscribeBar({ pref, setPref, chart, subToken, onSubscribed, serverOk, channels = {}, user, onRequireLogin }) {
   // 短信在本地可降级联调；公众号模板消息必须完成公众号二维码、回调和模板配置，
   // 否则不能把普通网页登录扫码或 mock 当作可送达的微信提醒。
   const smsMock = channels.sms === 'local(mock)'
@@ -533,10 +545,9 @@ function SubscribeBar({ pref, setPref, chart, subToken, onSubscribed, serverOk, 
     flash('ok', '已取消订阅')
   }
 
-  // 开关点击：开通订阅属于会员权益 → 未登录先去注册/登录（成功后自动返回本页）
+  // 个性黄历订阅面向全部注册用户；未登录先去注册/登录。
   const requireReminderMember = () => {
     if (!user) { onRequireLogin?.(); return true }
-    if (!reminderMember) { onUpgrade?.(); return true }
     return false
   }
 
@@ -571,12 +582,10 @@ function SubscribeBar({ pref, setPref, chart, subToken, onSubscribed, serverOk, 
           <span className="hl-sub-title">每日黄历提醒</span>
           <span className="hl-sub-tip">
             {!user
-              ? '注册或登录后可开通凡者会员'
-              : (!reminderMember
-                ? '凡者会员起可用'
+              ? '注册或登录后可定制与订阅'
               : (serverOk
                 ? (subToken ? '已开启 · 按所选时段推送' : '绑定手机号或关注公众号 · 按时段推送')
-                : '提醒服务暂不可用'))}
+                : '提醒服务暂不可用')}
           </span>
         </div>
         <button
@@ -609,16 +618,6 @@ function SubscribeBar({ pref, setPref, chart, subToken, onSubscribed, serverOk, 
             ))}
           </div>
         </>
-      ) : !user ? null : !reminderMember ? (
-        <div className="hl-sub-prompt hl-sub-member-gate">
-          <div className="hl-sub-prompt-txt">
-            <div className="hl-sub-prompt-h">凡者会员专享每日黄历提醒</div>
-            <div className="hl-sub-prompt-s">开通凡者及以上会员后，可选择手机短信或公众号模板消息接收。</div>
-          </div>
-          <button className="hl-sub-prompt-btn" onClick={() => onUpgrade?.()}>
-            ✦ 开通凡者会员
-          </button>
-        </div>
       ) : serverOk ? (
         <>
           {/* 未订阅：简短提示 + 触发弹层 */}
@@ -679,7 +678,7 @@ function SubscribeBar({ pref, setPref, chart, subToken, onSubscribed, serverOk, 
               <button className="hl-modal-close" onClick={() => setShowModal(false)} aria-label="关闭">×</button>
             </div>
 
-            <p className="hl-sub-modal-intro">凡者及以上会员可开通提醒。选择一种接收方式，再设定方便查看的时段。</p>
+            <p className="hl-sub-modal-intro">注册后即可开通提醒。选择一种接收方式，再设定方便查看的时段。</p>
             {smsMock && (
               <div className="hl-modal-dev-note">
                 <span className="hl-modal-dev-ic">🛠️</span>

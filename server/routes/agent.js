@@ -15,7 +15,7 @@ import { config } from '../config.js'
 import { generateHuangli } from '../../src/engine/cantian.js'
 import { buildChart } from '../../src/engine/bazi.js'
 import { AGENT_TOKEN_BILLING, canAfford } from '../../src/engine/membership.js'
-import { parseStructuredAgentAnswer, structuredAnswerProtocol, structuredAnswerText } from '../agentAnswer.js'
+import { extractStructuredAnswerPreview, parseStructuredAgentAnswer, structuredAnswerProtocol, structuredAnswerText } from '../agentAnswer.js'
 
 const MAX_TEXT = 2000
 const RATE_LIMIT = 20 // 次/分钟/uid+IP
@@ -288,13 +288,24 @@ function agentResponsePaceProtocol(text) {
 }
 
 // DSH 的标题器会从整段 prompt 自动概括标题。prompt 前部包含服务端控制协议时，
-// 它偶尔会把「回答长度」之类的内部指令当作会话名。标题只可来自用户主题，
-// 不能让控制语进入历史列表或当前会话头部。
+// 它偶尔会把「回答长度」或 `/tarot 【强制测算规约】` 之类的内部指令当作会话名。
+// 标题只可来自用户主题，不能让控制语进入历史列表或当前会话头部。
+function isInternalSessionTitle(title) {
+  const value = String(title || '').replace(/\s+/g, ' ').trim()
+  return /(?:^\/(?:[a-z][\w-]*)(?:\s+\/[a-z][\w-]*)*\s+【|【\s*(?:回答长度|问题覆盖校验|当前日期口径|日期换算核验|会话事实备忘|最终交付格式|当前缘主命盘|输出语言|輸出語言|Output language|强制测算(?:规约|契约)|服务端八字预检|排盘校验任务|事实核验与时间口径)|(?:不可跳过|必须成功调用).{0,32}(?:工具|Skill))/i.test(value)
+}
+
 function generatedSessionTitle(title) {
   const value = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 32)
   if (!value) return ''
-  if (/(?:【\s*(?:回答长度|问题覆盖校验|当前日期口径|日期换算核验|会话事实备忘|最终交付格式|当前缘主命盘|输出语言|輸出語言|Output language)|这是一次常规咨询|不要复述整张命盘)/i.test(value)) return ''
+  if (isInternalSessionTitle(value) || /(?:这是一次常规咨询|不要复述整张命盘)/i.test(value)) return ''
   return value
+}
+
+function titleFromUserMessage(text) {
+  const value = String(text || '').replace(/\s+/g, ' ').trim()
+  if (!value || isInternalSessionTitle(value)) return ''
+  return reportSessionTitle(value) || value.slice(0, 14)
 }
 
 function compactUserMessage(text, limit = 140) {
@@ -712,11 +723,19 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
 
   r.get('/agent/sessions', (req, res) => {
     const sessions = store.listSessions(req.uid).map(session => {
-      if (session.chartKey) return session
-      const inferred = inferStoredChart(store.listMessages(req.uid, session.id))
+      const messages = store.listMessages(req.uid, session.id)
+      // 修复旧版本已经保存的内部标题：可靠来源是用户首条原话，而不是模型的
+      // prompt 概括。最多 50 个会话，读取这份小镜像不会造成可感知的列表延迟。
+      let readable = session
+      if (isInternalSessionTitle(session.title)) {
+        const fallback = titleFromUserMessage(messages.find(message => message.role === 'user')?.text)
+        if (fallback) readable = store.updateSession(req.uid, session.id, { title: fallback }) || session
+      }
+      if (readable.chartKey) return readable
+      const inferred = inferStoredChart(messages)
       return inferred
-        ? store.updateSession(req.uid, session.id, { chartKey: chartKeyOf(inferred), title: chartSessionTitle(inferred) })
-        : session
+        ? store.updateSession(req.uid, readable.id, { chartKey: chartKeyOf(inferred), title: chartSessionTitle(inferred) })
+        : readable
     })
     res.json({ ok: true, sessions })
   })
@@ -874,6 +893,8 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
     let inferredChart = null
     let sawError = false
     let sentReasoningProgress = false
+    let sentAnswerStarted = false
+    let sentAnswerPreview = false
     try {
     // session 帧与用户消息落库都放进 try：appendMessage 抛错时（磁盘满、
       // 目录只读）原先会把 beat 定时器和这条响应一起晾在那儿，连接永远不收尾。
@@ -898,10 +919,27 @@ export function createAgentRouter({ pool = sharedPool(), store = sharedStore(), 
             const safeDelta = publicTextFilter.push(e.delta)
             if (safeDelta) {
               streamed += safeDelta
+              // 首个安全正文到达即通知前端。它表示模型已经开始生成可交付回复，
+              // 而不是把不可公开的原始推理或 JSON 碎片展示出来。
+              if (!sentAnswerStarted) {
+                sentAnswerStarted = true
+                send({ type: 'answer_started' })
+              }
               // 严格测算只认可工具成功后的输出。无论是否严格测算，正文都先缓冲，
               // 等完整 JSON 经服务端校验后才交给固定前端组件渲染。
               const toolReady = strictRequirement && verifiedTools.has(strictRequirement.tool)
               if (toolReady) verifiedStreamed += safeDelta
+              // `summary` 字段完整闭合后可提前作为公开预览。严格测算要等对应
+              // 工具成功，保证不会在核验失败时把随后会被丢弃的结论先发出去。
+              const previewSource = toolReady ? verifiedStreamed : streamed
+              const canPreview = !strictRequirement || toolReady
+              const preview = !sentAnswerPreview && canPreview
+                ? extractStructuredAnswerPreview(previewSource)
+                : null
+              if (preview) {
+                sentAnswerPreview = true
+                send({ type: 'answer_preview', summary: preview })
+              }
             }
             return
           }

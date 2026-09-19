@@ -11,7 +11,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { promisify } from 'node:util'
 import { config } from './config.js'
-import { getCreditBalance, planByKey, FEATURE_COSTS, nextResetAt, FREE_PLAN, SUPER_PLAN, isPlanExpired, isSuperAdmin, tokensToPoints, canUseFeature, requiredPlanForFeature, featureAllowanceStatus } from '../src/engine/membership.js'
+import { getCreditBalance, planByKey, FEATURE_COSTS, nextResetAt, FREE_PLAN, SUPER_PLAN, isPlanExpired, isSuperAdmin, tokensToPoints, canUseFeature, requiredPlanForFeature, featureAllowanceStatus, SHARE_REWARD_CREDITS, SHARE_REWARD_DAYS, SHARE_REWARD_DAILY_LIMIT, SHARE_REWARD_MAX_PER_PERIOD } from '../src/engine/membership.js'
 
 const scrypt = promisify(crypto.scrypt)
 
@@ -186,6 +186,10 @@ export function createAccountStore(file) {
       u.creditCharges = []
       changed = true
     }
+    if (!Array.isArray(u.shareRewardEvents)) {
+      u.shareRewardEvents = []
+      changed = true
+    }
     if (!u.monthlyFeatureUsage || typeof u.monthlyFeatureUsage !== 'object' || Array.isArray(u.monthlyFeatureUsage)) {
       u.monthlyFeatureUsage = {}
       changed = true
@@ -235,6 +239,7 @@ export function createAccountStore(file) {
       monthlyCreditsUsed: u.monthlyCreditsUsed ?? u.creditsUsed ?? 0,
       monthlyFeatureUsage: { ...(u.monthlyFeatureUsage || {}) },
       permanentCredits: u.permanentCredits ?? 0,
+      shareRewardsRemaining: Math.max(0, SHARE_REWARD_MAX_PER_PERIOD - (u.shareRewardEvents || []).filter(item => Number(item?.createdAt) > Date.now() - SHARE_REWARD_DAYS * 86400000).length),
       monthlyCredits: balance.monthly,
       totalCredits: balance.total,
       planCreditsResetAt: u.planCreditsResetAt || 0,
@@ -317,6 +322,7 @@ export function createAccountStore(file) {
       permanentCredits: WELCOME_CREDITS,
       welcomeCreditPolicyVersion: WELCOME_CREDIT_POLICY_VERSION,
       creditCharges: [],
+      shareRewardEvents: [],
       monthlyFeatureUsage: {},
       tokenCreditPolicyVersion: TOKEN_CREDIT_POLICY_VERSION,
       creditPolicyVersion: POINT_CREDIT_POLICY_VERSION,
@@ -559,6 +565,42 @@ export function createAccountStore(file) {
     }
   }
 
+  /**
+   * 有效分享奖励进入永久积分钱包，因此可直接抵扣 Agent Token 或积分功能。
+   * native share/copy 没有可信的「外部发送回执」，所以服务端以登录用户、一次性
+   * 事件标识、日冷却和 30 天上限做防刷；绝不接受浏览器上传的积分数。
+   */
+  function grantShareReward(id, eventId, source = 'site') {
+    const u = get(id)
+    if (!u) return { ok: false, reason: 'no_user' }
+    const cleanId = String(eventId || '').trim()
+    if (!/^[a-zA-Z0-9:_-]{8,120}$/.test(cleanId)) return { ok: false, reason: 'invalid_event' }
+    const now = Date.now()
+    const periodStart = now - SHARE_REWARD_DAYS * 86400000
+    const events = (u.shareRewardEvents || []).filter(item => item && Number(item.createdAt) > periodStart)
+    if (events.some(item => item.id === cleanId)) {
+      u.shareRewardEvents = events
+      save()
+      return { ok: true, rewarded: false, reason: 'duplicate', user: publicUser(u) }
+    }
+    const dailyRewards = events.filter(item => Number(item.createdAt) > now - 86400000)
+    if (dailyRewards.length >= SHARE_REWARD_DAILY_LIMIT) {
+      u.shareRewardEvents = events
+      save()
+      return { ok: true, rewarded: false, reason: 'daily_limit', user: publicUser(u) }
+    }
+    if (events.length >= SHARE_REWARD_MAX_PER_PERIOD) {
+      u.shareRewardEvents = events
+      save()
+      return { ok: true, rewarded: false, reason: 'period_limit', user: publicUser(u) }
+    }
+    const reward = { id: cleanId, source: String(source || 'site').slice(0, 32), credits: SHARE_REWARD_CREDITS, createdAt: now }
+    u.shareRewardEvents = [...events, reward]
+    u.permanentCredits = Math.max(0, Number(u.permanentCredits || 0)) + SHARE_REWARD_CREDITS
+    save()
+    return { ok: true, rewarded: true, credits: SHARE_REWARD_CREDITS, user: publicUser(u) }
+  }
+
   /** 退还积分。用于「扣了钱但这一轮什么都没产出」（模型立刻报错等）。 */
   function refundCredit(id, featureKey, chargeRef = null) {
     const cost = FEATURE_COSTS[featureKey]
@@ -612,7 +654,7 @@ export function createAccountStore(file) {
 
   return {
     get, byAccount, byEmail, byLogin, byOpenid, byGoogleSub, create, checkPassword, dummyPasswordCheck,
-    touchLogin, isActive, bindGoogleSub, setStatus, update, setPassword, resetPassword, changePlan, adminSetPlan, consumeCredit, consumeTokens, refundCredit, remove, grantSuperAdminByAccount,
+    touchLogin, isActive, bindGoogleSub, setStatus, update, setPassword, resetPassword, changePlan, adminSetPlan, consumeCredit, consumeTokens, refundCredit, grantShareReward, remove, grantSuperAdminByAccount,
     publicUser, refresh,
     count: () => load().users.length,
     list: () => load().users.map(publicUser),

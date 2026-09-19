@@ -199,6 +199,9 @@ export const api = {
   async adminSecurity(token) {
     return request('/api/admin/security', { headers: { 'X-Admin-Token': token } })
   },
+  async analyticsSummary(token, days = 30) {
+    return request(`/api/admin/analytics?days=${encodeURIComponent(days)}`, { headers: { 'X-Admin-Token': token } })
+  },
   async blockSource(fingerprint, { minutes, reason }, token) {
     return request(`/api/admin/security/blocks/${encodeURIComponent(fingerprint)}`, {
       method: 'POST', body: JSON.stringify({ minutes, reason }), headers: { 'X-Admin-Token': token },

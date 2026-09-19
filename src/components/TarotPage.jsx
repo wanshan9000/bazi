@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { SPREADS } from '../data/tarot.js'
 import UpgradePrompt from './UpgradePrompt.jsx'
 import { consumeCredit } from '../data/users.js'
-import { FEATURE_COSTS, getMonthlyCredits, planByKey, nextPlanKey, requiredPlanForFeature, canUseFeature, featureAllowanceStatus } from '../engine/membership.js'
+import { FEATURE_COSTS, getCreditBalance, getMonthlyCredits, planByKey, nextPlanKey, requiredPlanForFeature, canUseFeature } from '../engine/membership.js'
 import { consumeGuestTarot, guestTarotStatus } from '../engine/freeQuota.js'
 import { useLocale } from '../i18n.jsx'
 
@@ -67,13 +67,13 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
   const [insufficient, setInsufficient] = useState(false)
   const [accessDenied, setAccessDenied] = useState(false)
 
-  // 游客可任选牌阵，但全站仅有 3 次本机体验；凡者起则进入服务端月度配额。
+  // 游客可任选牌阵，但全站仅有 3 次本机体验；登录后统一由积分结算。
   const list = SPREADS.filter(s => {
     if (cat !== 'all' && s.cat !== cat) return false
     return !user || canUseFeature(user, 'tarot.reading')
   })
   const activeCat = SPREAD_CATS.find(c => c.k === cat)
-  const tarotAllowance = featureAllowanceStatus(user, 'tarot.reading')
+  const creditBalance = user ? getCreditBalance(user) : null
 
   return (
     <div className="page-wrap tarot-page">
@@ -91,7 +91,7 @@ export default function TarotPage({ onBack, onStart, history, user, onRequireLog
 
         <p className="quota-hint rise rise-2">
           {user
-            ? <>{planByKey(user.plan).name} · {en ? 'Tarot readings left this month ' : '塔罗解读本月剩余 '}<b>{tarotAllowance.remaining === Infinity ? (en ? 'Unlimited' : '不限') : `${tarotAllowance.remaining} / ${tarotAllowance.limit}`}</b>{en ? '' : ' 次'}</>
+            ? <>{en ? 'Tarot reading: ' : '塔罗解读每次 '}<b>{FEATURE_COSTS['tarot.reading']}</b>{en ? ' credits · Available ' : ' 积分 · 当前可用 '}<b>{creditBalance.total}</b>{en ? ' credits' : ' 积分'}</>
             : <>{en ? 'Try any spread on this device. Remaining ' : '游客可任选牌阵本机体验，剩余 '}<b>{guestQuota.remaining} / 3</b>{en ? '' : ' 次'}</>}
         </p>
 

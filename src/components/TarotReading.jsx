@@ -626,7 +626,7 @@ export default function TarotReading({ spreadId, onBack, onReading, onCharge, on
                 塔罗映照的是当下的能量倾向，最终的选择与行动始终在于你。信任直觉，方能穿越迷雾。
               </p>
             </div>
-            <ReportAgentFooter onAskAgent={handleAskAgent} onBack={onHome} />
+            <ReportAgentFooter onAskAgent={handleAskAgent} />
           </div>
         )}
       </div>

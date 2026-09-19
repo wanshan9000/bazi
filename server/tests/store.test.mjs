@@ -63,6 +63,23 @@ test('分享：读取时校验有效期，不是等到下次有人新建分享�
   assert.equal(JSON.parse(line).share, null, '过期分享必须立刻读不到')
 })
 
+test('增长归因：只保留按日聚合的渠道事件，不写入任何用户资料', () => {
+  store.recordAnalyticsEvent({
+    event: 'bazi_chart_created', page: 'bazi', locale: 'zh-CN',
+    source: 'xiaohongshu', medium: 'social', campaign: 'bazi-basics', content: 'note-01',
+  })
+  store.recordAnalyticsEvent({
+    event: 'chart_summary_share_completed', page: 'bazi', locale: 'zh-CN',
+    source: 'chart_share', medium: 'referral', campaign: 'bazi-summary', content: 'zh',
+  })
+  const summary = store.analyticsSummary(7)
+  assert.equal(summary.totals.bazi_chart_created, 1)
+  assert.equal(summary.sources.xiaohongshu.bazi_chart_created, 1)
+  assert.equal(summary.sources.chart_share.chart_summary_share_completed, 1)
+  const stored = fs.readFileSync(file, 'utf8')
+  assert.doesNotMatch(stored, /birth|name|profile|conversation/i)
+})
+
 test('数据文件损坏时另存备份，而不是静默清库后覆盖', () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'store-bad-'))
   const f = path.join(d, 'db.json')

@@ -20,6 +20,8 @@ import { hasPaid, markPaid } from '../engine/entitlements.js'
 import { FEATURE_COSTS, getMonthlyCredits, planByKey, nextPlanKey } from '../engine/membership.js'
 import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx'
 import { localize, useLocale } from '../i18n.jsx'
+import ChartSummaryShare from './ChartSummaryShare.jsx'
+import { consumeGuestFeature } from '../engine/freeQuota.js'
 
 const SHICHEN = [
   ['子时', '23-01'], ['丑时', '01-03'], ['寅时', '03-05'], ['卯时', '05-07'],
@@ -38,6 +40,15 @@ export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin,
   // reason='insufficient' 表示积分不足（展示升级卡）
   const [paid, setPaid] = useState(false)
   const [reason, setReason] = useState(null)
+  const [guestLimitNotice, setGuestLimitNotice] = useState('')
+
+  const allowGuestChart = () => {
+    if (user) return true
+    const quota = consumeGuestFeature('bazi.chart')
+    if (quota.ok) { setGuestLimitNotice(`游客今日还可免费排盘 ${quota.remaining} 次`); return true }
+    setGuestLimitNotice('游客今日免费排盘已达 20 次，登录后可不限次使用。')
+    return false
+  }
 
   useEffect(() => {
     if (!chart || !user) return
@@ -83,15 +94,18 @@ export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin,
         <p className="page-sub rise rise-2">{l('排四柱 · 看五行 · 找到你的出厂设置', 'Four Pillars · Five Elements · Your personal blueprint')}</p>
 
         {editing || !chart ? (
-          <BirthFormComp locale={locale}
-            onDone={(data) => {
-              onChart(data)
-              // 游客可直接排盘：盘面/五行等基础分析免费展示；完整命书按下方登录态 + 积分扣减
-              setEditing(false)
-              setTab('mangpai')
-              window.scrollTo(0, 0)
-            }}
-          />
+          <>
+            <BirthFormComp locale={locale} onBeforeDone={allowGuestChart}
+              onDone={(data) => {
+                onChart(data)
+                // 游客可直接排盘：盘面/五行等基础分析免费展示；完整命书按下方登录态 + 积分扣减
+                setEditing(false)
+                setTab('mangpai')
+                window.scrollTo(0, 0)
+              }}
+            />
+            {guestLimitNotice && <p className="form-note" role="status">{guestLimitNotice}</p>}
+          </>
         ) : (
           <ChartResult
             chart={chart}
@@ -104,7 +118,6 @@ export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin,
             onUpgrade={onUpgrade}
             onAskAgent={onAskAgent}
             onReportReady={onReportReady}
-            onBack={onBack}
           />
         )}
       </div>
@@ -112,7 +125,7 @@ export default function BaziPage({ chart, user, onBack, onChart, onRequireLogin,
   )
 }
 
-function BirthFormComp({ onDone, locale }) {
+function BirthFormComp({ onDone, onBeforeDone, locale }) {
   const l = (zh, en, tw) => localize(locale, zh, en, tw)
   const now = new Date()
   const [calendar, setCalendar] = useState('solar')
@@ -157,6 +170,7 @@ function BirthFormComp({ onDone, locale }) {
   }
 
   const submit = () => {
+    if (onBeforeDone && !onBeforeDone()) return
     let outYear = year, outMonth = month, outDay = day
     if (calendar === 'lunar') {
       const sol = tryLunarToSolar(year, month, day, lunarLeap)
@@ -278,7 +292,7 @@ const HOUR_LABEL = (h) => {
   return { label, range }
 }
 
-function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, onUpgrade, onAskAgent, onReportReady, onBack }) {
+function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, onUpgrade, onAskAgent, onReportReady }) {
   // 同上：完整命书是重计算，不能挂在渲染路径上每次重跑。
   // 依赖只有命盘与流派，两者不变则复用。
   const report = useMemo(
@@ -335,11 +349,11 @@ function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, o
 
   return (
     <>
-    <div className="rise bz-unified">
+      <div className="rise bz-unified">
       {/* 命盘主体 */}
       <div className="rise">
         <ChartBoard chart={chart} school={school} onSchoolChange={setTab} actionsEl={actionsEl} />
-      </div>
+        </div>
 
       {/* 报告正文（不含头部与 actions，由 ref 暴露导出/复制能力）
           · 未登录 → 引导注册
@@ -369,7 +383,10 @@ function ChartResult({ chart, tab, setTab, user, paid, reason, onRequireLogin, o
       </div>
 
     </div>
-    <ReportAgentFooter onAskAgent={handleAskAgent} onBack={onBack} />
+    <ReportAgentFooter
+      onAskAgent={handleAskAgent}
+      share={<ChartSummaryShare chart={chart} compact />}
+    />
     </>
   )
 }

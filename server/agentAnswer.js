@@ -107,6 +107,31 @@ export function parseStructuredAgentAnswer(raw) {
   return { version: 1, summary, sections, closing }
 }
 
+// JSON 回答必须完整后才作为最终结构交付，但 summary 是协议中最先出现、且能独立
+// 校验的一小段公开结论。流式期间只在该字符串已经闭合、可由 JSON.parse 还原时取它，
+// 绝不把半截 JSON、模型草稿或内部标签下发给客户端。
+export function extractStructuredAnswerPreview(raw) {
+  const source = String(raw || '').trim()
+  const prefix = /^\{\s*"version"\s*:\s*1\s*,\s*"summary"\s*:\s*"/.exec(source)
+  if (!prefix) return null
+
+  const contentStart = prefix[0].length
+  let escaped = false
+  for (let index = contentStart; index < source.length; index++) {
+    const char = source[index]
+    if (escaped) { escaped = false; continue }
+    if (char === '\\') { escaped = true; continue }
+    if (char !== '"') continue
+    // 字段值中的未转义引号不能当作结尾；只有后面是 JSON 字段边界才认可。
+    if (!/^\s*(?:,|})/.test(source.slice(index + 1))) continue
+    try {
+      const summary = text(JSON.parse(source.slice(contentStart - 1, index + 1)), MAX_SUMMARY)
+      return summary || null
+    } catch { return null }
+  }
+  return null
+}
+
 // 历史记录保留一份可阅读的纯文本，供旧客户端或人工导出使用；新客户端优先读取 answer。
 export function structuredAnswerText(answer) {
   if (!answer) return ''

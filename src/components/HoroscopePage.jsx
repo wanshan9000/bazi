@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { horoscope, ALL_SIGNS, findSign } from '../engine/horoscope.js'
 import ReportAgentFooter, { buildReportAgentPrompt } from './ReportAgentFooter.jsx'
+import { consumeGuestFeature } from '../engine/freeQuota.js'
 
 export default function HoroscopePage({ user, onBack, onAskAgent, onReportReady }) {
   const [date] = useState(new Date())
@@ -10,6 +11,17 @@ export default function HoroscopePage({ user, onBack, onAskAgent, onReportReady 
 
   const r = useMemo(() => horoscope(sign, date), [sign, date.getTime()])
   const [archiveId, setArchiveId] = useState(null)
+  const [guestLimitNotice, setGuestLimitNotice] = useState('')
+
+  const selectSign = nextSign => {
+    if (!user) {
+      const quota = consumeGuestFeature('horoscope')
+      if (!quota.ok) { setGuestLimitNotice('游客今日免费查看星座已达 20 次，登录后可不限次使用。'); return }
+      setGuestLimitNotice(`游客今日还可免费查看星座 ${quota.remaining} 次`)
+    }
+    setSign(nextSign)
+    setPickerOpen(false)
+  }
 
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -79,7 +91,7 @@ export default function HoroscopePage({ user, onBack, onAskAgent, onReportReady 
               <button
                 key={z.name}
                 className={`hs-pick-item ${sign === z.name ? 'active' : ''}`}
-                onClick={() => { setSign(z.name); setPickerOpen(false) }}
+              onClick={() => selectSign(z.name)}
               >
                 <span className="hs-pick-icon">{z.icon}</span>
                 <span className="hs-pick-name">{z.name}</span>
@@ -88,6 +100,7 @@ export default function HoroscopePage({ user, onBack, onAskAgent, onReportReady 
             ))}
           </div>
         )}
+        {guestLimitNotice && <p className="form-note" role="status">{guestLimitNotice}</p>}
 
         <div className="hs-head rise rise-2">
           <div className="hs-sign-card">
@@ -171,7 +184,7 @@ export default function HoroscopePage({ user, onBack, onAskAgent, onReportReady 
         <div className="hs-foot rise">
           行星行运 · 仅作日常参考，不替代理性思考。
         </div>
-        <ReportAgentFooter onAskAgent={handleAskAgent} onBack={onBack} />
+        <ReportAgentFooter onAskAgent={handleAskAgent} />
       </div>
     </div>
   )

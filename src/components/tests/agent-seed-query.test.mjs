@@ -36,7 +36,7 @@ test('子平报告咨询入口提供简洁首屏文案，同时保留完整报�
 
   try {
     r.click(r.findByText('子平命书'))
-    r.click(r.findByText('咨询元气 AI'))
+    r.click(r.findByText('问元气 AI'))
     assert.equal(request.displayText, '想咨询这份子平报告')
     assert.match(request.prompt, /^报告咨询：子平派/m)
     assert.match(request.prompt, /当前报告摘要/)

@@ -88,8 +88,6 @@ export default function NativeReportHistory({ view, reportId, onBack, onAskAgent
           <ArchivedReportView report={report} />
           <ReportAgentFooter
             onAskAgent={() => onAskAgent?.({ chart: report.chart, reportId: report.id, prompt: reportPrompt(report) })}
-            onBack={onBack}
-            backLabel="返回我的报告"
           />
           {report.agentSessionIds?.length ? <button className="history-report-sessions" onClick={() => onOpenSession?.(report.agentSessionIds[0])}>查看关联咨询 · {report.agentSessionIds.length}</button> : null}
           <button className="history-report-delete" onClick={() => setConfirming(true)}>删除这份报告</button>

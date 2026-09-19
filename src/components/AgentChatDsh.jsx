@@ -5,7 +5,7 @@ import { reportApi } from '../api/reports.js'
 import { buildChart } from '../engine/bazi.js'
 import { listCollection, saveToCollection, removeFromCollection } from '../engine/chartCollection.js'
 import { refreshSession } from '../data/users.js'
-import { canAfford, nextPlanKey } from '../engine/membership.js'
+import { AGENT_LOW_CREDIT_THRESHOLD, GUEST_AGENT_MONTHLY_CREDITS, SHARE_REWARD_CREDITS, canAfford, getCreditBalance, isPlanExpired, isSuperAdmin, nextPlanKey, planByKey } from '../engine/membership.js'
 import { LanguageSwitcher } from '../i18n.jsx'
 import { renderMarkdown } from '../utils/markdown.jsx'
 import { ThinkBlock, ToolCallsBlock, CopyButton, StructuredAnswer, parseStructuredAnswerText, renderAiText, timeNow, fmtSessionTime, quickQuestionsForConversation, isNearScrollBottom } from './agent/ChatParts.jsx'
@@ -20,7 +20,7 @@ const SHI_CHEN = ['子', '丑', '丑', '寅', '寅', '卯', '卯', '辰', '辰',
 function agentCopy(locale, key, fallback = key) {
   const en = {
     session: 'Session', unnamedSession: 'Untitled session', report: 'Reading report', malformedReply: '⚠️ The reply format was incomplete. Please ask again.', loginExpired: '⚠️ Your session expired. Please sign in again.', stopped: '⏹ Generation stopped', networkFailed: 'Network issue. The reply was not completed.', historyFailed: 'Could not load conversations. Check your connection and try again.', sessionMissing: 'This conversation is unavailable.', deleteFailed: 'Could not delete this conversation. Please try again.', noChart: 'No chart is active. Share your birth details before saving one.', chartName: 'Name this chart (for example: Me, Mom, Child):',
-    agentName: 'Mr. Sanmen', shortName: 'Sanmen', usage: 'Usage-based billing · Keep asking', trial: 'Trial credits included · Subscribe when used', newChat: 'New chat', history: 'History', totalChats: count => `${count} chats · Select to restore`, close: 'Close', noHistory: 'No saved conversations yet. Start chatting to save one.', messages: count => `${count} messages`, delete: 'Delete', myCharts: 'My charts', totalCharts: count => `${count} saved · Select to switch`, saveChart: '+ Save current', noCharts: 'No saved charts. Create one, then save it here.', saved: 'saved', removeSaved: 'Remove saved chart', you: 'You', copyReport: 'Copy full report', askAnything: 'Ask Mr. Sanmen anything…', switchModel: 'Switch model', modelTitle: 'Choose model (starts a new chat)', modelDeepNote: 'Deep mode is more thorough and may take longer.', modelQuick: 'Quick', modelDeep: 'Deep', stop: 'Stop generating',
+    agentName: 'Mr. Sanmen', shortName: 'Sanmen', usage: 'Usage-based billing · Keep asking', trial: 'Guest trial: ¥5 equivalent credits every 30 days', newChat: 'New chat', history: 'History', totalChats: count => `${count} chats · Select to restore`, close: 'Close', noHistory: 'No saved conversations yet. Start chatting to save one.', messages: count => `${count} messages`, delete: 'Delete', myCharts: 'My charts', totalCharts: count => `${count} saved · Select to switch`, saveChart: '+ Save current', noCharts: 'No saved charts. Create one, then save it here.', saved: 'saved', removeSaved: 'Remove saved chart', you: 'You', copyReport: 'Copy full report', askAnything: 'Ask Mr. Sanmen anything…', switchModel: 'Switch model', modelTitle: 'Choose model (starts a new chat)', modelDeepNote: 'Deep mode is more thorough and may take longer.', modelQuick: 'Quick', modelDeep: 'Deep', stop: 'Stop generating',
   }
   return locale === 'en' ? (en[key] ?? fallback) : fallback
 }
@@ -35,9 +35,9 @@ function routeModeCopy(route, locale) {
     : agentCopy(locale, 'modelQuick', '快速')
 }
 
-// v1 只存一个裸路由名，历史用户曾因此被永久锁在 MiniMax。v2 仅保存用户主动点选的
-// 路由；所有旧裸值一律交回默认 Flash，保留之后手动选择深度模型的能力。
-export function resolveAgentRoute(stored, fallback = 'deepseek-flash', available = null) {
+// v1 只存一个裸路由名，无法区分旧缓存与用户主动选择。v2 仅保存主动点选的
+// 路由；旧裸值一律交回当前默认 MiniMax，保留之后手动选择其他模型的能力。
+export function resolveAgentRoute(stored, fallback = 'minimax', available = null) {
   if (typeof stored !== 'string' || !stored.startsWith(ROUTE_PREF_PREFIX)) return fallback
   const route = stored.slice(ROUTE_PREF_PREFIX.length)
   if (!route) return fallback
@@ -62,7 +62,7 @@ export function normalizeAgentSeed(input, fallback = '') {
 export function safeThinkStep(type, toolName = '', locale = 'zh-CN') {
   if (locale === 'en') {
     const stages = {
-      start: 'Request received. Identifying the reading topic…', session_ready: 'Conversation ready. Preparing this consultation…', context_ready: 'Conversation context is ready. Checking whether a chart or prior report is needed…', engine_connecting: 'Connecting the reading engine…', engine_ready: 'Reading engine is ready. Delivering your request…', engine_requested: 'Reading request delivered. Waiting for the first response…', reasoning: 'Reviewing the relevant chart relationships and key facts…\nCross-checking the available information…', answering: 'Organizing the key conclusion and practical guidance…\nChecking that the reply directly addresses your question…', completed: 'Reading complete. You can ask a follow-up question.',
+      start: 'Request received. Identifying the reading topic…', session_ready: 'Conversation ready. Preparing this consultation…', context_ready: 'Conversation context is ready. Checking whether a chart or prior report is needed…', engine_connecting: 'Connecting the reading engine…', engine_ready: 'Reading engine is ready. Delivering your request…', engine_requested: 'Reading request delivered. Waiting for the first response…', answer_started: 'The reply is now being generated. Formatting the first conclusion for you…', reasoning: 'Reviewing the relevant chart relationships and key facts…\nCross-checking the available information…', answering: 'Organizing the key conclusion and practical guidance…\nChecking that the reply directly addresses your question…', completed: 'Reading complete. You can ask a follow-up question.',
     }
     const calls = { bazi: 'Calculating the Four Pillars and luck cycles…', ziwei: 'Calculating the Ziwei chart and twelve palaces…', qimen: 'Casting the Qimen chart and reviewing the pattern…', liuyao: 'Casting the hexagram and reviewing changing lines…', huangli: 'Checking the date and Almanac guidance…', tarot: 'Reviewing the spread and card positions…', fengshui: 'Reviewing space, direction, and movement…', name: 'Reviewing name structure and element balance…', wuyunliuqi: 'Reviewing seasonal wellness factors…' }
     const results = { bazi: 'Four Pillars data returned. Checking its relevance to this question…', ziwei: 'Ziwei chart data returned. Checking palace and star relationships…', qimen: 'Qimen chart returned. Checking the relevant signifiers…', liuyao: 'Hexagram returned. Checking the changing-line relationship…', huangli: 'Date guidance confirmed. Converting it into practical advice…', tarot: 'Spread details are ready. Relating the positions to your question…', fengshui: 'Space details are ready. Preparing actionable suggestions…', name: 'Name details are ready. Organizing the key points…', wuyunliuqi: 'Wellness factors are ready. Organizing daily recommendations…' }
@@ -75,6 +75,7 @@ export function safeThinkStep(type, toolName = '', locale = 'zh-CN') {
   if (type === 'engine_connecting') return '正在连接解读引擎…\n连接建立后将立即提交本次咨询…'
   if (type === 'engine_ready') return '解读引擎已就绪…\n正在提交本次咨询并等待接收确认…'
   if (type === 'engine_requested') return '已将咨询主题与上下文提交给解读引擎…\n正在等待模型返回首个推断片段…'
+  if (type === 'answer_started') return '解读引擎已开始生成回复…\n正在整理首段结论，完成排版后立即呈现…'
   if (type === 'reasoning') return '模型已开始推断，正在梳理命盘关系与问题重点…\n正在对照已有资料，检查关键信息是否一致…\n正在提取与本次问题最相关的判断依据…\n正在交叉核验信息之间的关联…'
   if (type === 'answering') return '已收到模型正文，正在整理核心判断…\n正在把判断转成清晰、可执行的建议…\n正在检查结论是否直接回应本次问题…'
   if (type === 'completed') return '本次解读已完成，结论与建议已整理。\n本轮实时输出已结束，可继续追问相关细节。'
@@ -128,7 +129,7 @@ function readAgentRoutePreference() {
     const route = resolveAgentRoute(stored)
     if (stored && !stored.startsWith(ROUTE_PREF_PREFIX)) localStorage.removeItem(ROUTE_KEY)
     return route
-  } catch { return 'deepseek-flash' }
+  } catch { return 'minimax' }
 }
 
 // hour 缺失表示「时辰未知」，不能悄悄补成 12 点：服务端会把它当成确定的午时写进
@@ -142,7 +143,7 @@ function chartLabel(c, locale = 'zh-CN') {
 }
 export function displaySessionTitle(title, locale = 'zh-CN') {
   const value = String(title || '').replace(/\s+/g, ' ').trim()
-  return /(?:【\s*(?:回答长度|问题覆盖校验|当前日期口径|日期换算核验|会话事实备忘|最终交付格式|当前缘主命盘|输出语言|輸出語言|Output language)|这是一次常规咨询|不要复述整张命盘)/i.test(value)
+  return /(?:^\/(?:[a-z][\w-]*)(?:\s+\/[a-z][\w-]*)*\s+【|【\s*(?:回答长度|问题覆盖校验|当前日期口径|日期换算核验|会话事实备忘|最终交付格式|当前缘主命盘|输出语言|輸出語言|Output language|强制测算(?:规约|契约)|服务端八字预检|排盘校验任务|事实核验与时间口径)|这是一次常规咨询|不要复述整张命盘)/i.test(value)
     ? agentCopy(locale, 'session', '本次咨询')
     : value || agentCopy(locale, 'unnamedSession', '未命名会话')
 }
@@ -159,6 +160,52 @@ function sessionTitle(s, locale = 'zh-CN') {
 function canRestoreSession(session) {
   // 积分余额与会话独立；只要会话存在，就应能恢复完整上下文。
   return Boolean(session?.id)
+}
+
+export function agentEntitlement(user, locale = 'zh-CN') {
+  const dictionary = locale === 'en'
+    ? {
+        guest: 'Wanderer', registered: 'Registered member', guestBenefit: `Genki AI includes ${GUEST_AGENT_MONTHLY_CREDITS} trial credits every 30 days`,
+        registeredBenefit: credits => `No-Token features are unlimited · ${credits} credits available`,
+        memberBenefit: (monthly, credits) => `${monthly} monthly credits · ${credits} credits available`,
+        guestShare: `Register, then make a valid share to earn ${SHARE_REWARD_CREDITS} permanent credits`, share: `A valid share earns ${SHARE_REWARD_CREDITS} permanent credits`, low: credits => `Only ${credits} credits remain. Top up before your chat is interrupted.`, topUp: 'View credit options',
+      }
+    : locale === 'zh-TW'
+      ? {
+          guest: '遊者', registered: '註冊用戶', guestBenefit: `元氣 AI 每 30 天含 ${GUEST_AGENT_MONTHLY_CREDITS} 積分體驗額度`,
+          registeredBenefit: credits => `無 Token 功能不限次 · 目前可用 ${credits} 積分`,
+          memberBenefit: (monthly, credits) => `每月 ${monthly} 積分 · 目前可用 ${credits} 積分`,
+          guestShare: `註冊後完成有效分享，獲 ${SHARE_REWARD_CREDITS} 永久積分`, share: `完成有效分享，獲 ${SHARE_REWARD_CREDITS} 永久積分`, low: credits => `可用積分僅剩 ${credits}，建議提前補充，避免對話中斷。`, topUp: '查看積分方案',
+        }
+      : {
+          guest: '游者', registered: '注册用户', guestBenefit: `元氣 AI 每 30 天含 ${GUEST_AGENT_MONTHLY_CREDITS} 积分体验额度`,
+          registeredBenefit: credits => `无 Token 功能不限次 · 当前可用 ${credits} 积分`,
+          memberBenefit: (monthly, credits) => `每月 ${monthly} 积分 · 当前可用 ${credits} 积分`,
+          guestShare: `注册后完成有效分享，获 ${SHARE_REWARD_CREDITS} 永久积分`, share: `完成有效分享，获 ${SHARE_REWARD_CREDITS} 永久积分`, low: credits => `可用积分仅剩 ${credits}，建议提前补充，避免对话中断。`, topUp: '查看积分方案',
+        }
+
+  if (!user) return {
+    tier: dictionary.guest,
+    benefit: dictionary.guestBenefit,
+    share: dictionary.guestShare,
+    low: false,
+    topUp: dictionary.topUp,
+  }
+
+  const balance = getCreditBalance(user)
+  const planKey = isSuperAdmin(user) ? 'supreme' : (!user.plan || user.plan === 'free' || isPlanExpired(user) ? 'free' : user.plan)
+  const plan = planByKey(planKey)
+  const available = balance.total === Infinity ? '∞' : balance.total
+  const isRegistered = planKey === 'free'
+  const low = Number.isFinite(balance.total) && balance.total <= AGENT_LOW_CREDIT_THRESHOLD
+  return {
+    tier: isRegistered ? dictionary.registered : plan.name,
+    benefit: isRegistered ? dictionary.registeredBenefit(available) : dictionary.memberBenefit(plan.credits, available),
+    share: dictionary.share,
+    low,
+    lowText: low ? dictionary.low(available) : '',
+    topUp: dictionary.topUp,
+  }
 }
 
 export default function AgentChatDsh({ chart: chartProp, seedQuery, user, reportId, initialSessionId, locale = 'zh-CN', onRequireLogin, onUpgrade, onUserChange }) {
@@ -196,7 +243,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
       if (cancelled) return
       const routes = m.routes || []
       const available = routes.map(item => item.key)
-      const fallback = m.default || 'deepseek-flash'
+      const fallback = m.default || 'minimax'
       setModels({ routes, default: fallback })
       setRoute(current => {
         if (available.includes(current)) return current
@@ -303,9 +350,14 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
                 heartbeat: { stage: e.stage, elapsedSeconds: e.elapsedSeconds, at: Date.now() },
               }))
               break
+            case 'answer_started': patchLast(m => appendSafeThinkStep(m, safeThinkStep('answer_started', '', locale))); break
+            case 'answer_preview': patchLast(m => ({
+              ...appendSafeThinkStep(m, safeThinkStep('answer_started', '', locale)),
+              preview: typeof e.summary === 'string' ? e.summary : '',
+            })); break
             case 'text': patchLast(m => {
               if (e.structured === false) {
-                return { ...appendSafeThinkStep(m, safeThinkStep('answering', '', locale)), structuredRaw: undefined, text: m.text + e.delta }
+                return { ...appendSafeThinkStep(m, safeThinkStep('answering', '', locale)), preview: undefined, structuredRaw: undefined, text: m.text + e.delta }
               }
               const candidate = `${m.structuredRaw || ''}${e.delta}`
               const isStructured = Boolean(m.structuredRaw) || /^\s*\{\s*"version"\s*:/.test(`${m.text || ''}${e.delta}`)
@@ -316,6 +368,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
               patchLast(m => ({
                 ...appendSafeThinkStep(m, safeThinkStep('answering', '', locale)),
                 answer: e.answer,
+                preview: undefined,
                 text: '',
               }))
               break
@@ -330,13 +383,13 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
               break
             // 追加而不是二选一：模型已经吐了半截又报错时，丢掉已渲染的文字
             // 会让用户看着内容凭空消失；把错误接在后面，两样都留住。
-            case 'error': patchLast(m => ({ ...m, text: (m.text ? m.text + '\n\n' : '') + `⚠️ ${e.message}`, streaming: false, _failed: true })); break
+            case 'error': patchLast(m => ({ ...m, preview: undefined, text: (m.text ? m.text + '\n\n' : '') + `⚠️ ${e.message}`, streaming: false, _failed: true })); break
             case 'done': patchLast(m => {
               const raw = m.structuredRaw || m.text
               const answer = m.answer || parseStructuredAnswerText(raw)
               return answer
-                ? { ...appendSafeThinkStep(m, safeThinkStep('completed', '', locale)), answer, text: '', structuredRaw: undefined, streaming: false }
-                : { ...appendSafeThinkStep(m, safeThinkStep('completed', '', locale)), text: m.structuredRaw ? agentCopy(locale, 'malformedReply', '⚠️ 本次回复格式未完成，请重新提问。') : m.text, structuredRaw: undefined, streaming: false }
+                ? { ...appendSafeThinkStep(m, safeThinkStep('completed', '', locale)), answer, preview: undefined, text: '', structuredRaw: undefined, streaming: false }
+                : { ...appendSafeThinkStep(m, safeThinkStep('completed', '', locale)), preview: undefined, text: m.structuredRaw ? agentCopy(locale, 'malformedReply', '⚠️ 本次回复格式未完成，请重新提问。') : m.text, structuredRaw: undefined, streaming: false }
             }); break
             default: break
           }
@@ -509,9 +562,13 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
     send()
   }
   const quick = quickQuestionsForConversation(messages, { hasChart: Boolean(activeChart), locale })
-  const currentRoute = sessionRoute || route || models.default || 'deepseek-flash'
+  const currentRoute = sessionRoute || route || models.default || 'minimax'
   const currentRouteMeta = models.routes.find(item => item.key === currentRoute)
   const currentRouteIsDeep = isDeepRoute(currentRoute)
+  const entitlement = agentEntitlement(user, locale)
+  // 身份与体验额度是三门先生开场时说清楚的事，不单独占用聊天区上方的产品栏。
+  // 一旦用户已经发言，欢迎语自然退出；低积分提醒则在输入前持续可见。
+  const showWelcomeEntitlement = !messages.some(message => message.role === 'user')
   return (
     <div className="agent-page-inner">
       <div className="agent-head">
@@ -522,7 +579,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
               : activeSession ? <div className="current-session-chip" title={displaySessionTitle(activeSession.title, locale)}><span className="current-session-label">{agentCopy(locale, 'session', '会话')}</span><span className="current-session-title">{displaySessionTitle(activeSession.title, locale)}</span></div>
                 : <div className="name"><span className="agent-name-full">{agentCopy(locale, 'agentName', '三门先生')}</span><span className="agent-name-short">{agentCopy(locale, 'shortName', '三门')}</span></div>}
           </div>
-          <div className="agent-topic-status">{user ? agentCopy(locale, 'usage', '按实际用量结算 · 可持续追问') : agentCopy(locale, 'trial', '赠送体验积分 · 用完后订阅')}</div>
+          <div className="agent-topic-status">{user ? agentCopy(locale, 'usage', '按实际用量结算 · 可持续追问') : agentCopy(locale, 'trial', '游客每 30 天赠 ¥5 等值积分')}</div>
         </div>
         <div className="agent-head-actions">
           <LanguageSwitcher mobile />
@@ -585,6 +642,7 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
       <div className="chat-scroll" ref={scrollRef} onScroll={handleChatScroll}>
         {messages.map(m => {
           const answer = renderableAgentAnswer(m)
+          const preview = typeof m.preview === 'string' ? m.preview.trim() : ''
           return (
           <div key={m.id} className={`msg ${m.role}`}>
             <div className="avatar">{m.role === 'ai' ? '三' : m.role === 'tool' ? '🔧' : agentCopy(locale, 'you', '我')}</div>
@@ -601,10 +659,14 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
                 <ToolCallsBlock names={m.text} locale={locale} />
               ) : (
                 <div className={`bubble ${m.streaming ? 'bubble-streaming' : ''}`}>
-                  {m.reasoning ? <ThinkBlock content={m.reasoning} streaming={!!m.streaming} collapseWhenStreamingText={Boolean(m.text || answer)} heartbeat={m.heartbeat} locale={locale} /> : null}
+                  {m.reasoning ? <ThinkBlock content={m.reasoning} streaming={!!m.streaming} collapseWhenStreamingText={Boolean(m.text || answer || preview)} heartbeat={m.heartbeat} locale={locale} /> : null}
                   {m.tools && m.tools.length > 0 ? <ToolCallsBlock tools={m.tools} streaming={!!m.streaming} heartbeat={m.heartbeat} locale={locale} /> : null}
                   {answer ? <StructuredAnswer answer={answer} /> : m.streaming && !m.text ? (
-                    <span className="typing"><i /><i /><i /></span>
+                    preview ? <div className="agent-answer-preview" aria-live="polite">
+                      <span className="agent-answer-preview-label">{locale === 'en' ? 'First conclusion' : '先给结论'}</span>
+                      <p>{preview}</p>
+                      <span className="agent-answer-preview-status">{locale === 'en' ? 'Full reading is being organized…' : '完整解读正在整理…'}</span>
+                    </div> : <span className="typing"><i /><i /><i /></span>
                   ) : (
                     <>{renderAiText(m.role === 'user' ? (m.displayText || m.text) : m.text, !!m.streaming, { suppressThinkBlocks: Boolean(m.reasoning) })}{m.streaming && <span className="stream-cursor">▍</span>}</>
                   )}
@@ -614,7 +676,26 @@ export default function AgentChatDsh({ chart: chartProp, seedQuery, user, report
           </div>
           )
         })}
+        {showWelcomeEntitlement && (
+          <div className="msg ai agent-welcome-entitlement" aria-label={locale === 'en' ? 'Account benefits and credits' : '当前权益与积分'}>
+            <div className="avatar">三</div>
+            <div className="msg-content">
+              <div className="bubble">
+                <span className="agent-welcome-tier">{entitlement.tier}</span>
+                <span>{entitlement.benefit}</span>
+                <span className="agent-welcome-share">✦ {entitlement.share}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {entitlement.low && !showWelcomeEntitlement && (
+        <div className="agent-low-credit-notice" role="status">
+          <span>{entitlement.lowText}</span>
+          <button type="button" onClick={() => onUpgrade && onUpgrade(nextPlanKey(user?.plan))}>{entitlement.topUp}</button>
+        </div>
+      )}
 
       <div className="quick-grid">
         <div className="quick-block">

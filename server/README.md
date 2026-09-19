@@ -149,7 +149,7 @@ npm run agent:smoke
 |---|---|
 | `DEEPSEEK_API_KEY` | DeepSeek 官方密钥（必填） |
 | `MINIMAX_API_KEY` | MiniMax 备选模型（可选） |
-| `AGENT_DEFAULT_ROUTE` | 默认路由：`deepseek-flash` / `deepseek-pro` / `minimax` |
+| `AGENT_DEFAULT_ROUTE` | 默认路由：`minimax`（可改为 `deepseek-flash` / `deepseek-pro`） |
 | `AGENT_STORE_FILE` | 会话索引文件，默认 `server/data/agent_sessions.json` |
 
 运行时数据：`server/dsh/home/sessions/`（dsh 会话日志，需挂持久卷）。密钥只在服务端，子进程 env 白名单传递，遥测已关闭。

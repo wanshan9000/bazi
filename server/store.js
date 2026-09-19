@@ -13,7 +13,7 @@ function ensureFile() {
   }
 }
 
-const EMPTY_DB = () => ({ subscribers: [], verifies: [], shares: [], adminSkills: [], articles: [], refunds: [], complaints: [] })
+const EMPTY_DB = () => ({ subscribers: [], verifies: [], shares: [], analytics: { days: {} }, adminSkills: [], articles: [], refunds: [], complaints: [] })
 
 function load() {
   if (cache) return cache
@@ -201,6 +201,80 @@ export function getShare(id) {
   // 在那之前，一条早该失效的分享仍然照常返回内容，而接口文案却写着「已过期」。
   if (now() - rec.createdAt >= shareTtlMs()) return null
   return rec.payload
+}
+
+// ---- 增长归因（仅聚合计数，不保存用户、IP、生辰、命盘或对话内容）----
+const ANALYTICS_KEEP_DAYS = 180
+const ANALYTICS_EVENT_RE = /^[a-z_]{2,48}$/
+const ANALYTICS_FIELD_RE = /^[a-z0-9._:-]{1,64}$/
+
+function analyticsDate(nowDate = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(nowDate)
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
+function analyticsField(value, fallback = '') {
+  const text = String(value || '').trim().toLowerCase()
+  return ANALYTICS_FIELD_RE.test(text) ? text : fallback
+}
+
+function analyticsStore() {
+  const db = load()
+  if (!db.analytics || typeof db.analytics !== 'object') db.analytics = { days: {} }
+  if (!db.analytics.days || typeof db.analytics.days !== 'object') db.analytics.days = {}
+  return db.analytics
+}
+
+function increment(target, key) {
+  target[key] = (Number(target[key]) || 0) + 1
+}
+
+/**
+ * 记录匿名增长事件。数据按日/来源聚合，避免把访问者轨迹写入本站 JSON 存储。
+ */
+export function recordAnalyticsEvent({ event, page, locale, source, medium, campaign, content }) {
+  if (!ANALYTICS_EVENT_RE.test(String(event || ''))) return false
+  const analytics = analyticsStore()
+  const key = analyticsDate()
+  const day = analytics.days[key] || (analytics.days[key] = { events: {}, sources: {}, pages: {}, locales: {} })
+  const safeSource = analyticsField(source, 'direct')
+  const safePage = analyticsField(page, 'home')
+  increment(day.events, event)
+  increment(day.pages[safePage] || (day.pages[safePage] = {}), event)
+  increment(day.locales, analyticsField(locale, 'zh-cn'))
+  const sourceBucket = day.sources[safeSource] || (day.sources[safeSource] = { events: {}, medium: {}, campaign: {}, content: {} })
+  increment(sourceBucket.events, event)
+  increment(sourceBucket.medium, analyticsField(medium, 'none'))
+  if (campaign) increment(sourceBucket.campaign, analyticsField(campaign, 'none'))
+  if (content) increment(sourceBucket.content, analyticsField(content, 'none'))
+
+  const cutoff = Date.now() - ANALYTICS_KEEP_DAYS * 24 * 60 * 60 * 1000
+  Object.keys(analytics.days).forEach(date => {
+    if (Date.parse(`${date}T00:00:00+08:00`) < cutoff) delete analytics.days[date]
+  })
+  save()
+  return true
+}
+
+/** 供管理员查看近 N 天的渠道与转化事件汇总。 */
+export function analyticsSummary(days = 30) {
+  const analytics = analyticsStore()
+  const keys = Object.keys(analytics.days).sort().slice(-Math.max(1, Math.min(90, Number(days) || 30)))
+  const totals = {}
+  const sources = {}
+  const series = keys.map(date => {
+    const entry = analytics.days[date] || { events: {} }
+    Object.entries(entry.events || {}).forEach(([event, count]) => { totals[event] = (totals[event] || 0) + count })
+    Object.entries(entry.sources || {}).forEach(([source, bucket]) => {
+      const target = sources[source] || (sources[source] = {})
+      Object.entries(bucket.events || {}).forEach(([event, count]) => { target[event] = (target[event] || 0) + count })
+    })
+    return { date, ...entry.events }
+  })
+  return { days: keys.length, totals, sources, series }
 }
 
 // ---- 管理后台：自定义技能（管理员导入，全站共享）----

@@ -171,9 +171,9 @@ export const config = {
 
   // ---- 游客免费额度（服务端记账，按来源 IP）----
   guest: {
-    // 每 IP 每天的免费 Token 上限。游客额外赠送 1 积分等值的体验量（19,000 Token），
-    // 游客标识是客户端自报的，只有按 IP 记账才拦得住。
-    dailyTokens: Number(env.GUEST_DAILY_TOKENS || 69000),
+    // 每 IP 每 30 天的免费 Token 上限。游客获得约 ¥5 的体验额度（24 积分 =
+    // 456,000 Token）。游客标识是客户端自报的，只有按 IP 记账才拦得住。
+    monthlyTokens: Number(env.GUEST_MONTHLY_TOKENS || 456000),
     quotaFile: env.GUEST_QUOTA_FILE || path.join(__dirname, 'data', 'guest_quota.json'),
   },
 

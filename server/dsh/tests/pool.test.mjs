@@ -121,9 +121,9 @@ test('没有 DeepSeek 凭据时默认模型回退到可用的 MiniMax，而不�
   assert.equal(resolveDefaultRoute(env), 'minimax')
 })
 
-test('DeepSeek 凭据存在时仍优先使用快速默认模型', () => {
-  const env = { AGENT_DEFAULT_ROUTE: 'deepseek-flash', DEEPSEEK_API_KEY: 'configured', MINIMAX_API_KEY: 'configured' }
-  assert.equal(resolveDefaultRoute(env), 'deepseek-flash')
+test('未显式配置时，MiniMax 是成本可控的默认模型', () => {
+  const env = { DEEPSEEK_API_KEY: 'configured', MINIMAX_API_KEY: 'configured' }
+  assert.equal(resolveDefaultRoute(env), 'minimax')
 })
 
 test('快速路由和深度路由按各自的生成上限初始化', async () => {

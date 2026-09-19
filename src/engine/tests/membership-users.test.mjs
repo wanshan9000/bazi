@@ -27,7 +27,7 @@ function installStorage(name) {
 const ls = installStorage('localStorage')
 installStorage('sessionStorage')
 
-const { getCreditBalance, getMonthlyCredits, getMonthlyProgress, planByKey, FREE_PLAN, SUPER_PLAN, PLANS, AGENT_TOKEN_BILLING, TOKENS_PER_POINT, tokensToPoints, isPlanExpired, canAfford, canUseFeature, featureAllowanceStatus, requiredPlanForFeature, canUseHuangliReminder } = await import('../membership.js')
+const { getCreditBalance, getMonthlyCredits, getMonthlyProgress, planByKey, FREE_PLAN, SUPER_PLAN, PLANS, AGENT_TOKEN_BILLING, AGENT_LOW_CREDIT_THRESHOLD, TOKENS_PER_POINT, GUEST_AGENT_MONTHLY_CREDITS, SHARE_REWARD_CREDITS, tokensToPoints, isPlanExpired, canAfford, canUseFeature, featureAllowanceStatus, requiredPlanForFeature, canUseHuangliReminder } = await import('../membership.js')
 const { localKey } = await import('../userScope.js')
 const { remapScopedKeys } = await import('../../data/legacyMigrate.js')
 const { setAuth, clearAuth } = await import('../../api/auth.js')
@@ -64,12 +64,14 @@ test('free 档本身不会过期', () => {
 
 test('会员额度：注册用户与三档会员按积分产品策略展示', () => {
   assert.equal(FREE_PLAN.name, '注册用户')
-  assert.equal(FREE_PLAN.perks.some(item => item.includes('体验积分')), true)
-  assert.equal(FREE_PLAN.perks.some(item => item.includes('20 积分')), true)
+  assert.equal(FREE_PLAN.perks.some(item => item.includes(`每 30 天获 ${GUEST_AGENT_MONTHLY_CREDITS} 积分`)), true)
+  assert.equal(FREE_PLAN.perks.some(item => item.includes(`每次获 ${SHARE_REWARD_CREDITS} 永久积分`)), true)
+  assert.equal(FREE_PLAN.perks.some(item => item.includes('注册赠 20 永久积分')), true)
   assert.deepEqual(PLANS.map(plan => [plan.key, plan.credits]), [
     ['earth', 60], ['heaven', 200], ['oracle', 520],
   ])
   assert.equal(AGENT_TOKEN_BILLING.minimumBalance, 1)
+  assert.equal(AGENT_LOW_CREDIT_THRESHOLD, 5)
   assert.equal(TOKENS_PER_POINT, 19000)
   assert.equal(SUPER_PLAN.name, '尊者')
 })
@@ -81,35 +83,34 @@ test('模型实际用量向上换算为积分', () => {
   assert.equal(tokensToPoints(19001), 2)
 })
 
-test('非 Agent 模块按会员档位开放，积分不能绕过高阶模块限制', () => {
+test('已注册用户以积分而非会员档位访问所有 AI 功能', () => {
   const now = Date.now()
   const active = plan => ({ plan, planExpiresAt: plan === 'free' ? 0 : now + 86400000 })
-  assert.equal(requiredPlanForFeature('ziwei.full'), 'heaven')
+  assert.equal(requiredPlanForFeature('ziwei.full'), 'free')
   assert.equal(canUseFeature(active('free'), 'bazi.full'), true)
-  assert.equal(canUseFeature(active('free'), 'tarot.reading'), false)
+  assert.equal(canUseFeature(active('free'), 'tarot.reading'), true)
   assert.equal(canUseFeature(active('earth'), 'tarot.single'), true)
   assert.equal(canUseFeature(active('earth'), 'tarot.reading'), true)
-  assert.equal(canUseFeature(active('earth'), 'qimen.reading'), false)
+  assert.equal(canUseFeature(active('earth'), 'qimen.reading'), true)
   assert.equal(canUseFeature(active('heaven'), 'ziwei.full'), true)
   assert.equal(canUseFeature(active('oracle'), 'fengshui.ai'), true)
   assert.equal(canUseFeature({ role: 'super_admin', plan: 'free' }, 'qimen.reading'), true)
-  assert.equal(canUseFeature({ plan: 'heaven', planExpiresAt: now - 1 }, 'ziwei.full'), false)
+  assert.equal(canUseFeature({ plan: 'heaven', planExpiresAt: now - 1 }, 'ziwei.full'), true)
 })
 
-test('凡者全部牌阵共用每月二十次塔罗解读，旧单牌次数也会计入', () => {
+test('AI 功能不再有按档位附赠次数', () => {
   const user = { plan: 'earth', planExpiresAt: Date.now() + 86400000, monthlyFeatureUsage: { 'tarot.single': 4, 'tarot.reading': 3 } }
-  assert.deepEqual(featureAllowanceStatus(user, 'tarot.reading'), { limit: 20, used: 7, remaining: 13 })
-  assert.deepEqual(featureAllowanceStatus({ ...user, monthlyFeatureUsage: { 'tarot.reading': 20 } }, 'tarot.reading'), { limit: 20, used: 20, remaining: 0 })
+  assert.deepEqual(featureAllowanceStatus(user, 'tarot.reading'), { limit: 0, used: 7, remaining: 0 })
 })
 
-test('每日黄历提醒仅限凡者及以上的有效会员', () => {
+test('个性黄历提醒面向所有注册用户', () => {
   const now = Date.now()
   assert.equal(canUseHuangliReminder(null), false)
-  assert.equal(canUseHuangliReminder({ plan: 'free' }), false)
+  assert.equal(canUseHuangliReminder({ plan: 'free' }), true)
   assert.equal(canUseHuangliReminder({ plan: 'earth', planExpiresAt: now + 1000 }), true)
   assert.equal(canUseHuangliReminder({ plan: 'heaven', planExpiresAt: now + 1000 }), true)
   assert.equal(canUseHuangliReminder({ plan: 'oracle', planExpiresAt: now + 1000 }), true)
-  assert.equal(canUseHuangliReminder({ plan: 'earth', planExpiresAt: now - 1000 }), false)
+  assert.equal(canUseHuangliReminder({ plan: 'earth', planExpiresAt: now - 1000 }), true)
   assert.equal(canUseHuangliReminder({ role: 'super_admin', plan: 'free' }), true)
 })
 

@@ -135,6 +135,100 @@ export const SEO_ROUTES = {
     },
     editorial: BAZI_EDITORIAL,
   },
+  fiveElementsMissing: {
+    path: '/learn/wuxing-que-shenme-yisi',
+    title: '五行缺什么是什么意思？八字五行“缺”与“喜用”的区别 - 元氣满满',
+    description: '说明八字里“五行缺什么”的传统含义，区分五行缺、偏弱与喜用，解释为什么不能把“缺”直接理解为必须补足。',
+    heading: '五行缺什么，是什么意思？',
+    summary: '“五行缺什么”是对一张八字盘中某类五行显现情况的传统描述，不等于现实中缺少某种东西，更不等于必须立刻“补”它。',
+    language: 'zh-CN',
+    topic: 'bazi',
+    sections: [
+      ['先看见“缺”，不要急着下结论', '在八字的传统语境里，“五行缺”通常指木、火、土、金、水中某一类没有明显出现，或在表层干支中显现较少。它是盘面信息的起点，不是对一个人身体、财富、关系或未来的事实判断。'],
+      ['“缺”不等于“弱”，也不等于“要补”', '五行是否偏弱，还要结合藏干、月令、日主和全局关系来看。传统说法中的喜用，也是在整体关系中讨论的取向；不能只凭一个“缺”字就决定颜色、名字、商品，更不应据此作医疗、投资、婚恋等重要决定。'],
+      ['先核对排盘条件，再理解传统术语', '出生日期、出生时刻和节气口径都会影响四柱。时辰不明时只能确认三柱，任何涉及整体关系的理解都应保留这个限制。把盘面当作传统文化学习和自我观察的材料，而不是确定性结论。'],
+    ],
+    faqs: [
+      ['五行缺什么是什么意思？', '它是传统八字中对盘面五行显现情况的描述，常指某一类五行未在表层干支出现或显现较少。它不等于现实中“缺少”某种东西，也不能单独推导出人生结论。'],
+      ['五行缺和五行弱一样吗？', '不一样。“缺”侧重是否出现，“弱”需要结合季节、藏干、日主和其他干支的关系判断。只看四柱表面字符，无法把两者简单画上等号。'],
+      ['五行缺某个元素就一定要补吗？', '不一定。传统语境中的“喜用”讨论的是整张盘的关系，不是看到缺什么就补什么。请不要据此购买商品或作医疗、投资、婚恋等决定。'],
+      ['不知道出生时辰还能看五行吗？', '可以先查看年、月、日三柱的基本信息，但时柱缺失会让盘面不完整。涉及五行整体关系的传统解读，应明确这一限制。'],
+    ],
+    definedTerms: [
+      ['五行缺什么', '传统八字中对一张盘内某类五行未在表层干支出现或显现较少的描述；不等于现实中缺少某种事物，也不自动等于需要补足。'],
+      ['五行偏弱', '在传统阅读中，需要结合月令、藏干、日主及全局关系理解的相对状态，不能只按表层字符判断。'],
+      ['喜用', '传统八字中用于讨论整张盘关系与取向的术语；不应从单一五行“缺失”直接推出。'],
+    ],
+    schema: {
+      article: {
+        headline: '五行缺什么是什么意思？八字五行“缺”与“喜用”的区别',
+        datePublished: '2026-09-19',
+        dateModified: '2026-09-19',
+      },
+      application: {
+        name: '元氣满满八字排盘',
+        description: '基于出生日期、时间与性别展示传统四柱八字盘面的在线工具。',
+      },
+    },
+    termPage: {
+      eyebrow: '传统文化术语 · 八字',
+      definitionLabel: '一句话定义',
+      definition: '“五行缺什么”描述的是八字盘里五行的显现情况；它不是现实诊断，也不是“缺什么就要补什么”的指令。',
+      calculatorLabel: '核对我的八字盘',
+      related: [
+        { href: '/learn/bazi-basics', label: '八字入门：四柱、五行与十神' },
+        { href: '/ai-bazi', label: '元氣 Agent：继续了解术语' },
+      ],
+    },
+    editorial: BAZI_EDITORIAL,
+  },
+  baziDayMaster: {
+    path: '/learn/what-is-a-day-master-in-bazi',
+    title: 'What Is a Day Master in BaZi? Meaning and Role in Four Pillars | Genki',
+    description: 'Learn what the Day Master means in BaZi: the Heavenly Stem of the Day Pillar, its relationship to the Five Elements and Ten Gods, and the limits of a chart reading.',
+    heading: 'What is a Day Master in BaZi?',
+    summary: 'In BaZi, the Day Master is the Heavenly Stem of the Day Pillar. It is a traditional reference point for describing relationships in a chart, not a personality label or a score for someone’s future.',
+    language: 'en',
+    topic: 'bazi',
+    sections: [
+      ['The Day Master is one part of the Day Pillar', 'Each BaZi pillar contains a Heavenly Stem and an Earthly Branch. The Day Master, also called the Day Stem, is specifically the Heavenly Stem in the day pillar. It is not the whole Day Pillar and it is not the whole chart.'],
+      ['A reference point for traditional relationships', 'Many BaZi readings use the Day Master as a reference point when describing Five Elements and Ten Gods. These are traditional labels for symbolic relationships among chart components, not verified measurements of personality, health, wealth or future events.'],
+      ['The calculation still depends on traceable inputs', 'A reproducible chart needs a birth date, birth time and stated sex under a stated calendar convention. An unknown time leaves the hour pillar unresolved; it should remain an uncertainty rather than be filled in with a guess.'],
+    ],
+    faqs: [
+      ['Is the Day Master the same as the Day Pillar?', 'No. The Day Pillar contains both a Heavenly Stem and an Earthly Branch. The Day Master is the Heavenly Stem portion of that one pillar.'],
+      ['Does a Day Master determine personality or future?', 'No. It is a reference term within a traditional cultural framework, not a verified personality test or a way to guarantee future outcomes.'],
+      ['What if my birth time is unknown?', 'You can still identify the year, month and day pillars, including the Day Master, from a date under a stated calendar convention. The hour pillar remains unknown, so a complete chart reading should keep that limitation visible.'],
+      ['How are the Ten Gods related to the Day Master?', 'In traditional BaZi vocabulary, the Ten Gods are ten labels for how other stems and branches relate to the Day Master through the Five Elements. They organize chart relationships; they are not factual diagnoses or professional advice.'],
+    ],
+    definedTerms: [
+      ['Day Master (日主)', 'The Heavenly Stem of the Day Pillar in a BaZi chart; often used as the reference point for traditional relationships in the rest of the chart.'],
+      ['Day Pillar', 'The day’s paired Heavenly Stem and Earthly Branch, one of the Four Pillars. The Day Master is only its Heavenly Stem.'],
+      ['Ten Gods (十神)', 'Ten traditional relationship labels that describe how other chart components relate to the Day Master through the Five Elements.'],
+    ],
+    schema: {
+      article: {
+        headline: 'What Is a Day Master in BaZi? Meaning and Role in Four Pillars',
+        datePublished: '2026-09-19',
+        dateModified: '2026-09-19',
+      },
+      application: {
+        name: 'Genki BaZi Chart Calculator',
+        description: 'A web calculator for exploring a traditional BaZi / Four Pillars chart using birth date, time and stated sex.',
+      },
+    },
+    termPage: {
+      eyebrow: 'TRADITIONAL CULTURE TERM · BAZI',
+      definitionLabel: 'IN ONE SENTENCE',
+      definition: 'The Day Master is the Heavenly Stem of the Day Pillar: a reference point in traditional BaZi vocabulary, not a label that determines a person or their future.',
+      calculatorLabel: 'Check a BaZi chart',
+      related: [
+        { href: '/learn/bazi-four-pillars', label: 'BaZi / Four Pillars guide' },
+        { href: '/ai-bazi', label: 'Genki Agent: explore a term' },
+      ],
+    },
+    editorial: BAZI_EDITORIAL,
+  },
   ziwei: {
     path: '/ziwei',
     title: '紫微斗数排盘｜十二宫、主星与大限解读 - 元氣满满',
@@ -246,7 +340,8 @@ export function languageAlternatesForPage(page, siteUrl = DEFAULT_SITE_URL) {
 export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE_URL) {
   const language = page.language || 'zh-CN'
   const faqs = page.guide?.faqs || page.faqs || []
-  const isBaziGuide = Boolean(page.guide)
+  const terms = page.definedTerms || page.guide?.terms || []
+  const isBaziTopic = page.topic === 'bazi' || Boolean(page.guide)
   const organizationId = `${siteUrl}/#organization`
   const websiteId = `${siteUrl}/#website`
   const pageId = `${canonicalUrl}#webpage`
@@ -255,6 +350,7 @@ export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE
   const applicationId = `${siteUrl}${page.schema?.application?.url || '/bazi'}#application`
   const baziTopicId = `${siteUrl}/#bazi-four-pillars`
   const termSetId = `${canonicalUrl}#terms`
+  const primaryTermId = terms.length ? `${termSetId}-1` : null
   const editorialPersonId = `${canonicalUrl}#byline`
   const organization = {
     '@type': 'Organization',
@@ -283,7 +379,7 @@ export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE
     ...(hasArticle ? {
       mainEntity: { '@id': articleId },
     } : {}),
-    ...(isBaziGuide ? {
+    ...(isBaziTopic ? {
       about: { '@id': baziTopicId },
     } : {}),
   }]
@@ -297,7 +393,7 @@ export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE
     })
   }
 
-  if (isBaziGuide) {
+  if (isBaziTopic) {
     nodes.push({
       '@type': 'DefinedTerm',
       '@id': baziTopicId,
@@ -312,7 +408,7 @@ export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE
       description: page.description,
       inLanguage: language,
       about: { '@id': baziTopicId },
-      hasDefinedTerm: page.guide.terms.map(([name, description], index) => ({
+      hasDefinedTerm: terms.map(([name, description], index) => ({
         '@type': 'DefinedTerm',
         '@id': `${termSetId}-${index + 1}`,
         name,
@@ -339,8 +435,9 @@ export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE
         editor: { '@id': editorialPersonId },
         ...(page.editorial.sources?.length ? { citation: page.editorial.sources.map(source => source.url || source.title) } : {}),
       } : {}),
-      ...(isBaziGuide ? {
+      ...(isBaziTopic ? {
         about: { '@id': baziTopicId },
+        ...(primaryTermId ? { mainEntity: { '@id': primaryTermId } } : {}),
         mentions: [{ '@id': termSetId }, { '@id': applicationId }, { '@id': `${siteUrl}/ai-bazi#application` }],
       } : {}),
     })
@@ -355,7 +452,7 @@ export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE
         acceptedAnswer: { '@type': 'Answer', text },
       })),
       inLanguage: language,
-      ...(isBaziGuide ? { about: { '@id': baziTopicId } } : {}),
+      ...(isBaziTopic ? { about: { '@id': primaryTermId || baziTopicId } } : {}),
     })
   }
   if (page.schema?.application) {
@@ -370,7 +467,7 @@ export function structuredDataForPage(page, canonicalUrl, siteUrl = DEFAULT_SITE
       isAccessibleForFree: true,
       inLanguage: language,
       ...(page.schema.application.featureList ? { featureList: page.schema.application.featureList } : {}),
-      ...(isBaziGuide ? { about: { '@id': baziTopicId } } : {}),
+      ...(isBaziTopic ? { about: { '@id': baziTopicId } } : {}),
     })
   }
   return { '@context': 'https://schema.org', '@graph': nodes }

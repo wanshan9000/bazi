@@ -127,6 +127,32 @@ test('内部输出语言协议不能覆盖用户会话标题', async () => {
   } finally { srv.close() }
 })
 
+test('强制测算 Skill 协议不会覆盖用户可读的会话标题', async () => {
+  const pool = fakePool([{ type: 'title', title: '/tarot 【强制测算规约·不可跳过】本轮涉及塔罗抽牌。' }, { type: 'text', delta: '已整理。' }])
+  const { app, store, accounts } = mkApp(pool)
+  const me = await mkUser(accounts, 'title-skill-protocol')
+  const { srv, base } = await listen(app)
+  try {
+    const res = await fetch(`${base}/api/agent/chat`, { method: 'POST', headers: { 'content-type': 'application/json', ...bearer(me.token) }, body: JSON.stringify({ text: '抽一张塔罗' }) })
+    const sessionId = sseFrames(await res.text()).find(frame => frame.type === 'session').sessionId
+    assert.equal(store.getSession(me.id, sessionId).title, '抽一张塔罗')
+  } finally { srv.close() }
+})
+
+test('历史列表会把旧的内部协议标题恢复为用户首条提问', async () => {
+  const { app, store, accounts } = mkApp(fakePool([]))
+  const me = await mkUser(accounts, 'repair-title')
+  const session = store.createSession(me.id, { route: 'deepseek-flash', title: '/tarot 【强制测算规约·不可跳过】' })
+  store.appendMessage(me.id, session.id, { role: 'user', text: '帮我抽一张塔罗', time: '10:00' })
+  const { srv, base } = await listen(app)
+  try {
+    const res = await fetch(`${base}/api/agent/sessions`, { headers: bearer(me.token) })
+    const body = await res.json()
+    assert.equal(body.sessions[0].title, '帮我抽一张塔罗')
+    assert.equal(store.getSession(me.id, session.id).title, '帮我抽一张塔罗')
+  } finally { srv.close() }
+})
+
 test('合规 JSON 以固定 answer 事件交付并保存结构对象', async () => {
   const answer = {
     version: 1,
@@ -152,6 +178,9 @@ test('合规 JSON 以固定 answer 事件交付并保存结构对象', async () 
     const frames = sseFrames(await res.text())
     const sessionId = frames.find(frame => frame.type === 'session').sessionId
     assert.ok(receivedPrompt.includes('【最终交付格式·最高优先】'))
+    assert.equal(frames.find(frame => frame.type === 'answer_started')?.type, 'answer_started')
+    assert.equal(frames.find(frame => frame.type === 'answer_preview')?.summary, answer.summary)
+    assert.ok(frames.findIndex(frame => frame.type === 'answer_preview') < frames.findIndex(frame => frame.type === 'answer'))
     assert.deepEqual(frames.find(frame => frame.type === 'answer')?.answer, answer)
     assert.equal(frames.some(frame => frame.type === 'text' && frame.delta.includes('"version"')), false)
     const saved = store.listMessages(me.id, sessionId).at(-1)
@@ -461,8 +490,9 @@ test('models 列表', async () => {
     const m = await (await fetch(`${base}/api/agent/models`)).json()
     assert.ok(m.routes.find(r => r.key === 'minimax'))
     const deepseekEnabled = Boolean(process.env.DEEPSEEK_API_KEY)
+    const minimaxEnabled = Boolean(process.env.MINIMAX_API_KEY)
     assert.equal(m.routes.some(r => r.key === 'deepseek-flash'), deepseekEnabled, '模型列表应与当前凭据状态一致')
-    assert.equal(m.default, deepseekEnabled ? 'deepseek-flash' : 'minimax')
+    assert.equal(m.default, minimaxEnabled ? 'minimax' : (deepseekEnabled ? 'deepseek-flash' : 'minimax'))
   } finally { srv.close() }
 })
 

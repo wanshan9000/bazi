@@ -10,9 +10,13 @@ test('核心公开页使用 keymm.me 对应的干净路由', () => {
   assert.equal(publicPathForView('agent'), '/ai-bazi')
   assert.equal(publicPathForView('baziGuide'), '/learn/bazi-four-pillars')
   assert.equal(publicPathForView('baziBasics'), '/learn/bazi-basics')
+  assert.equal(publicPathForView('fiveElementsMissing'), '/learn/wuxing-que-shenme-yisi')
+  assert.equal(publicPathForView('baziDayMaster'), '/learn/what-is-a-day-master-in-bazi')
   assert.equal(routeFromPath('/ziwei').view, 'ziwei')
   assert.equal(routeFromPath('/learn/bazi-four-pillars').view, 'baziGuide')
   assert.equal(routeFromPath('/learn/bazi-basics').view, 'baziBasics')
+  assert.equal(routeFromPath('/learn/wuxing-que-shenme-yisi').view, 'fiveElementsMissing')
+  assert.equal(routeFromPath('/learn/what-is-a-day-master-in-bazi').view, 'baziDayMaster')
   assert.equal(routeFromPath('/articles/zodiac-rat-2026').articleId, 'zodiac-rat-2026')
 })
 
@@ -72,6 +76,27 @@ test('中英文八字指南使用同一主题实体，并提供稳定的页面�
     assert.equal(article.author['@id'], `https://keymm.me${pages[index].path}#byline`)
     assert.equal(article.editor['@id'], article.author['@id'])
     assert.equal(article.citation.length, 4)
+  }
+})
+
+test('高意图八字术语页提供独立主术语、FAQ 与 BaZi 主题关联', () => {
+  const pages = [SEO_ROUTES.fiveElementsMissing, SEO_ROUTES.baziDayMaster]
+
+  for (const page of pages) {
+    const canonicalUrl = `https://keymm.me${page.path}`
+    const data = structuredDataForPage(page, canonicalUrl, 'https://keymm.me')
+    const webPage = data['@graph'].find(node => node['@type'] === 'WebPage')
+    const article = data['@graph'].find(node => node['@type'] === 'Article')
+    const faq = data['@graph'].find(node => node['@type'] === 'FAQPage')
+    const terms = data['@graph'].find(node => node['@type'] === 'DefinedTermSet')
+
+    assert.equal(webPage.about['@id'], 'https://keymm.me/#bazi-four-pillars')
+    assert.equal(article.about['@id'], webPage.about['@id'])
+    assert.equal(terms.hasDefinedTerm.length, 3)
+    assert.equal(article.mainEntity['@id'], `${canonicalUrl}#terms-1`)
+    assert.equal(faq.about['@id'], article.mainEntity['@id'])
+    assert.equal(faq.mainEntity.length, 4)
+    assert.ok(article.mentions.some(node => node['@id'] === 'https://keymm.me/ai-bazi#application'))
   }
 })
 

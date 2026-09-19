@@ -253,7 +253,7 @@ export default function FengshuiPage({ chart, onBack, onChart, onAskAgent, user,
         </section>
 
         <p className="fs-foot">风水讲求「藏风聚气」，本盘以八宅派简化算法出具，仅供布局参考；合理布置、勤于打扫，光线充足、空气流通，是任何户型的关键所在。</p>
-        <ReportAgentFooter onAskAgent={handleAskAgent} onBack={onBack} />
+        <ReportAgentFooter onAskAgent={handleAskAgent} />
         </>)}
       </div>
     </div>

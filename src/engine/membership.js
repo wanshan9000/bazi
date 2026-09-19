@@ -29,6 +29,22 @@ export const DEEPSEEK_FLASH_PRICING = Object.freeze({
 /** 市场价格换算的最小用户计费单位。实际模型用量向上取整为积分。 */
 export const TOKENS_PER_POINT = 19000
 
+/* ---- 增长激励额度 ----
+ *
+ * 一积分按 Flash 峰时纯输出成本预留 19,000 Token。所有营销奖励均进入永久
+ * 积分钱包：它们可直接抵扣元气 Agent 的实际 Token 用量，也可用于需要积分的
+ * 深读功能，不与会员的月度积分混在一起。
+ */
+export const GUEST_AGENT_MONTHLY_CREDITS = 24 // 约 ¥5 的 DeepSeek Flash 保守体验额度
+export const GUEST_AGENT_MONTHLY_TOKENS = GUEST_AGENT_MONTHLY_CREDITS * TOKENS_PER_POINT
+export const SHARE_REWARD_CREDITS = 24 // 每次有效分享约 ¥5 的 Token 等值积分
+export const SHARE_REWARD_DAYS = 30
+export const SHARE_REWARD_DAILY_LIMIT = 3
+export const SHARE_REWARD_MAX_PER_PERIOD = 20
+
+/** 未登录访客的纯本地功能，每个功能每天可完成的次数。 */
+export const GUEST_FREE_FEATURE_DAILY_LIMIT = 20
+
 export function tokensToPoints(tokens) {
   return Math.ceil(Math.max(0, Number(tokens) || 0) / TOKENS_PER_POINT)
 }
@@ -58,20 +74,20 @@ export const PLANS = [
     price: 19.9,
     pricing: { monthly: 19.9, quarterly: 56.9, annual: 199 },
     credits: 60,
-    desc: '从每天的个人黄历与轻量解读开始，慢慢建立自己的生活参考。',
+    desc: '适合日常咨询与轻量 AI 解读的月度积分方案。',
     unit: '/月',
     cta: '从凡者开始',
     perks: [
-      '个人黄历订阅推送（结合八字 · 晨起 / 午间 / 晚归）',
-      '八字命书、称骨 / 星座 / 黄历深读',
-      '全部塔罗牌阵 · 每月合计 20 次解读',
-      '月度积分当月有效，购买积分永久有效',
+      '每月 60 月度积分（当月有效）',
+      '可订阅个性黄历和使用全部功能',
+      '注册用户功能与个性黄历订阅均可使用',
+      '模型用量优先从月度积分扣减',
     ],
     featured: false,
     benefits: [
-      '个人黄历订阅推送',
-      '基础深读与塔罗 20 次解读',
-      '60 月度积分',
+      '元氣 AI 与全部 AI 深读',
+      '注册用户全部功能',
+      '60 月度积分（当月有效）',
     ],
   },
   {
@@ -83,20 +99,21 @@ export const PLANS = [
     price: 59.9,
     pricing: { monthly: 59.9, quarterly: 169, annual: 599 },
     credits: 200,
-    desc: '适合持续探索与反复咨询的月度点数方案。',
+    desc: '适合持续探索与更频繁 AI 咨询的月度积分方案。',
     unit: '/月',
     cta: '跃升玄者',
     perks: [
-      '凡者全部权益',
-      '紫微、奇门、风水与姓名详批',
-      '每月 200 积分',
-      '历史记录与新功能优先体验',
+      '每月 200 月度积分（当月有效）',
+      '可订阅个性黄历和使用全部功能',
+      '注册用户功能与个性黄历订阅均可使用',
+      '模型用量优先从月度积分扣减',
     ],
     featured: true,
     hot: true,
     benefits: [
-      '全部高阶术数模块',
-      '200 月度积分',
+      '元氣 AI 与全部 AI 深读',
+      '注册用户全部功能',
+      '200 月度积分（当月有效）',
       '历史记录与优先体验',
     ],
   },
@@ -109,19 +126,20 @@ export const PLANS = [
     price: 129.9,
     pricing: { monthly: 129.9, quarterly: 369, annual: 1299 },
     credits: 520,
-    desc: '为高频咨询与多份报告准备的充足点数方案。',
+    desc: '为高频咨询与多份 AI 报告准备的充足月度积分方案。',
     unit: '/月',
     cta: '登临天者',
     perks: [
-      '玄者全部权益',
-      '全模块高频使用 · 每月 520 积分',
-      '完整报告与个人黄历持续留存',
-      '高频使用与新功能优先体验',
+      '每月 520 月度积分（当月有效）',
+      '可订阅个性黄历和使用全部功能',
+      '注册用户功能与个性黄历订阅均可使用',
+      '模型用量优先从月度积分扣减',
     ],
     featured: false,
     benefits: [
-      '全模块高频使用',
-      '520 月度积分',
+      '元氣 AI 与全部 AI 深读',
+      '注册用户全部功能',
+      '520 月度积分（当月有效）',
       '优先体验新功能',
     ],
   },
@@ -141,14 +159,14 @@ export const FREE_PLAN = {
   price: 0,
   credits: 0,
   unit: '',
-  desc: '基础测算免费；注册赠 20 积分可体验轻量深读，高阶术数需开通玄者。',
+  desc: '登录后无 Token 功能不限次；注册赠 20 永久积分，积分可用于全部 AI 功能。',
   perks: [
-    '称骨、星座、八字基础盘与通用黄历免费',
-    '八字、称骨、星座、黄历轻量深读',
-    '元气 Agent 获赠限量体验积分',
-    '注册赠 20 积分',
+    '游客无 Token 功能每项每天最多 20 次；登录后不限次',
+    '注册后可定制与订阅个人黄历',
+    '游客元气 Agent 每 30 天获 24 积分体验额度（约 ¥5）',
+    '注册赠 20 永久积分；有效分享每次获 24 永久积分',
   ],
-  benefits: ['基础测算免费', '轻量深读体验', '注册赠 20 积分'],
+  benefits: ['登录后无 Token 功能不限次', '轻量深读体验', '注册赠 20 永久积分'],
 }
 
 /** 永久积分包。支付回调接入前仅用于展示预览，不能由前端直接加点。 */
@@ -205,12 +223,9 @@ export function isPlanExpired(user, now = Date.now()) {
   return exp > 0 && exp <= now
 }
 
-/** 每日黄历提醒是凡者起的付费权益；过期用户即时失去推送资格。 */
-export function canUseHuangliReminder(user, now = Date.now()) {
-  if (!user) return false
-  if (isSuperAdmin(user)) return true
-  if (isPlanExpired(user, now)) return false
-  return ['earth', 'heaven', 'oracle'].includes(user.plan)
+/** 个性黄历订阅面向全部注册用户，不与付费档位绑定。 */
+export function canUseHuangliReminder(user) {
+  return Boolean(user)
 }
 
 /* ---- 游客完全免费的功能（不消耗模型用量的本地计算/展示） ----
@@ -241,53 +256,42 @@ export const FEATURE_COSTS = {
   'agent.chat': 1,
 }
 
-/* ---- 非 Agent 模块的会员开放范围 ----
+/* ---- AI 功能访问范围 ----
  *
- * 积分决定“还可用多少”，档位决定“哪些模块可用”。轻量深读保留给已登录游客，
- * 让注册赠送积分能真正用于体验；需要更完整方法论与盘面能力的模块从玄者开放。
+ * 登录是唯一的功能门槛，积分是唯一的 AI 用量门槛。会员方案仅决定每月
+ * 获得多少月度积分，不能把紫微、奇门、风水或姓名等功能锁在某个档位后。
  */
 export const FEATURE_MIN_PLAN = Object.freeze({
   'bazi.full': 'free',
   'chenggu.ai': 'free',
   'horoscope.ai': 'free',
   'huangli.ai': 'free',
-  'tarot.single': 'earth',
-  'tarot.reading': 'earth',
-  'ziwei.full': 'heaven',
-  'qimen.reading': 'heaven',
-  'fengshui.ai': 'heaven',
-  'name.ai': 'heaven',
+  'tarot.single': 'free',
+  'tarot.reading': 'free',
+  'ziwei.full': 'free',
+  'qimen.reading': 'free',
+  'fengshui.ai': 'free',
+  'name.ai': 'free',
   'agent.chat': 'free',
 })
 
-const PLAN_ACCESS_RANK = Object.freeze({ free: 0, earth: 1, heaven: 2, oracle: 3, supreme: 4 })
-
-/** 随订阅周期重置的非 Agent 附赠次数；付费会员继承凡者的全牌阵体验额度。 */
-export const PLAN_FEATURE_ALLOWANCES = Object.freeze({
-  earth: Object.freeze({ 'tarot.reading': 20 }),
-  heaven: Object.freeze({ 'tarot.reading': 20 }),
-  oracle: Object.freeze({ 'tarot.reading': 20 }),
-  supreme: Object.freeze({ 'tarot.reading': Infinity }),
-})
+/** 不再按档位赠送特定功能次数，所有 AI 功能统一按积分结算。 */
+export const PLAN_FEATURE_ALLOWANCES = Object.freeze({})
 
 export function requiredPlanForFeature(featureKey) {
   return FEATURE_MIN_PLAN[featureKey] || 'free'
 }
 
-/** 功能是否已由当前有效会员档位开放；尊者始终不受限制。 */
-export function canUseFeature(user, featureKey, now = Date.now()) {
-  if (isSuperAdmin(user)) return true
-  if (!user) return false
-  const currentPlan = isPlanExpired(user, now) ? FREE_PLAN.key : (user.plan || FREE_PLAN.key)
-  return (PLAN_ACCESS_RANK[currentPlan] ?? 0) >= (PLAN_ACCESS_RANK[requiredPlanForFeature(featureKey)] ?? 0)
+/** 已登录用户均可进入任意 AI 功能；实际调用仍须有足够积分。 */
+export function canUseFeature(user) {
+  return Boolean(user)
 }
 
 /** 当前月度内含次数及已用次数。服务端负责实际递增，这里仅供展示和校验。 */
 export function featureAllowanceStatus(user, featureKey, now = Date.now()) {
   if (!user) return { limit: 0, used: 0, remaining: 0 }
   if (isSuperAdmin(user)) return { limit: Infinity, used: 0, remaining: Infinity }
-  const currentPlan = isPlanExpired(user, now) ? FREE_PLAN.key : (user.plan || FREE_PLAN.key)
-  const limit = PLAN_FEATURE_ALLOWANCES[currentPlan]?.[featureKey] || 0
+  const limit = 0
   // 旧版把单牌与多牌阵分别记账。新方案是全牌阵共用一个月度总额，
   // 所以历史单牌次数也必须并入，不能让切换版本的用户重复获得额度。
   const legacySingleUsed = featureKey === 'tarot.reading'
@@ -303,6 +307,9 @@ export const AGENT_TOKEN_BILLING = Object.freeze({
   unit: '积分',
   tokensPerPoint: TOKENS_PER_POINT,
 })
+
+/** 在余额耗尽前提醒用户补充积分，避免对话在下一轮被中断。 */
+export const AGENT_LOW_CREDIT_THRESHOLD = 5
 
 /* ---- 工具 ---- */
 export function planByKey(key) {

@@ -1,29 +1,43 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { render } from '../../test/render.mjs'
+import { flush, render } from '../../test/render.mjs'
 import { buildChart } from '../../engine/bazi.js'
 
-test('报告页尾操作提供咨询元气 AI 与回到首页', async () => {
+test('报告页尾操作提供分享、问元气 AI 与回到顶部', async () => {
   const { default: ReportAgentFooter } = await import('../ReportAgentFooter.jsx')
   let asked = 0
-  let returned = 0
   const r = render(ReportAgentFooter, {
     onAskAgent: () => { asked++ },
-    onBack: () => { returned++ },
   })
 
   assert.ok(r.$('.report-agent-footer-zone'), '操作条应放在报告主体结束后的独立留白区')
   assert.ok(r.$('.report-agent-footer'), '报告页操作应保留在报告尾部')
   assert.equal(r.$('.report-agent-footer-zone .report-agent-footer').parentElement.className, 'report-agent-footer-zone')
   assert.equal(r.$('.report-agent-float'), null, '报告页操作不应固定悬浮在屏幕上')
-  const ask = r.findByText('咨询元气 AI')
-  const back = r.findByText('回到首页')
-  assert.ok(ask, '页尾应提供元气 AI 咨询入口')
-  assert.ok(back, '页尾应提供回到首页入口')
+  const share = r.findByText('分享')
+  const ask = r.findByText('问元气 AI')
+  const back = r.findByText('回到顶部')
+  assert.ok(share, '页尾应提供分享入口')
+  assert.ok(ask, '页尾应提供元气 AI 提问入口')
+  assert.ok(back, '页尾应提供回到顶部入口')
+  assert.match(r.text(), /完成有效分享，获 24 永久积分/)
   r.click(ask)
-  r.click(back)
   assert.equal(asked, 1)
-  assert.equal(returned, 1)
+  r.unmount()
+})
+
+test('报告页尾的通用分享入口打开不含报告数据的弹窗', async () => {
+  const { default: ReportAgentFooter } = await import('../ReportAgentFooter.jsx')
+  const r = render(ReportAgentFooter, {
+    onAskAgent: () => {},
+  })
+
+  assert.ok(r.$('.report-agent-footer.has-share'), '有分享入口时应使用三操作布局')
+  r.click(r.findByText('分享'))
+  await flush()
+  assert.ok(document.body.querySelector('.report-share-dialog'), '分享应在页面根节点的弹窗中展开')
+  assert.ok(document.body.querySelector('.report-share-qr img'), '通用分享弹窗应生成可扫码的二维码')
+  assert.match(document.body.textContent, /不会包含你的出生资料、命盘或报告内容/)
   r.unmount()
 })
 
@@ -54,7 +68,7 @@ test('长报告咨询上下文会带上来源标签，并压缩到 Agent 可接�
   assert.match(prompt, /最终结论：宜先沟通后行动/)
 })
 
-test('黄历结果页复用统一的报告页尾双按钮', async () => {
+test('黄历结果页复用统一的报告页尾三操作', async () => {
   const { default: SubscribePage } = await import('../SubscribePage.jsx')
   const r = render(SubscribePage, {
     chart: buildChart(1998, 8, 12, 10, '女'),

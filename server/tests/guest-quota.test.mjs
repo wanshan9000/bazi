@@ -51,13 +51,13 @@ test('结算用真实用量替换预扣；没产出则退回', () => {
   assert.equal(q.remaining('1.1.1.1'), 43000, '一轮没跑起来应把预扣退回去')
 })
 
-test('24 小时后重置', () => {
+test('30 天后重置', () => {
   const q = createGuestQuota(path.join(tmp(), 'q.json'), { dailyLimit: 10000 })
   const t0 = Date.now()
   q.begin('1.1.1.1', t0)
   q.settle('1.1.1.1', 10000, t0)
   assert.equal(q.begin('1.1.1.1', t0).ok, false)
-  assert.equal(q.begin('1.1.1.1', t0 + 86400001).ok, true, '过一天应恢复')
+  assert.equal(q.begin('1.1.1.1', t0 + 30 * 86400000 + 1).ok, true, '过 30 天应恢复')
 })
 
 test('落盘：重启后额度不会白送', () => {
@@ -76,7 +76,7 @@ test('过期条目会被清掉，表不会随访客 IP 无界增长', () => {
   const t0 = Date.now()
   for (let i = 0; i < 50; i++) q.begin(`10.0.0.${i}`, t0)
   assert.equal(Object.keys(q._dump()).length, 50)
-  q.begin('11.0.0.1', t0 + 86400001)
+  q.begin('11.0.0.1', t0 + 30 * 86400000 + 1)
   assert.equal(Object.keys(q._dump()).length, 1, '过期条目应被清理')
 })
 

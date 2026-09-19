@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ARTICLES, CATEGORIES } from '../data/articles.js'
 import { PLANS } from '../engine/membership.js'
 import { useLocale } from '../i18n.jsx'
+import { trackEvent } from '../utils/analytics.js'
 
 // 八卡片·元氣测算矩阵
 // 每张卡片有三种跳转：page（路由到独立页面）/ agent（带 seed 打开元氣AI）/ ask（带预设问题）
@@ -15,6 +16,7 @@ const CALCULATORS = [
     title: '八字排盘',
     desc: '输入出生年月日时，自动推算四柱八字，结合大运流年给出命理解读，涵盖事业、感情、财运、健康。',
     tags: ['四柱', '大运', '流年', '深度解读'],
+    freeTag: '基础排盘免费 · 无需登录',
     cta: '立即排盘',
     route: 'page',
     target: 'bazi'
@@ -164,23 +166,45 @@ const FEATURED = ARTICLES.slice(0, 3)
 
 const LANDING_COPY = {
   'zh-CN': {
-    kicker: 'AI 元氣助手 · 24 小时在线', heroA: '先和元氣AI', heroB: '聊聊人生', input: '想问事业、姻缘，还是今年的运势？', ask: '向元氣 AI 提问', start: '开启元氣 AI 对话', try: '试试这样问', suggestions: ['今年工作会有变化吗？', '我适合主动表白吗？', '最近该注意什么？'], explore: '也可以自己探索', shortcuts: ['排八字', '抽塔罗', '看黄历', '择吉', '座位风水', '紫微'],
+    kicker: 'AI 元氣助手，分享得积分', heroA: '先和元氣AI', heroB: '聊聊人生', input: '想问事业、姻缘，还是今年的运势？', ask: '向元氣 AI 提问', start: '开启元氣 AI 对话', try: '试试这样问', suggestions: ['今年工作会有变化吗？', '我适合主动表白吗？', '最近该注意什么？'], explore: '也可以自己探索', shortcuts: ['排八字', '抽塔罗', '看黄历', '择吉', '座位风水', '紫微'],
     popularKicker: 'Popular picks', popularTitle: '大家都在测', popularDesc: '从一件最近在意的小事开始，也能慢慢找到答案。', calcTitle: '元氣测算', calcDesc: '八字、紫微、塔罗、奇门、每日黄历……传统命理 × AI 算法，一站式解决你的疑问。', plansTitle: '解锁你的命运层级', plansDesc: '从日常陪伴到天机尽握，选择属于你的玄学境界。', popular: [
       ['关系小测', '感情测试', '想知道桃花、暧昧或相处节奏？先说说你在意的那个人。', '问问元氣 AI'], ['财运小测', '财源测试', '从近期财运与赚钱节奏出发，理清适合先做什么。', '看看财运'], ['心动占卜', '爱情塔罗', '为一段关系抽牌，把心里的犹豫换成更清楚的提示。', '开始抽牌'], ['学习与办公', '书桌风水', '从座位与书桌方位开始，看看怎么让空间更顺手、安心。', '调整书桌'],
     ], categories: ['命理排盘', '运势预测', '决策占卜', '环境家居'], articleTitle: '文库精选', allArticles: '全部文章', read: '阅读', minutes: '分钟', guest: '游客', featuredLabel: '最受欢迎',
   },
   'zh-TW': {
-    kicker: 'AI 元氣助手 · 24 小時在線', heroA: '先和元氣AI', heroB: '聊聊人生', input: '想問事業、姻緣，還是今年的運勢？', ask: '向元氣 AI 提問', start: '開啟元氣 AI 對話', try: '試試這樣問', suggestions: ['今年工作會有變化嗎？', '我適合主動表白嗎？', '最近該注意什麼？'], explore: '也可以自己探索', shortcuts: ['排八字', '抽塔羅', '看黃曆', '擇吉', '座位風水', '紫微'],
+    kicker: 'AI 元氣助手，分享得積分', heroA: '先和元氣AI', heroB: '聊聊人生', input: '想問事業、姻緣，還是今年的運勢？', ask: '向元氣 AI 提問', start: '開啟元氣 AI 對話', try: '試試這樣問', suggestions: ['今年工作會有變化嗎？', '我適合主動表白嗎？', '最近該注意什麼？'], explore: '也可以自己探索', shortcuts: ['排八字', '抽塔羅', '看黃曆', '擇吉', '座位風水', '紫微'],
     popularKicker: 'Popular picks', popularTitle: '大家都在測', popularDesc: '從一件最近在意的小事開始，也能慢慢找到答案。', calcTitle: '元氣測算', calcDesc: '八字、紫微、塔羅、奇門、每日黃曆……傳統命理 × AI 演算法，一站式解決你的疑問。', plansTitle: '解鎖你的命運層級', plansDesc: '從日常陪伴到天機盡握，選擇屬於你的玄學境界。', popular: [
       ['關係小測', '感情測試', '想知道桃花、曖昧或相處節奏？先說說你在意的那個人。', '問問元氣 AI'], ['財運小測', '財源測試', '從近期財運與賺錢節奏出發，理清適合先做什麼。', '看看財運'], ['心動占卜', '愛情塔羅', '為一段關係抽牌，把心裡的猶豫換成更清楚的提示。', '開始抽牌'], ['學習與辦公', '書桌風水', '從座位與書桌方位開始，看看怎麼讓空間更順手、安心。', '調整書桌'],
     ], categories: ['命理排盤', '運勢預測', '決策占卜', '環境家居'], articleTitle: '文庫精選', allArticles: '全部文章', read: '閱讀', minutes: '分鐘', guest: '遊客', featuredLabel: '最受歡迎',
   },
   en: {
-    kicker: 'GENKI AI · HERE WHEN YOU NEED IT', heroA: 'Talk with Genki AI', heroB: 'about your life', input: 'Career, relationships, or this year\'s outlook?', ask: 'Ask Genki AI', start: 'Start a Genki AI conversation', try: 'Try asking', suggestions: ['Will my work change this year?', 'Should I make the first move?', 'What should I watch for lately?'], explore: 'Or explore on your own', shortcuts: ['Bazi chart', 'Draw Tarot', 'Almanac', 'Choose a date', 'Desk Feng Shui', 'Ziwei'],
+    kicker: 'GENKI AI · SHARE TO EARN CREDITS', heroA: 'Talk with Genki AI', heroB: 'about your life', input: 'Career, relationships, or this year\'s outlook?', ask: 'Ask Genki AI', start: 'Start a Genki AI conversation', try: 'Try asking', suggestions: ['Will my work change this year?', 'Should I make the first move?', 'What should I watch for lately?'], explore: 'Or explore on your own', shortcuts: ['Bazi chart', 'Draw Tarot', 'Almanac', 'Choose a date', 'Desk Feng Shui', 'Ziwei'],
     popularKicker: 'Popular picks', popularTitle: 'What people are exploring', popularDesc: 'Start with what has been on your mind lately, then find a clearer next step.', calcTitle: 'Explore with Genki', calcDesc: 'Bazi, Ziwei, Tarot, Qimen, and the daily Almanac. Traditional systems and AI guidance in one place.', plansTitle: 'Choose your access level', plansDesc: 'From everyday guidance to frequent, in-depth use, find the plan that fits you.', popular: [
       ['Relationship check-in', 'Love reading', 'Explore the rhythm of attraction, ambiguity, and connection.', 'Ask Genki AI'], ['Money check-in', 'Wealth reading', 'Start with your recent money rhythm and clarify what to focus on.', 'Explore finances'], ['Tarot reading', 'Love Tarot', 'Draw for a relationship and turn uncertainty into a clearer prompt.', 'Draw cards'], ['Study and work', 'Desk Feng Shui', 'Start with the direction of your desk and make your space feel more supportive.', 'Adjust my desk'],
     ], categories: ['Chart reading', 'Daily outlook', 'Decision reading', 'Home and space'], articleTitle: 'From the library', allArticles: 'All articles', read: 'Read', minutes: 'min', guest: 'Guest', featuredLabel: 'Most popular',
   },
+}
+
+function guestPlan(locale) {
+  const copy = {
+    'zh-CN': {
+      name: '游者', en: 'WANDERER', priceLabel: '免费体验', desc: '无需注册，先从一次免费的测算开始。',
+      perks: ['无 Token 功能每项每天最多 20 次', '元氣 AI 每 30 天含 24 积分体验额度', '分享可获永久积分'], cta: '开始免费体验',
+    },
+    'zh-TW': {
+      name: '遊者', en: 'WANDERER', priceLabel: '免費體驗', desc: '無需註冊，先從一次免費的測算開始。',
+      perks: ['無 Token 功能每項每天最多 20 次', '元氣 AI 每 30 天含 24 積分體驗額度', '分享可獲永久積分'], cta: '開始免費體驗',
+    },
+    en: {
+      name: 'Wanderer', en: 'GUEST', priceLabel: 'Free to try', desc: 'No sign-in needed. Start with a free reading.',
+      perks: ['Up to 20 no-Token uses per feature each day', '24 Genki AI trial credits every 30 days', 'Earn permanent credits when sharing'], cta: 'Start for free',
+    },
+  }[locale] || {
+    name: '游者', en: 'WANDERER', priceLabel: '免费体验', desc: '无需注册，先从一次免费的测算开始。',
+    perks: ['无 Token 功能每项每天最多 20 次', '元氣 AI 每 30 天含 24 积分体验额度', '分享可获永久积分'], cta: '开始免费体验',
+  }
+
+  return { key: 'guest', icon: '◎', ...copy }
 }
 
 const CALCULATOR_TRANSLATIONS = {
@@ -216,12 +240,14 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
   const [agentQuery, setAgentQuery] = useState('')
   const { locale } = useLocale()
   const copy = LANDING_COPY[locale] || LANDING_COPY['zh-CN']
+  const plans = [guestPlan(locale), ...PLANS]
   const calculators = localizedCalculators(locale)
 
   const handleClick = (card) => {
     if (card.route === 'agent') {
       onAskAgent && onAskAgent(card.seed)
     } else {
+      if (card.target === 'bazi') trackEvent('bazi_calculator_opened', { page: 'home', locale })
       onGate(card.target)
     }
   }
@@ -229,6 +255,11 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
   const openAgent = (event) => {
     event.preventDefault()
     onAskAgent && onAskAgent(agentQuery.trim())
+  }
+
+  const openBaziCalculator = () => {
+    trackEvent('bazi_calculator_opened', { page: 'home', locale })
+    onGate('bazi')
   }
 
   return (
@@ -266,7 +297,7 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
           <div className="hero-quick-start rise rise-3">
             <span>{copy.explore}</span>
             <div className="hero-cta">
-              {['bazi', 'tarot', 'huangli', 'huangli', 'fengshui', 'ziwei'].map((target, index) => <button key={`${target}-${index}`} className="btn ghost" onClick={() => onGate(target)}>{copy.shortcuts[index]}</button>)}
+              {['bazi', 'tarot', 'huangli', 'huangli', 'fengshui', 'ziwei'].map((target, index) => <button key={`${target}-${index}`} className="btn ghost" onClick={target === 'bazi' ? openBaziCalculator : () => onGate(target)}>{copy.shortcuts[index]}</button>)}
             </div>
           </div>
         </div>
@@ -330,7 +361,7 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
               </div>
               <p className="yc-desc">{c.desc}</p>
               {!user && c.freeTag && (
-                <span className="yc-free">🎁 {locale === 'en' ? 'Guest: 3 free on-device readings' : c.freeTag}</span>
+                <span className="yc-free">🎁 {locale === 'en' ? (c.key === 'bazi' ? 'Free chart, no sign-in' : 'Guest: 3 free on-device readings') : c.freeTag}</span>
               )}
               <div className="yc-tags">
                 {c.tags.map(t => <span key={t} className="yc-tag-chip">{t}</span>)}
@@ -350,22 +381,23 @@ export default function Landing({ onGate, onAskAgent, onArticle, onSubscribe, us
           <p className="yc-sub">{copy.plansDesc}</p>
         </div>
         <div className="plans-grid rise">
-          {PLANS.map((p, i) => (
-            <div key={p.key} className={`plan-card ${p.featured ? 'featured' : ''} rise rise-${(i % 3) + 1}`}>
+          {plans.map((p, i) => (
+            <div key={p.key} className={`plan-card ${p.key === 'guest' ? 'guest' : ''} ${p.featured ? 'featured' : ''} rise rise-${(i % 3) + 1}`}>
               {p.featured && <span className="plan-badge">{copy.featuredLabel}</span>}
               <span className="plan-icon" aria-hidden="true">{p.icon}</span>
               <h3 className="plan-name">{p.name}</h3>
-              <p className="plan-en latin">{p.en}</p>
               <div className="plan-price">
-                <span className="num">{p.price}</span>
-                <span className="unit">{p.unit}</span>
+                {p.priceLabel
+                  ? <span className="plan-price-free">{p.priceLabel}</span>
+                  : <><span className="num">{p.price}</span><span className="unit">{p.unit}</span></>}
               </div>
-              <p className="plan-desc">{p.desc}</p>
               <ul className="plan-perks">
-                {p.perks.map(perk => <li key={perk}>{perk}</li>)}
+                {p.perks.slice(0, 2).map(perk => <li key={perk}>{perk}</li>)}
               </ul>
               <button className={`btn ${p.featured ? 'light' : 'ghost'} plan-cta`}
-                onClick={() => (onSubscribe ? onSubscribe(p.key) : onGate && onGate('agent'))}>
+                onClick={() => (p.key === 'guest'
+                  ? onGate && onGate('bazi')
+                  : (onSubscribe ? onSubscribe(p.key) : onGate && onGate('agent')))}>
                 {p.cta} <span aria-hidden="true">→</span>
               </button>
             </div>
