@@ -11,7 +11,7 @@ import { reportApi } from './api/reports.js'
 import { createArchiveDraft, legacyArchiveDrafts } from './engine/reportArchive.js'
 import { historyRouteForReport, isHistoryReportView } from './engine/reportHistoryRoute.js'
 import SeoMeta from './components/SeoMeta.jsx'
-import { pairedGuideViewForLocale, publicPathForView, routeFromPath } from './seo.js'
+import { guideViewForLocale, pairedGuideViewForLocale, publicPathForView, routeFromPath } from './seo.js'
 
 // 首屏只需要首页和应用壳；具体阅读、排盘与管理页进入后才下载。
 const BaziPage = lazy(() => import('./components/BaziPage.jsx'))
@@ -831,8 +831,6 @@ function TailBand({ onNav, hideOnMobile, user }) {
             <p className="tail-col-title">{l('发现更多', 'Discover')}</p>
             <ul>
               <li><a onClick={() => onNav('wenku')}>{l('文库精选', 'Library')}</a></li>
-              <li><a onClick={() => onNav('baziBasics')}>{l('八字入门', 'BaZi basics')}</a></li>
-              <li><a onClick={() => onNav('baziGuide')}>{l('BaZi 英文指南', 'BaZi guide')}</a></li>
               <li><a onClick={() => onNav('huangli')}>{l('订阅黄历', 'Almanac')}</a></li>
               <li><a onClick={() => onNav('profile')}>{l('我的元氣', 'My Genki')}</a></li>
             </ul>
@@ -840,6 +838,7 @@ function TailBand({ onNav, hideOnMobile, user }) {
           <div className="tail-col">
             <p className="tail-col-title">{l('关于', 'About')}</p>
             <ul>
+              <li><a onClick={() => onNav(guideViewForLocale(locale))}>{l('八字入门', 'BaZi guide')}</a></li>
               <li><a onClick={() => onNav('privacy')}>{l('隐私政策', 'Privacy')}</a></li>
               <li><a onClick={() => onNav('terms')}>{l('用户协议', 'Terms')}</a></li>
               {CONTACT_EMAIL && <li><a href={`mailto:${CONTACT_EMAIL}`}>{l('联系我们', 'Contact')}</a></li>}

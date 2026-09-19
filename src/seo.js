@@ -23,6 +23,10 @@ export function pairedGuideViewForLocale(view, locale) {
   return null
 }
 
+export function guideViewForLocale(locale) {
+  return locale === 'en' ? 'baziGuide' : 'baziBasics'
+}
+
 export function routeFromPath(pathname) {
   const path = decodeURIComponent(pathname || '/').replace(/\/+$/, '') || '/'
   const found = Object.entries(ROUTES).find(([, value]) => value.path === path)

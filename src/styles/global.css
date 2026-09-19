@@ -29,6 +29,7 @@
   --topbar-h: 62px;
   --bottomnav-h: 58px;
   --content-max: 1120px;
+  --agent-shell-max: 1020px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -7854,7 +7855,7 @@ select option { background: var(--paper-light); color: var(--ink); }
 }
 
 /* ---- 元氣AI 全屏页 ---- */
-.agent-page { padding: 16px 20px 40px; max-width: 1020px; margin: 0 auto; }
+.agent-page { padding: 16px 20px 40px; max-width: var(--agent-shell-max); margin: 0 auto; }
 .page-back,
 .back-btn,
 .alc-back {
@@ -14838,6 +14839,8 @@ select option { background: var(--paper-light); color: var(--ink); }
     grid-template-columns: auto minmax(0, 1fr) auto;
     column-gap: 18px;
   }
+  /* 顶栏与元氣 AI 对话框共享同一阅读列，切换页面时左右边线保持稳定。 */
+  .topbar .container { max-width: var(--agent-shell-max); }
   .brand { justify-self: start; }
   .topnav {
     min-width: 0;

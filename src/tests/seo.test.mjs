@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { pairedGuideViewForLocale, publicPathForView, routeFromPath, seoRoute, shouldIndex } from '../seo.js'
+import { guideViewForLocale, pairedGuideViewForLocale, publicPathForView, routeFromPath, seoRoute, shouldIndex } from '../seo.js'
 import { languageAlternatesForPage, SEO_ROUTES, structuredDataForPage } from '../seo-pages.js'
 import { ARTICLES } from '../data/articles.js'
 
@@ -21,6 +21,12 @@ test('八字指南随显示语言切换到对应的中英文页面', () => {
   assert.equal(pairedGuideViewForLocale('baziGuide', 'zh-CN'), 'baziBasics')
   assert.equal(pairedGuideViewForLocale('baziGuide', 'zh-TW'), 'baziBasics')
   assert.equal(pairedGuideViewForLocale('baziBasics', 'zh-CN'), null)
+})
+
+test('页尾关于入口按当前显示语言打开对应的八字指南', () => {
+  assert.equal(guideViewForLocale('en'), 'baziGuide')
+  assert.equal(guideViewForLocale('zh-CN'), 'baziBasics')
+  assert.equal(guideViewForLocale('zh-TW'), 'baziBasics')
 })
 
 test('中文八字入门页提供可引用的中文 FAQ、文章与工具结构化数据', () => {
